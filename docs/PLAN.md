@@ -160,3 +160,127 @@ The owner's full spec is now the roadmap. Items 1-12 above map onto it as shown.
 
 ### Never
 - Automatic account rotation, impersonating DeepSeek's own clients, a third-party relay, or copying code from unlicensed projects (ideas only; we build on the MIT harness).
+
+## Agreed plan v0.1 (Claude Code review)
+
+**Before anything else:** another session is writing an uncommitted "pass 3" into this working tree right now. It is about 20 modified and 16 new files: retry/checkpoint, saved conversations, Office builders, dictation and a new Settings screen. None of it has been compiled or tested. This review is based on HEAD `8acd803`. Let pass 3 finish, get CI green, commit it, then re-check this list against it. No parallel edits.
+
+I read all 10 of your official-app screenshots, so the UI section is checked against them.
+
+### 1. Must-haves 1–12 at HEAD
+| # | Status | Where | Missing |
+|---|---|---|---|
+| 1 Upload | Partly done | `ChatScreen.kt`, `AttachmentImporter.kt`, `PdfTextExtractor.kt`, `DocxTextExtractor.kt` | Excel/PowerPoint text, OCR for images, 8 files per message instead of ~50 per chat |
+| 2, 9 Look of the official app | Partly done | `DsAndroidApp.kt`, `ChatScreen.kt` | Doesn't match the screenshots (see §3) |
+| 3 Newest models | Done | `ModelSelector.kt` | Quick/Expert labels |
+| 4 Markdown | Done | `MarkdownParser.kt`, `MarkdownText.kt` | Copy/Regenerate row under answers; slow on long answers |
+| 5 Plain errors | Partly done | `ErrorExplainer.kt` | No one-tap "Sign in again" on 401; wrong catch-all message at `ChatViewModel.kt:225` |
+| 6 Viewer | Done | `ArtifactViewer.kt` | Office preview and "Open with" |
+| 7 Rename | Done | `strings.xml`, `ClientIdentity.kt`, `ic_mark.xml` | — |
+| 8 Timeline | Done | `AgentLoop.kt`, `AssistantTurn.kt` | "Auto-collapse thinking" setting |
+| 10 Office and workspace tools | Missing (pass 3 in progress) | — | — |
+| 11 Charts | Missing (pass 3 in progress) | — | Your roadmap puts this in Phase 2 |
+| 12 Resilient runs | Missing (pass 3 in progress) | At HEAD the manifest even removes the network-state permission this needs | — |
+
+### 2. Bugs and risks, each with its fix
+- **Second message fails with thinking models.** The app sends the model's reasoning back in the history, and DeepSeek rejects that with a 400 error. Fix: drop it from earlier turns (new `HistoryPolicy`), with a test on the request body.
+- **Long thinking gets cut off.** Streams have a 5-minute total limit (`OpenAiCompatibleClient.kt:42`). Fix: no total limit, a 120-second idle limit, and Stop still works.
+- **Each message creates a new network client.** Fix: one shared client.
+- **Runs stop after 8 steps** (`AgentLoop.kt:44`). Fix: default 25, maximum 50.
+- **Web fetch rejects every redirect**, so most links fail. Fix: follow up to 5 redirects, re-checking each against the private-network rules.
+- **The app is stuck if encrypted settings won't load.** Fix: a "Reset secure storage" option that keeps chats.
+- **The thinking flag goes to every provider.** Fix: send it only to DeepSeek.
+- **A web page could make the model leak chat data** by visiting a URL with the data in it. Fix: visiting any URL not seen in search results, your message, or an earlier fetched page asks you first.
+- **Photos do nothing with DeepSeek**, because its models only read text. Fix: on-device OCR.
+- **Streaming is heavy.** Fix: limit screen updates to about 30 per second and re-read only the last part of the Markdown.
+- **56 UI texts are hard-coded** instead of in the strings file.
+- **Each CI build is signed with a different debug key.** Updating means uninstalling, which deletes saved chats. Fix: one stable release key.
+- **Settings looks like a developer form** and has shell/install switches for tools that don't exist. Some colours ignore the Appearance setting.
+- **The confirm dialog shows raw JSON.** Fix: a plain sentence such as "Save deck.pptx to Downloads", with details on request.
+- **"Sign in with DeepSeek" can't work yet.** It is a generic sign-in form with empty addresses. Fix: implement the real sign-in steps from the MIT harness source, still identifying as `DeepSeek-Android-Unofficial`. If DeepSeek refuses third-party apps, the button says so and v0.1.0 ships with API key as the main path. No workarounds.
+- **Legal:**
+  - "DeepSeek" in the app's name is a trademark risk. Keep the "Unofficial" notice and make renaming a one-line change.
+  - Never use the whale, the voice names or the voice artwork.
+  - Using DuckDuckGo's HTML page for search is a terms-of-service grey area. Make the search backend switchable.
+  - List androidsvg and the chosen OCR engine in NOTICE.
+  - The README must say API use costs money.
+  - Don't copy the "Improve the model" switch; we can't control training.
+- **Android pitfalls:**
+  - Move appcompat and androidsvg into the version catalog.
+  - A partly translated language makes lint fail.
+  - Ask for the microphone only on the first hold.
+  - Android 15 edge-to-edge can double the bottom padding.
+  - Turn on R8 with rules for pdfbox.
+  - Free memory used by PDF page images when they leave the screen.
+
+### 3. UI, screen by screen from your screenshots
+- **Empty chat:** menu icon on the left, new-chat icon on the right, our own logo, "Hi! What's on your mind today?". The example prompts go.
+- **Composer:** "Type a message or hold to speak", Think and Search pills, a "+" button, and a voice button that becomes Send when you type and Stop while a reply runs.
+- **Drawer:**
+  - "Search chat content…" searches the messages themselves.
+  - Groups: Today, Yesterday, 7 Days, 30 Days, then months like "Sep 2026".
+  - The current chat is a light-blue pill with a "⋯" menu (Rename, Delete).
+  - At the bottom: avatar, account name and "⋯", which opens Settings.
+- **Settings:** white rounded groups on light grey.
+  - Profile: Account settings, Data controls.
+  - App: Language, Appearance, Font size, Personalization.
+  - Audio: Main language, Voice (v0.2).
+  - About: Check for updates, Service agreement.
+  - Then Help & Feedback, Log out, and the AI-generated/unofficial footer.
+  - Pop-ups match yours: icon, title, radio list, blue "Confirm".
+- **Personalization:** the auto-collapse thinking switch.
+- **Data controls:** an honest "stored only on this device" note and a red "Delete all chats".
+- **Account settings:** sign-in method, masked key, balance, Sign out, and a link to manage your account on DeepSeek. There are no fake "log out of all devices" or "delete account" buttons. The technical fields sit under Advanced.
+
+### 4. v0.1.0 (Phase 1), in order; tests are written first
+1. Commit pass 3 once CI is green.
+2. Fix the protocol bugs above. Tests: the request body, a slow stream, a 25-step run.
+3. Error types with their own actions, and sign-in again on 401. Tests: a status-code table; a run resumes without repeating your message.
+4. A welcome screen with "Sign in with DeepSeek", "Use an API key" and "Other provider". Tests: valid key, bad key, balance.
+5. The real DeepSeek sign-in (`HarnessAuthClient`). Tests: each sign-in step, Cancel, sign-out, headers, the refusal message.
+6. Saved chats plus pick-up-where-it-left-off after a dropped connection. Tests: a tool never runs twice; retry timing; damaged files are skipped.
+7. Web search and page visits. Tests: result parsing, redirects, private addresses blocked, unknown URLs ask first.
+8. Excel/PowerPoint reading, OCR, and 50 files per chat with a size budget. Tests: the budget split.
+9. Making PowerPoint, Word and Excel files, plus file and ZIP tools. Tests: each file opens as a valid document; ZIP safety limits.
+10. Hold to dictate. Tests: the listening steps and the fallback when the microphone is refused.
+11. All texts in resources, plus the Language setting. Test: fails if any text is hard-coded.
+12. The UI from §3. Tests: date groups, the settings logic.
+13. Smoother streaming. Tests: the faster Markdown matches a full re-read; update count stays low.
+14. A properly signed release with a permission check in CI, an install guide for non-technical users, and a device checklist.
+
+### 5. v0.2.0 (Phase 2)
+- Artifact panel with live preview, edit and re-run (web pages run in a separate, locked-down process).
+- Save to any folder, and save everything as a ZIP.
+- Code editor with syntax colours.
+- Several accounts with their balances; you switch yourself, never automatically.
+- Deep research reports with numbered sources you can tap.
+- Charts and diagrams, and photos with models that can see.
+- Read aloud with sentence highlighting, the Voice picker and the speaker button.
+- Custom instructions and font size.
+- Upkeep: replace the deprecated secure-storage library, move to a database with full-text search, maths formulas, chat export.
+
+### 6. v0.3.0 (Phase 3): every device action asks first; permissions are asked when needed
+- Share from any app into a new chat.
+- Storage (through the system folder picker), a sandboxed command line and app install, in a separate "agent" version.
+- Screenshots and taps in the same "agent" version, with an on-screen indicator and a stop button.
+- SMS drafts, calendar, alarms, maps and Health Connect (read-only).
+- Floating bubble, Chat/Agent mode, pinned chats and folders.
+- Real-time voice built from on-device speech plus read-aloud (DeepSeek has no live audio API, and the app says so).
+- A long-document view and analysis of about 50 files at once.
+
+### 7. Decisions I need from you
+1. **Chat storage:** simple files for v0.1 and a database in v0.2 (my recommendation), or the database now as your roadmap says.
+2. **OCR engine:** Google's ML Kit reads better but isn't open source. Tesseract is open source but bigger and slower.
+3. **Languages:** which ones ship besides English.
+4. **Default search:** DuckDuckGo, SearXNG, or a search service that needs its own key.
+5. **Release key:** you keep the signing key, stored in GitHub Secrets.
+6. **App name:** keep "DeepSeek Android" despite the trademark risk, or choose another.
+
+
+### 8. Decisions taken (owner asked for a fully autonomous build)
+1. Chat storage: persistent local history in v0.1 (whatever pass 3 ships), Room database by v0.2 at the latest.
+2. OCR: ML Kit on-device text recognition by default, behind an interface so a Tesseract build flavour can replace it.
+3. Languages: English default; Bengali and Simplified Chinese as the first extra languages; all strings externalised.
+4. Default search: DuckDuckGo (no key); SearXNG URL or a keyed search service optional in Settings.
+5. Release key: a dedicated release keystore stored in GitHub Secrets; the APK is signed in CI only.
+6. App name: "DeepSeek Android (Unofficial)" with a clear not-affiliated notice in About and README.
