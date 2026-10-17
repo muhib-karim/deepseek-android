@@ -33,7 +33,7 @@ class GuardPolicy(private val registry: ToolRegistry, private val workspace: Wor
         if (tool.kind == ToolKind.WRITE || tool.kind == ToolKind.READ) {
             val fields = listOfNotNull(args["path"], args["fileName"], args["zip_path"]) + ((args["sources"] as? kotlinx.serialization.json.JsonArray)?.toList() ?: emptyList())
             if (args.containsKey("sources") && args["sources"] !is kotlinx.serialization.json.JsonArray) return Decision.DENY
-            if (fields.isEmpty() && tool.kind == ToolKind.WRITE && name !in setOf("create_docx","create_pptx","create_xlsx","create_chart","create_image")) return Decision.DENY
+            if (fields.isEmpty() && tool.kind == ToolKind.WRITE && name !in setOf("create_docx","create_pptx","create_xlsx","create_chart","create_image","render_chart","create_artifact")) return Decision.DENY
             var outside = false
             for (field in fields) {
                 if (field !is JsonPrimitive || !field.isString) return Decision.DENY

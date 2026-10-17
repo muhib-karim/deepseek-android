@@ -5,10 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color as AndroidColor
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,7 +29,7 @@ import app.dsandroid.core.attachments.PptxTextExtractor
 import app.dsandroid.core.attachments.XlsxTextExtractor
 import app.dsandroid.core.attachments.SpreadsheetPreview
 import app.dsandroid.tools.AndroidSvgRasterizer
-import java.io.ByteArrayInputStream
+import app.dsandroid.sandbox.SandboxWebViews
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,8 +46,12 @@ private sealed interface Preview {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Unit, share: () -> Unit, save: () -> Unit,
-    openExternal: () -> Unit = {}, exportPng: () -> Unit = {}) {
+fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Unit, share: (Artifact) -> Unit, save: (Artifact) -> Unit,
+    openExternal: (Artifact) -> Unit = {}, exportPng: (Artifact) -> Unit = {}) {
+    if (artifact.mimeType in setOf("text/html", "image/svg+xml", "text/markdown", "text/vnd.mermaid", "text/csv", "text/plain", "application/json")) {
+        ArtifactCanvas(artifact, workspace, back, share, save, exportPng)
+        return
+    }
     var preview by remember(artifact.path, artifact.mimeType) { mutableStateOf<Preview?>(null) }
     LaunchedEffect(artifact.path, artifact.mimeType) {
         preview = withContext(Dispatchers.IO) {
@@ -87,12 +88,12 @@ fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Uni
     }, bottomBar = {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = share, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
-                Button(onClick = save, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_save)) }
+                OutlinedButton(onClick = { share(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
+                Button(onClick = { save(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_save)) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                TextButton(onClick = openExternal) { Text(stringResource(R.string.viewer_open)) }
-                if (artifact.mimeType == "image/svg+xml") TextButton(onClick = exportPng) { Text(stringResource(R.string.viewer_export_png)) }
+                TextButton(onClick = { openExternal(artifact) }) { Text(stringResource(R.string.viewer_open)) }
+                if (artifact.mimeType == "image/svg+xml") TextButton(onClick = { exportPng(artifact) }) { Text(stringResource(R.string.viewer_export_png)) }
             }
         }
     }) { padding ->
@@ -165,35 +166,19 @@ private fun PdfPage(workspace: WorkspacePath, path: String, index: Int) {
     }
 }
 
-@Suppress("DEPRECATION")
 @Composable
 private fun StaticWebPreview(content: String) {
-    val holder = remember { arrayOfNulls<WebView>(1) }
-    val document = remember(content) {
-        "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
-            "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'\">" +
-            "<style>body{margin:16px;overflow-wrap:anywhere}svg,img{max-width:100%;height:auto}</style></head><body>" + content + "</body></html>"
+    var failed by remember(content) { mutableStateOf(false) }
+    if (failed) {
+        Text(stringResource(R.string.viewer_error), Modifier.padding(24.dp))
+        return
     }
+    val holder = remember { arrayOfNulls<WebView>(1) }
     DisposableEffect(Unit) { onDispose { holder[0]?.apply { stopLoading(); destroy() }; holder[0] = null } }
     AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
-        WebView(context).apply {
-            holder[0] = this
-            settings.javaScriptEnabled = false
-            settings.domStorageEnabled = false
-            settings.allowFileAccess = false
-            settings.allowContentAccess = false
-            settings.allowFileAccessFromFileURLs = false
-            settings.allowUniversalAccessFromFileURLs = false
-            settings.blockNetworkLoads = true
-            settings.blockNetworkImage = true
-            settings.setSupportMultipleWindows(false)
-            webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
-                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
-                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse =
-                    WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
-            }
-            loadDataWithBaseURL(null, document, "text/html", "UTF-8", null)
+        SandboxWebViews.create(context, javaScriptEnabled = false, onFailure = { failed = true }).also {
+            holder[0] = it
+            SandboxWebViews.loadPreview(it, content)
         }
     })
 }

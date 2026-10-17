@@ -15,6 +15,8 @@ import app.dsandroid.auth.AccountSignIn
 import app.dsandroid.core.agent.*
 import app.dsandroid.core.auth.SessionAuthMachine
 import app.dsandroid.core.attachments.AttachmentContextBuilder
+import app.dsandroid.core.artifacts.ArtifactStore
+import app.dsandroid.core.artifacts.FencedArtifact
 import app.dsandroid.core.guard.*
 import app.dsandroid.core.llm.*
 import app.dsandroid.core.tools.*
@@ -22,6 +24,7 @@ import app.dsandroid.core.persistence.*
 import app.dsandroid.data.*
 import app.dsandroid.tools.CreatePdfTool
 import app.dsandroid.tools.CreateImageTool
+import app.dsandroid.sandbox.WebViewCodeExecutor
 import java.io.File
 import java.util.Locale
 import java.util.TimeZone
@@ -100,6 +103,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var signInJob: Job? = null
     private var modelsJob: Job? = null
     private var confirmationReply: CompletableDeferred<Boolean>? = null
+    private val codeExecutor = WebViewCodeExecutor(application) {
+        requestConfirmation("python_runtime_download", buildJsonObject {
+            put("runtime", "Pyodide")
+            put("url", app.dsandroid.core.sandbox.PythonRuntime.BASE_URL)
+            put("maximumBytes", app.dsandroid.core.sandbox.PythonRuntime.MAX_BYTES)
+        })
+    }
     private data class Conversation(
         val id: String = UUID.randomUUID().toString(), var title: String = "", val createdAt: Long = System.currentTimeMillis(),
         val history: MutableList<ChatMessage>, var items: List<ChatItem> = emptyList(),
@@ -236,7 +246,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 for (uri in uris.take(remaining)) {
                     try {
-                        val upload = withContext(Dispatchers.IO) { importer.import(uri) }
+                        val upload = importer.import(uri)
                         mutableState.update { it.copy(attachments = it.attachments + upload) }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { showError(text(R.string.upload_read_error)) }
@@ -259,10 +269,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (current.pendingRunId != null) { showError(this.text(R.string.resume_before_send)); return false }
         val config = settings.value
         val model = config.turnModel(think)
-        if (text.isBlank() && ui.attachments.isNotEmpty() && ui.attachments.all { it.kind == app.dsandroid.core.attachments.AttachmentKind.IMAGE } && !config.supportsVision(think)) {
-            showError(this.text(R.string.image_model_error))
-            return false
-        }
         try { client(config, model, think && !(config.capabilities[model] ?: ModelCapabilities()).isReasoning(model)) }
         catch (_: Exception) { showError(this.text(R.string.credentials_required)); return false }
         val uploads = ui.attachments
@@ -316,19 +322,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val llm = client(config, run.model, run.thinking && !(config.capabilities[run.model] ?: ModelCapabilities()).isReasoning(run.model))
         val tools = mutableListOf<Tool>(CreateMarkdownTool(), CreateCsvTool(), CreateSvgTool(), CreatePdfTool(), CreateImageTool(),
             CreateFileTool(), ListDirTool(), ListFilesTool(), ReadFileTool(), ZipFilesTool(), ListZipTool(),
-            CreateDocxTool(), CreatePptxTool(), CreateXlsxTool(), CreateChartTool())
+            CreateDocxTool(), CreatePptxTool(), CreateXlsxTool(), CreateChartTool(),
+            RenderChartTool(), CreateArtifactTool(), CodeInterpreterTool(codeExecutor))
         if (run.agentEnabled && run.searchEnabled) {
             tools.add(VisitWebTool()); tools.add(WebFetchTool())
             tools.add(WebSearchTool(if (config.searchBackend == "searxng") config.searxngUrl else null))
         }
         val registry = ToolRegistry(if (run.agentEnabled) tools else emptyList())
-        val confirmer = Confirmer { name, arguments ->
-            val reply = CompletableDeferred<Boolean>()
-            confirmationReply = reply
-            mutableState.update { it.copy(confirmation = Confirmation(name, arguments)) }
-            try { reply.await() }
-            finally { reply.cancel(); confirmationReply = null; mutableState.update { it.copy(confirmation = null) } }
-        }
+        val confirmer = Confirmer(::requestConfirmation)
         val loop = AgentLoop(llm, registry, GuardPolicy(registry, workspace), ToolContext(workspace), confirmer,
             config.guardSettings(), checkpointStore = checkpoints, runConfig = run)
         val events = if (checkpoint == null) loop.run(conversation.history) else loop.resume(checkpoint, conversation.history)
@@ -356,6 +357,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     mutableState.update { it.copy(retrySeconds = null, waitingForNetwork = false) }
                 else -> Unit
             }
+        }
+    }
+
+    private suspend fun requestConfirmation(name: String, arguments: JsonObject): Boolean = withContext(Dispatchers.Main.immediate) {
+        val reply = CompletableDeferred<Boolean>()
+        confirmationReply = reply
+        mutableState.update { it.copy(confirmation = Confirmation(name, arguments)) }
+        try { reply.await() }
+        finally { reply.cancel(); confirmationReply = null; mutableState.update { it.copy(confirmation = null) } }
+    }
+
+    fun openFencedArtifact(turnId: String, index: Int, fence: FencedArtifact, open: (Artifact) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val artifact = withContext(Dispatchers.IO) {
+                    ArtifactStore(workspace).importFence(turnId, index, fence.format, fence.content)
+                }
+                open(artifact)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.canvas_open_failed)) }
         }
     }
 
@@ -435,11 +456,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (revised.items.last().text.isBlank() && revised.items.last().attachments.isEmpty()) return false
         val config = settings.value
         val model = config.turnModel(think)
-        val userMessage = revised.history.last()
-        if (!config.supportsVision(think) && userMessage.parts?.any { it.type == "image_url" } == true &&
-            userMessage.forVision(false).content.isNullOrBlank()) {
-            showError(text(R.string.image_model_error)); return false
-        }
         try { client(config, model) }
         catch (_: Exception) { showError(text(R.string.credentials_required)); return false }
         val runId = UUID.randomUUID().toString()

@@ -2,7 +2,6 @@ package app.dsandroid.attachments
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.net.Uri
@@ -13,14 +12,37 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
-data class Upload(val id: String, val name: String, val kind: AttachmentKind, val file: File, val text: String = "") {
+data class Upload(
+    val id: String,
+    val name: String,
+    val kind: AttachmentKind,
+    val file: File,
+    val text: String = "",
+    val imageTextStatus: ImageTextStatus? = null,
+) {
     fun content(vision: Boolean) = AttachmentContent(name, kind, text,
-        if (vision && kind == AttachmentKind.IMAGE) AttachmentImporter.imageData(file) else null)
+        if (vision && kind == AttachmentKind.IMAGE) AttachmentImporter.imageData(file) else null, imageTextStatus)
 }
 
 class AttachmentImporter(private val context: Context) {
-    fun import(uri: Uri): Upload {
+    suspend fun import(uri: Uri): Upload {
+        var copiedFile: File? = null
+        try {
+            return withContext(Dispatchers.IO) { importOnWorker(uri) { copiedFile = it } }
+        } catch (error: Exception) {
+            // Also covers cancellation while returning from the IO dispatcher: the
+            // caller never received ownership of the copied upload in that case.
+            copiedFile?.delete()
+            throw error
+        }
+    }
+
+    private suspend fun importOnWorker(uri: Uri, copied: (File) -> Unit): Upload {
         require(uri.scheme == "content") { "Choose a document from the system picker." }
         val resolver = context.contentResolver
         val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
@@ -31,6 +53,7 @@ class AttachmentImporter(private val context: Context) {
         val directory = File(context.filesDir, "uploads").apply { check(isDirectory || mkdirs()) }
         val id = UUID.randomUUID().toString()
         val file = File(directory, id)
+        copied(file)
         try {
             // Immediate private copy: no persistable URI grant is needed or retained.
             resolver.openInputStream(uri)?.use { input ->
@@ -38,6 +61,7 @@ class AttachmentImporter(private val context: Context) {
                     val buffer = ByteArray(8192)
                     var total = 0L
                     while (true) {
+                        currentCoroutineContext().ensureActive()
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
@@ -46,15 +70,19 @@ class AttachmentImporter(private val context: Context) {
                     }
                 }
             } ?: error("The selected document could not be opened.")
+            currentCoroutineContext().ensureActive()
+            val imageText = if (kind == AttachmentKind.IMAGE) ImageTextRecognizer.extract(file) else null
             val text = when (kind) {
                 AttachmentKind.PDF -> file.inputStream().use(PdfTextExtractor::extract)
                 AttachmentKind.DOCX -> file.inputStream().use { DocxTextExtractor.extract(it) }
                 AttachmentKind.XLSX -> file.inputStream().use { XlsxTextExtractor.extract(it) }
                 AttachmentKind.PPTX -> file.inputStream().use { PptxTextExtractor.extract(it) }
                 AttachmentKind.TEXT -> file.inputStream().use { PlainTextAttachment.read(it) }
+                AttachmentKind.IMAGE -> imageText!!.text
                 else -> ""
             }
-            return Upload(id, name, kind, file, text)
+            currentCoroutineContext().ensureActive()
+            return Upload(id, name, kind, file, text, imageText?.status)
         } catch (error: Exception) { file.delete(); throw error }
         finally {
             if (uri.authority == "${context.packageName}.artifacts" && uri.pathSegments.firstOrNull() == "camera") {
@@ -66,12 +94,7 @@ class AttachmentImporter(private val context: Context) {
 
     companion object {
         fun imageData(file: File): String {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.path, bounds)
-            require(bounds.outWidth > 0 && bounds.outHeight > 0) { "This image format cannot be decoded." }
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 3136) sample *= 2
-            val decoded = requireNotNull(BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }))
+            val decoded = ImageAttachmentDecoder.decode(file)
             try {
                 val ratio = minOf(1f, 1568f / maxOf(decoded.width, decoded.height))
                 val jpeg = Bitmap.createBitmap((decoded.width * ratio).roundToInt().coerceAtLeast(1),

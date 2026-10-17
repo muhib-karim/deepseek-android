@@ -12,6 +12,8 @@ security = "1.1.0-alpha06"
 browser = "1.8.0"
 junit = "4.13.2"
 pdfbox = "2.0.27.0"
+mlkit-text = "16.0.1"
+exifinterface = "1.3.7"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
@@ -34,6 +36,8 @@ security-crypto = { module = "androidx.security:security-crypto", version.ref = 
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
 junit = { module = "junit:junit", version.ref = "junit" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox" }
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text" }
+exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

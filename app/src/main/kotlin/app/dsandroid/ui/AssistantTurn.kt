@@ -27,12 +27,16 @@ import app.dsandroid.core.agent.TurnStep
 import app.dsandroid.core.llm.LlmJson
 import app.dsandroid.core.markdown.MarkdownParser
 import app.dsandroid.core.tools.Artifact
+import app.dsandroid.core.artifacts.FencedArtifact
+import app.dsandroid.core.artifacts.FencedArtifacts
+import app.dsandroid.core.guard.WorkspacePath
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, collapseThinking: Boolean = true) {
+fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, collapseThinking: Boolean = true,
+    workspace: WorkspacePath, openFence: (Int, FencedArtifact) -> Unit) {
     var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     var sourcesVisible by remember(item.id) { mutableStateOf(false) }
     var selectedSource by remember(item.id) { mutableStateOf<Int?>(null) }
@@ -69,7 +73,8 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         }
                         Text(toolLabel(step), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(statusLabel(step.status), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        if (step.resultPreview.isNotEmpty()) {
+                        if (step.name == "code_interpreter") InterpreterCardContent(step)
+                        if (step.resultPreview.isNotEmpty() && step.name != "code_interpreter") {
                             TextButton(onClick = { outputExpanded = !outputExpanded }) {
                                 Text(stringResource(if (outputExpanded) R.string.tool_output_hide else R.string.tool_output_show))
                             }
@@ -80,8 +85,19 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         }
                     }
                 }
-                is TurnStep.Answer -> MarkdownText(step.text, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
-                    selectedSource = it; sourcesVisible = true
+                is TurnStep.Answer -> Column {
+                    MarkdownText(step.text, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
+                        selectedSource = it; sourcesVisible = true
+                    }
+                    val fences = remember(step.text) { FencedArtifacts.parse(step.text) }
+                    fences.forEachIndexed { fenceIndex, fence ->
+                        OutlinedCard(onClick = { openFence(index * 100 + fenceIndex, fence) }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(stringResource(R.string.canvas_fenced_title, fence.format.uppercase(java.util.Locale.ROOT)), style = MaterialTheme.typography.titleSmall)
+                                Text(stringResource(R.string.tap_preview), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -91,6 +107,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
         }
         item.artifacts.forEach { artifact ->
             OutlinedCard(onClick = { openArtifact(artifact) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                if (artifact.mimeType == "image/svg+xml") InlineSvgArtifact(artifact, workspace) { openArtifact(artifact) }
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     AppIcon(Glyph.DOCUMENT, color = MaterialTheme.colorScheme.primary)
                     Column(Modifier.weight(1f)) {
@@ -123,6 +140,8 @@ private fun toolLabel(step: TurnStep.ToolCall): String {
     val done = step.status == ToolStatus.DONE
     val zippedCount = if(done) Regex("^Zipped (\\d+) files").find(step.resultPreview)?.groupValues?.get(1)?.toIntOrNull() else null
     return when {
+        step.name == "code_interpreter" -> stringResource(if (done) R.string.interpreter_ran else R.string.interpreter_running)
+        step.name == "render_chart" -> stringResource(if (done) R.string.chart_rendered else R.string.chart_rendering)
         step.name == "web_search" -> stringResource(if(done) R.string.searched_query else R.string.searching_query, arg("query"))
         step.name in listOf("web_fetch", "visit_web") -> stringResource(if(done) R.string.visited_site else R.string.visiting_site, runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty())
         step.name == "zip_files" -> if(zippedCount != null) stringResource(R.string.zipped_files, zippedCount) else stringResource(if(done) R.string.zipped_archive else R.string.zipping_files)

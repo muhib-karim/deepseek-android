@@ -48,6 +48,8 @@ dependencies {
     implementation(libs.security.crypto)
     implementation(libs.browser)
     implementation(libs.pdfbox.android)
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.exifinterface)
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.caverock:androidsvg-aar:1.4")
     testImplementation(libs.junit)

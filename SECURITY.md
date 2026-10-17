@@ -54,12 +54,48 @@ assumed by this scaffold.
   link inside it never grants host trust. HTML and search snippets are untrusted data;
   prompt injection is still a model-level risk, not something HTML stripping solves.
 - SVG is parsed without DTD/entity resolution and reduced to static allowed
-  elements/attributes. Static SVG/HTML previews use a WebView with JavaScript,
-  file/content access, network requests and navigation disabled. PDF creation
-  renders plain text; PDF previews use the system PdfRenderer.
+  elements/attributes, including before inline preview. SVG, Mermaid, Markdown,
+  CSV and text previews disable JavaScript. HTML canvas previews permit JavaScript
+  inside an opaque-origin WebView with no native bridge, file/content access,
+  persistent web storage, device permission grants, popups, downloads or navigation.
+  Network starts blocked. An explicit preview confirmation can allow bounded public
+  HTTPS GET resources (scripts, images, fonts and styles) for that version until
+  rerun, version change or close. The resource loader strips page headers/cookies,
+  rejects private DNS addresses and redirects, and caps requests and decoded bytes.
+  CSP continues to block forms, frames, workers and fetch/WebSocket connections.
+  PDF creation renders plain text; PDF previews use the system PdfRenderer.
   CSV quoting does not disable spreadsheet formula interpretation.
+- Code runs in a disposable worker inside an offscreen WebView, with no Android
+  JavaScript interface. A trusted page validates and caps the result before native
+  polling. Code is limited to 100,000 characters, total stdout/stderr/value to
+  16,000 characters, and execution (including runtime startup) to 15 seconds.
+  Stop, timeout and renderer failure dispose the view. CSP, request interception
+  and disabled worker APIs prevent app file/device access and outbound networking.
+  WebView does not expose a hard per-worker heap quota: hostile allocations can
+  still exhaust the renderer; this boundary needs adversarial device testing.
+- Python requires an explicit confirmation before downloading the version-pinned
+  Pyodide runtime from `https://cdn.jsdelivr.net/pyodide/v0.26.4/full/`. Only five
+  exact runtime resources are fetched, without redirects, credentials, code or chat
+  payloads, with a 64 MiB combined limit and 120-second download deadline. Complete
+  downloads are cached privately; incomplete downloads are never executed. Later
+  runs reuse the cache without another download. Synthetic runtime URLs inside the
+  WebView are intercepted and streamed from those exact cached files; no request
+  falls through to the network. Package downloads and installs are unavailable.
+  The version is pinned; runtime bytes are trusted from the HTTPS CDN, not verified
+  against an independently pinned content hash.
+- Artifact edits create separate immutable files and an atomically replaced private
+  history journal, retaining the original and up to 19 edits. Completed fenced
+  artifacts receive a stable import identity. HTML source is untrusted even when
+  saved. Save uses ACTION_CREATE_DOCUMENT; Share uses a read-only FileProvider URI
+  grant. Both export the selected version and require an explicit UI action.
+- Image imports use the system picker and a bounded private copy. A bundled Latin
+  ML Kit model extracts text locally, with sampled/oriented bitmap decoding and
+  a timeout; recognition needs no model download. OCR is marked as untrusted data
+  in model context. Only vision-capable model requests include encoded image bytes;
+  text-only requests include OCR/failure context. ML Kit may collect SDK diagnostic
+  and usage metrics under its terms; on-device OCR is not a claim of zero SDK telemetry.
 
-## Registered tool policy (Pass A)
+## Registered tool policy (Passes A and B)
 
 | Tools | Risk and execution policy |
 |---|---|
@@ -67,6 +103,8 @@ assumed by this scaffold.
 | `create_file`, `create_markdown`, `create_csv`, `create_svg`, `create_pdf`, `create_image`, `create_docx`, `create_pptx`, `create_xlsx`, `create_chart`, `zip_files` | SAFE: private workspace writes run **without confirmation**, using new-file semantics. The guard requests confirmation for an outside write, but current built-in tools still reject writes outside the workspace. |
 | `web_search` | CONFIRM: every call displays the exact query before sending it to the configured DuckDuckGo or SearXNG service. Invalid/empty/oversized queries are denied. |
 | `web_fetch`, `visit_web` | Declared SAFE with a dynamic guard: run without asking only for public HTTPS URLs of at most 200 characters, without a query string, on an exact host returned by search in this turn. Otherwise CONFIRM; malformed, private/local or non-HTTPS destinations are denied even if a user would approve. DNS checks also apply at connection time. |
+| `render_chart`, `create_artifact` | SAFE: bounded private workspace outputs using new-file semantics. No external writes or network execution. HTML networking requires a separate preview confirmation. |
+| `code_interpreter` | SAFE: cancellable isolated computation with time/output limits and no app/device access. Python runtime download has its own exact-resource confirmation; downloaded code never receives a network grant. |
 
 Share, Save and opening source links are explicit UI actions, not model-callable
 registered tools. Sources are numbered within each assistant turn; only registered

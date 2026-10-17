@@ -7,7 +7,7 @@ import java.nio.file.Files
 import java.nio.file.StandardOpenOption
 
 enum class Risk { SAFE, CONFIRM, DANGEROUS }
-enum class ToolKind { READ, WRITE, NETWORK, SHELL, INSTALL, ACTION }
+enum class ToolKind { READ, WRITE, NETWORK, COMPUTE, SHELL, INSTALL, ACTION }
 
 @Serializable
 data class Artifact(val fileName: String, val mimeType: String, val path: String)

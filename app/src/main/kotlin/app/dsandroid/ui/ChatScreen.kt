@@ -111,7 +111,9 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                             }
                         }
                         is ChatItem.Assistant -> Column {
-                            AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id, openArtifact, settings.collapseThinking)
+                            AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id,
+                                openArtifact = openArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
+                                openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) })
                             val user = state.items.takeWhile { it.id != item.id }.filterIsInstance<ChatItem.User>().lastOrNull()
                             if (user != null) TextButton(onClick = { vm.restartTurn(user.id, null, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
                                 Text(stringResource(R.string.turn_regenerate))
@@ -198,7 +200,11 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                         Column(Modifier.widthIn(max = 230.dp)) {
                             Text(upload.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(if (upload.kind == AttachmentKind.IMAGE) {
-                                if (vision) stringResource(R.string.image_ready) else stringResource(R.string.image_unreadable)
+                                when (upload.imageTextStatus) {
+                                    app.dsandroid.core.attachments.ImageTextStatus.EXTRACTED -> stringResource(R.string.image_ocr_ready, upload.text.length)
+                                    app.dsandroid.core.attachments.ImageTextStatus.FAILED -> stringResource(R.string.image_ocr_failed)
+                                    else -> stringResource(R.string.image_ocr_empty)
+                                } + " · " + stringResource(if (vision) R.string.image_vision_context else R.string.image_text_context)
                             } else stringResource(R.string.attachment_chars, upload.text.length) + if (upload.text.isBlank()) " · " + stringResource(R.string.no_text) else "", style = MaterialTheme.typography.labelSmall)
                         }
                     }, trailingIcon = {

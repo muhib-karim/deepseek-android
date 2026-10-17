@@ -150,14 +150,13 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
                     }
                     composable("viewer") {
                         ArtifactViewer(Artifact(viewerName, viewerMime, viewerPath), vm.workspace, { navigation.popBackStack() },
-                            { share(Artifact(viewerName, viewerMime, viewerPath)) }, { save(Artifact(viewerName, viewerMime, viewerPath)) },
-                            openExternal = {
+                            ::share, ::save,
+                            openExternal = { artifact ->
                                 try {
-                                    val artifact = Artifact(viewerName, viewerMime, viewerPath)
                                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.artifacts", vm.workspace.resolve(artifact.path))
                                     context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, artifact.mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply { clipData = ClipData.newRawUri(artifact.fileName, uri) })
                                 } catch (_: Exception) { vm.showError(context.getString(R.string.share_failed)) }
-                            }, exportPng = { vm.exportPng(Artifact(viewerName, viewerMime, viewerPath)) { save(it) } })
+                            }, exportPng = { artifact -> vm.exportPng(artifact) { save(it) } })
                     }
                     composable("about") {
                         Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.about)) }, navigationIcon = { TextButton(onClick = { navigation.popBackStack() }) { Text(stringResource(R.string.back)) } }) }) { padding ->

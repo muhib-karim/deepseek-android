@@ -4,6 +4,11 @@
 Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the chat) plus the v0.2.0 rows of docs/FEATURE_MATRIX.md, in three passes (A, B, C), each committed when CI is green.
 
 ## Status
+- Pass B integration in tree: retained sandbox/registry/canvas/OCR work, corrected
+  Compose view calls, structured interpreter previews and nested artifact history.
+  Python downloads now stream to a bounded private cache served only at exact local
+  runtime URLs; no large base64 runtime copies. Added focused JVM regression cases.
+  Working tree only; static checks and documentation remain, CI not run.
 - v0.1.0 released (debug testing build); QC GO with 4 notes, all scheduled for v0.2.0: network-security-config, confirm fetches with query strings or long URLs, SECURITY.md wording on confirmations, CI SHA-pinning/permissions/release gate.
 - Pass A (agent tools, confirmations, Chat/Agent toggle, thinking display, turn controls, cited web search/fetch, the 4 notes) committed; CI result pending at commit time.
 - Chat controls, source persistence, web guards and release/network hardening are integrated.
@@ -12,6 +17,8 @@ Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the 
 - No local Gradle execution; compilation, JVM tests and Android lint require CI.
 
 ## Next step
+0. Finish runtime/preview/export checks, update Pass B docs and run static checks; CI
+   must execute compilation, tests and lint. Do not run Gradle locally.
 1. CI green for pass A (compile, JVM tests, lint, assemble); fix exact errors only.
 2. Pass B, then pass C (remaining v0.2.0 matrix rows), each committed when green.
 3. Release v0.2.0: identity check, manifest permissions check, secret scan, tag, APK link check, QC request.

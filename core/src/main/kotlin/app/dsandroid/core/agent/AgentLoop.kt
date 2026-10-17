@@ -174,9 +174,13 @@ class AgentLoop(
                 var denied = false
                 var recorded = false
                 suspend fun record(result: ToolResult) {
+                    // Interpreter results are a bounded structured envelope. Cutting JSON at
+                    // the generic text preview limit loses the separate output channels.
+                    val previewLimit = if (call.function.name == "code_interpreter")
+                        app.dsandroid.core.sandbox.CodeLimits.MAX_RESULT_JSON_CHARS else 8000
                     timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(
                         status = if (denied) ToolStatus.DENIED else if (result.isError) ToolStatus.ERROR else ToolStatus.DONE,
-                        resultPreview = result.content.take(8000) + if (result.content.length > 8000) "\n[Result truncated]" else "",
+                        resultPreview = result.content.take(previewLimit) + if (result.content.length > previewLimit) "\n[Result truncated]" else "",
                         durationMs = (System.nanoTime() - started) / 1_000_000)
                     history.add(ChatMessage("tool", LlmJson.encodeToString(result), toolCallId = call.id))
                     checkpoint = checkpoint.copy(pendingToolIndex = callIndex + 1)
@@ -215,9 +219,9 @@ class AgentLoop(
                             withContext(NonCancellable) { record(completed) }
                             return completed
                         }
-                        // Network calls are cancellable. Bounded local operations finish their
+                        // Network and isolated computation are cancellable. Bounded local writes finish their
                         // durable record before Stop can interrupt, avoiding replayed writes.
-                        if (tool.kind == ToolKind.NETWORK) executeTool()
+                        if (tool.kind == ToolKind.NETWORK || tool.kind == ToolKind.COMPUTE) executeTool()
                         else withContext(NonCancellable) { executeTool() }
                     }
                 }

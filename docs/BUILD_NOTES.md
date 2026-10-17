@@ -87,3 +87,88 @@ interaction, Stop during network/confirmation/attachment preparation, process de
 and resume, edited turns with attachments, and provider-backed tool calling. Debug
 release signing is unchanged. Passes B and C and feature-matrix rows beyond 1–8 are
 outside this pass; no version bump or release was performed.
+
+## Pass B (v0.2.0)
+
+Continued the interrupted working tree for feature-matrix rows 11–15 and 20,
+retaining Pass A's registry, guard, timeline cards and export flow. This is an
+implementation handoff, not a release or a claim of a passing Android build.
+
+- Registered `code_interpreter` with JavaScript and optional Python. A disposable
+  offscreen WebView runs a dedicated worker; there is no native JavaScript bridge,
+  app file access or unrestricted network. Code is capped at 100,000 characters,
+  combined output at 16,000 characters and execution at 15 seconds. Stop cancels
+  computation. Cards show source, stdout, stderr, return value, timeout and truncation.
+  The timeline preserves the bounded JSON envelope instead of cutting it at the
+  generic 8,000-character preview limit.
+- Optional Pyodide 0.26.4 downloads only after confirmation. Five exact CDN files
+  are streamed into an atomic private cache (64 MiB/120-second limits, no redirects).
+  Subsequent runs use that cache. WebView requests for a synthetic runtime origin
+  are intercepted as exact cache reads; all other requests are refused. This avoids
+  copying the runtime into multiple large base64 strings. No package downloads.
+- Added `render_chart(data, spec)` using the existing original SVG builder for bar,
+  line and pie charts, displayed inline with the shared sandbox WebView policy.
+- Added `create_artifact` and completed fenced-block cards. The full-screen canvas
+  extends ArtifactViewer with preview/source tabs, edit/apply/rerun, immutable version
+  history (original plus 19 edits), stable fence imports and reopening after process
+  death. HTML permits JavaScript with networking initially disabled. A separate
+  confirmation permits bounded public HTTPS resources for the current preview;
+  rerun/version changes/close revoke that grant. Other formats disable scripts.
+  SVG is sanitized; Markdown and CSV use static original renderers. Existing nested
+  workspace artifacts can be edited without breaking their history.
+- Save uses ACTION_CREATE_DOCUMENT and Share uses the existing FileProvider paths.
+  Both now receive the selected canvas version, including `.md`, `.html`, `.csv`,
+  `.txt`, `.svg` and `.json`; SVG PNG export also uses the selected version.
+- Image attachments use bundled on-device ML Kit OCR, bounded bitmap sampling,
+  EXIF orientation and a recognition timeout. OCR state is shown in attachment
+  chips. Recognized text is marked untrusted in model context; image bytes are
+  included only for vision-capable models. OCR failure retains the image for vision.
+  No storage/camera permission or automatic account switching was added.
+
+Files touched (grouped):
+
+- Core: `agent/AgentLoop.kt`, `tools/Tool.kt`, `guard/GuardPolicy.kt`,
+  `attachments/Attachments.kt`; new `tools/CodeInterpreterTool.kt`,
+  `CreateArtifactTool.kt`, `RenderChartTool.kt`; new `artifacts/` store, fences,
+  Markdown/Mermaid/CSV previews and `sandbox/` execution, result and runtime policies.
+- Android: `attachments/AttachmentImporter.kt`, new image decoder/OCR adapters,
+  new `sandbox/` WebView executor, resource policy and Python cache loader;
+  `ui/ArtifactViewer.kt`, new `ArtifactCanvas.kt`, `InlineSvgArtifact.kt`,
+  `InterpreterCardContent.kt`; `AssistantTurn.kt`, `ChatScreen.kt`,
+  `ChatViewModel.kt`, `DsAndroidApp.kt`, `ToolConfirmationSheet.kt`.
+- Resources/dependencies: `app/src/main/res/values/strings.xml`,
+  `app/build.gradle.kts`, `gradle/libs.versions.toml` (bundled ML Kit and ExifInterface).
+  Existing manifest SDK/permission rules and FileProvider paths are retained.
+- Tests: core agent-mode/cancellation, attachment context and model capability cases;
+  new artifact store/fences/preview, chart/interpreter and sandbox policy/result cases;
+  app JVM bitmap-sampling cases.
+- Documentation: this section, `SECURITY.md`, `NOTICE`, `docs/PASS_B_PLAN.md` and
+  `docs/PROJECT_BRAIN.md`. MIT harness attribution in README/NOTICE is retained.
+
+Validation performed locally: XML/TOML parsing, default-resource reference and
+duplicate checks, dependency alias checks, source manifest/SDK constraints, Kotlin
+delimiter/string/comment checks, embedded JavaScript syntax checks using Node's
+parser only, `git diff --check`, and a redacted working-tree gitleaks scan. These
+checks passed. No browser, WebView, Gradle, JVM suite, Android lint or APK build was
+run locally; no sub-agents, commit, push, version bump or release was used.
+
+Remaining validation and supported limits:
+
+- CI must compile both modules, run core/app JVM tests and lint, assemble, and
+  verify the merged manifest after adding ML Kit. Test cases were written/updated
+  but have not been executed here.
+- Device-check JavaScript output, infinite loops, cancellation, renderer crashes,
+  blocked network/files/iframes/permissions, and actual Pyodide initialization from
+  intercepted cache resources. Verify declined/interrupted downloads and offline
+  reuse. WebView has no hard heap quota; runtime bytes use version-pinned HTTPS,
+  without an independently pinned content hash.
+- Device-check selected-version Save/Share/PNG, process-death history recovery,
+  preview grant revocation, large-font layouts and OCR with rotated/large/empty
+  images and both model capabilities. Unapplied editor drafts are in-memory;
+  applying creates the durable version.
+- The offline Mermaid renderer supports basic flowcharts and sequence diagrams,
+  not the complete Mermaid language. Unsupported syntax gets an explicit notice
+  while source stays editable/exportable. CSV previews cap at 500 rows/50 columns.
+  Bundled OCR is Latin-script recognition; additional scripts are not included.
+  Full Mermaid grammar, extra OCR scripts and package-enabled Python are not
+  implemented. Feature-matrix release status remains unchanged until a tag ships.

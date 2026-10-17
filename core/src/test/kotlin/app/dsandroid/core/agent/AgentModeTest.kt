@@ -7,6 +7,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -14,6 +16,72 @@ import org.junit.rules.TemporaryFolder
 
 class AgentModeTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Test fun interpreterChannelsSurviveTimelineAndToolHistoryWithoutCuttingJson() = runTest {
+        val output = "\u0001".repeat(16_000)
+        val tool = CodeInterpreterTool(app.dsandroid.core.sandbox.CodeExecutor {
+            app.dsandroid.core.sandbox.CodeExecution(stdout = output)
+        })
+        var requests = 0
+        val client = object : LlmClient {
+            override fun stream(messages: List<ChatMessage>, tools: List<ToolSpec>): Flow<ChatChunk> =
+                if (requests++ == 0) flowOf(ChatChunk(listOf(StreamChoice(delta = StreamDelta(toolCalls = listOf(
+                    ToolCallDelta(0, "compute", function = FunctionDelta("code_interpreter",
+                        """{"language":"javascript","code":"console.log('hello')"}""")),
+                )))))) else flowOf(ChatChunk(listOf(StreamChoice(delta = StreamDelta(content = "Done")))))
+        }
+        val workspace = WorkspacePath(temporary.newFolder())
+        val registry = ToolRegistry(listOf(tool))
+        val history = mutableListOf(ChatMessage("user", "calculate"))
+        val events = AgentLoop(client, registry, GuardPolicy(registry, workspace), ToolContext(workspace), Confirmer { _, _ -> true })
+            .run(history).toList()
+        val preview = events.filterIsInstance<AgentEvent.StepsUpdated>().last().steps
+            .filterIsInstance<TurnStep.ToolCall>().single().resultPreview
+        assertEquals(output, LlmJson.parseToJsonElement(preview).jsonObject["stdout"]!!.jsonPrimitive.content)
+        val savedResult = LlmJson.parseToJsonElement(history.single { it.role == "tool" }.content!!).jsonObject
+        assertEquals(preview, savedResult["content"]!!.jsonPrimitive.content)
+        assertTrue(events.last() is AgentEvent.Done)
+    }
+
+    @Test fun stopCancelsComputeRatherThanWaitingForLocalWriteSemantics() = runTest {
+        val entered = CompletableDeferred<Unit>()
+        var completed = false
+        var wasCancelled = false
+        val tool = object : Tool {
+            override val name = "code_interpreter"
+            override val description = "Compute"
+            override val schema = JsonObject(emptyMap())
+            override val risk = Risk.SAFE
+            override val kind = ToolKind.COMPUTE
+            override suspend fun run(args: JsonObject, ctx: ToolContext): ToolResult {
+                entered.complete(Unit)
+                try {
+                    delay(500)
+                    completed = true
+                    return ToolResult("late result")
+                } catch (cancelled: CancellationException) {
+                    wasCancelled = true
+                    throw cancelled
+                }
+            }
+        }
+        val client = object : LlmClient {
+            override fun stream(messages: List<ChatMessage>, tools: List<ToolSpec>) = flowOf(
+                ChatChunk(listOf(StreamChoice(delta = StreamDelta(toolCalls = listOf(
+                    ToolCallDelta(0, "compute", function = FunctionDelta("code_interpreter", "{}")),
+                ))))))
+        }
+        val workspace = WorkspacePath(temporary.newFolder())
+        val registry = ToolRegistry(listOf(tool))
+        val job = launch {
+            AgentLoop(client, registry, GuardPolicy(registry, workspace), ToolContext(workspace), Confirmer { _, _ -> true })
+                .run(mutableListOf(ChatMessage("user", "calculate"))).collect()
+        }
+        entered.await()
+        job.cancelAndJoin()
+        assertTrue(wasCancelled)
+        assertFalse(completed)
+    }
 
     @Test fun chatModeAdvertisesNoToolsAndNeverExecutesUnsolicitedCalls() = runTest {
         var ran = false
