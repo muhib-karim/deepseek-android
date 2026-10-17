@@ -103,6 +103,16 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 | 46 | Language toggle; Bangla interface | ✓ | ✓ | ✓ | v0.2.0 |
 | 47 | Text size and display controls; dark/light | ✓ | ✓ | ✓ | v0.2.0 |
 
+## Agent extras
+
+| # | Feature | ChatGPT | Claude | Kimi | Release |
+|---|---|---|---|---|---|
+| 48 | Browser agent: the model opens and reads pages in an in-app browser for you, every click/submit confirmed | ✓ | ✓ | ✓ | v0.3.0 |
+| 49 | Connectors to your own accounts (e.g. cloud drive, mail), read-only first, signed in by you | ✓ | ✓ | — | v0.3.0 |
+| 50 | Multi-file website / slide-deck builder in the artifacts panel, export as a zip | ✓ | ✓ | ✓ | v0.3.0 |
+| 51 | Study mode: step-by-step tutoring instead of straight answers | ✓ | ✓ | — | v0.3.0 |
+| 52 | Suggested follow-up questions under an answer | ✓ | — | ✓ | v0.3.0 |
+
 ## Not planned
 
 - Image and video generation: DeepSeek has no image model. Drawings come out as SVG/HTML artifacts instead (row 13).
@@ -114,5 +124,5 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 |---|---|
 | v0.1.0 (released) | 6 |
 | v0.2.0 | 26 |
-| v0.3.0 | 15 |
-| **All** | **47** |
+| v0.3.0 | 20 |
+| **All** | **52** |
