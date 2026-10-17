@@ -37,4 +37,13 @@ class ModelSelectorTest {
         assertEquals("v1", ModelSelector.forTurn(models, "v1", false, emptyMap()))
         assertEquals("v1", ModelSelector.forTurn(models, "v1", true, mapOf("v1" to ModelCapabilities(reasoning = true))))
     }
+
+    @Test fun deepseekTextModelsStayTextOnlyAndCustomVisionRequiresSupport() {
+        listOf("deepseek-chat", "deepseek-reasoner", "deepseek-v3", "deepseek-r1").forEach {
+            assertFalse(ModelCapabilities().isVision(it))
+        }
+        assertFalse(ModelCapabilities().isVision("private-model"))
+        assertTrue(ModelCapabilities(vision = true).isVision("private-model"))
+        assertFalse(ModelCapabilities(vision = false).isVision("qwen2.5-vl"))
+    }
 }

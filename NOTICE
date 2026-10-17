@@ -28,3 +28,22 @@ SVG preview and PNG rendering:
   Apache License, Version 2.0
   https://bigbadaboom.github.io/androidsvg/
   Dependency notices and licenses remain applicable; artwork and chart code are original.
+
+On-device OCR:
+  Google ML Kit Text Recognition 16.0.1 (com.google.mlkit:text-recognition)
+  Bundled Latin-script recognition model; Google SDK terms apply.
+  https://developers.google.com/ml-kit/terms
+  https://developers.google.com/ml-kit/vision/text-recognition/v2/android
+
+Image orientation:
+  AndroidX ExifInterface 1.3.7 (androidx.exifinterface:exifinterface)
+  Apache License, Version 2.0
+  https://developer.android.com/jetpack/androidx/releases/exifinterface
+
+Optional Python runtime (downloaded only after user approval):
+  Pyodide 0.26.4, Mozilla Public License 2.0
+  https://github.com/pyodide/pyodide/blob/0.26.4/LICENSE
+  Python and bundled standard-library components retain their respective licenses.
+  https://docs.python.org/3/license.html
+  No runtime source is copied into this repository; its upstream notices apply
+  to downloaded runtime files. Mermaid previews and charts use original renderers.
