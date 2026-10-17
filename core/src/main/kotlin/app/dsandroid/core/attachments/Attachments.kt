@@ -9,7 +9,7 @@ import java.nio.charset.CodingErrorAction
 import java.util.Locale
 
 enum class AttachmentKind(val label: String) {
-    PDF("PDF"), DOCX("DOCX"), TEXT("text"), IMAGE("image"), UNKNOWN("unsupported");
+    PDF("PDF"), DOCX("DOCX"), XLSX("XLSX"), PPTX("PPTX"), TEXT("text"), IMAGE("image"), UNKNOWN("unsupported");
 
     companion object {
         fun detect(mime: String?, name: String): AttachmentKind {
@@ -22,6 +22,8 @@ enum class AttachmentKind(val label: String) {
                 type.startsWith("text/") || type in setOf("application/json", "application/xml") -> TEXT
                 extension == "pdf" -> PDF
                 extension == "docx" -> DOCX
+                extension == "xlsx" || type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> XLSX
+                extension == "pptx" || type == "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> PPTX
                 extension in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif") -> IMAGE
                 extension in setOf("txt", "md", "markdown", "csv", "json", "xml", "log", "yaml", "yml") -> TEXT
                 else -> UNKNOWN
@@ -90,7 +92,9 @@ internal fun InputStream.readNBytesCompat(limit: Int): ByteArray {
 data class AttachmentContent(val name: String, val kind: AttachmentKind, val text: String = "", val imageDataUri: String? = null)
 
 object AttachmentContextBuilder {
+    const val MAX_FILES = 50
     fun message(prompt: String, attachments: List<AttachmentContent>, vision: Boolean): ChatMessage {
+        require(attachments.size <= MAX_FILES) { "At most 50 files per chat" }
         val blocks = attachments.filter { it.kind != AttachmentKind.IMAGE && it.kind != AttachmentKind.UNKNOWN }.map {
             val name = it.name.replace(Regex("[\\r\\n\\p{Cntrl}]"), " ").take(200)
             val text = PlainTextAttachment.cap(it.text)

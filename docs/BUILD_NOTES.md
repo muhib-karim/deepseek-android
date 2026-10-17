@@ -1,5 +1,8 @@
 # v0.1 implementation record
 
+Historical first-pass notes below are superseded by `PASS3.md` and the authoritative
+Roadmap in `PLAN.md`. Pass 3 adds JSON persistence, Office, charts, PNG and dictation.
+
 The approved design is in PLAN.md. The build-session brief is the current scope.
 
 - Ruling: use two modules, in-memory history, plain JVM tests and no wrapper JAR,

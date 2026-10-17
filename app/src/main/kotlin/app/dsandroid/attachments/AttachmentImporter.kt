@@ -49,6 +49,8 @@ class AttachmentImporter(private val context: Context) {
             val text = when (kind) {
                 AttachmentKind.PDF -> file.inputStream().use(PdfTextExtractor::extract)
                 AttachmentKind.DOCX -> file.inputStream().use { DocxTextExtractor.extract(it) }
+                AttachmentKind.XLSX -> file.inputStream().use { XlsxTextExtractor.extract(it) }
+                AttachmentKind.PPTX -> file.inputStream().use { PptxTextExtractor.extract(it) }
                 AttachmentKind.TEXT -> file.inputStream().use { PlainTextAttachment.read(it) }
                 else -> ""
             }

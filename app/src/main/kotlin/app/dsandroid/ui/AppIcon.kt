@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-enum class Glyph { MENU, PLUS, SEND, STOP, THINK, SEARCH, CAMERA, PHOTO, DOCUMENT, CLOSE, CHEVRON, TOOL, CHECK, SHIELD, ERROR }
+enum class Glyph { MENU, PLUS, SEND, STOP, THINK, SEARCH, CAMERA, PHOTO, DOCUMENT, CLOSE, CHEVRON, TOOL, CHECK, SHIELD, ERROR, MIC, MORE, MUTE }
 
 /** Original line icons; no external icon pack or brand artwork. */
 @Composable
@@ -27,6 +27,9 @@ fun AppIcon(glyph: Glyph, description: String? = null, modifier: Modifier = Modi
             val stroke = Stroke(width = 1.8f, cap = StrokeCap.Round)
             fun line(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(x1, y1), Offset(x2, y2), 1.8f, StrokeCap.Round)
             when (glyph) {
+                Glyph.MIC -> { drawRoundRect(color, Offset(9f, 2f), Size(6f, 13f), CornerRadius(3f), style = stroke); drawArc(color, 0f, 180f, false, Offset(5f, 7f), Size(14f, 13f), style = stroke); line(12f, 20f, 12f, 23f) }
+                Glyph.MORE -> { drawCircle(color, 1.2f, Offset(5f, 12f)); drawCircle(color, 1.2f, Offset(12f, 12f)); drawCircle(color, 1.2f, Offset(19f, 12f)) }
+                Glyph.MUTE -> { line(3f, 9f, 7f, 9f); line(7f, 9f, 12f, 5f); line(12f, 5f, 12f, 19f); line(12f, 19f, 7f, 15f); line(7f, 15f, 3f, 15f); line(3f, 15f, 3f, 9f); line(17f, 9f, 22f, 15f); line(22f, 9f, 17f, 15f) }
                 Glyph.MENU -> { line(4f, 8f, 20f, 8f); line(4f, 16f, 15f, 16f) }
                 Glyph.PLUS -> { line(5f, 12f, 19f, 12f); line(12f, 5f, 12f, 19f) }
                 Glyph.CLOSE, Glyph.ERROR -> { line(6f, 6f, 18f, 18f); line(6f, 18f, 18f, 6f) }

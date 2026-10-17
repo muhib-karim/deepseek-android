@@ -1,5 +1,8 @@
 package app.dsandroid.ui
 
+import androidx.compose.ui.res.stringResource
+import app.dsandroid.R
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -91,8 +94,8 @@ private fun CodeBlock(block: MarkdownBlock.Code) {
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(block.language.ifBlank { "Code" }, style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) "Copied" else "Copy") }
+                Text(block.language.ifBlank { stringResource(R.string.code) }, style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy)) }
             }
             SelectionContainer {
                 Text(block.text, Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
@@ -119,6 +122,6 @@ fun DataTable(header: List<String>, rows: List<List<String>>, alignments: List<T
                 }
             }
         }
-        if (rows.size > 500) Text("Preview shows the first 500 rows. Share or save for the full table.", style = MaterialTheme.typography.bodySmall)
+        if (rows.size > 500) Text(stringResource(R.string.table_preview_limit), style = MaterialTheme.typography.bodySmall)
     }
 }

@@ -1,0 +1,28 @@
+package app.dsandroid.core.agent
+
+import app.dsandroid.core.llm.ChatMessage
+import kotlinx.serialization.Serializable
+import java.util.UUID
+
+@Serializable
+data class RunConfig(
+    val runId: String = UUID.randomUUID().toString(), val conversationId: String = "",
+    val model: String = "", val thinking: Boolean = false, val searchEnabled: Boolean = false,
+    val providerKey: String = "",
+)
+
+/** Contains conversation data only. Credentials must never be put in this record. */
+@Serializable
+data class RunCheckpoint(
+    val runId: String, val conversationId: String = "", val model: String = "",
+    val thinking: Boolean = false, val searchEnabled: Boolean = false, val providerKey: String = "",
+    val messages: List<ChatMessage> = emptyList(), val steps: List<TurnStep> = emptyList(),
+    val pendingToolIndex: Int = 0, val assistantStep: Int = 0,
+    val pendingAssistant: ChatMessage? = null, val complete: Boolean = false,
+)
+
+interface CheckpointStore {
+    suspend fun save(checkpoint: RunCheckpoint)
+    suspend fun load(runId: String): RunCheckpoint?
+    suspend fun delete(runId: String)
+}

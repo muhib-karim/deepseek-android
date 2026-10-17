@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
+import app.dsandroid.R
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,17 +32,17 @@ import kotlinx.serialization.json.JsonElement
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit) {
+fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, collapseThinking: Boolean = true) {
     var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item.steps.forEachIndexed { index, step ->
             when (step) {
                 is TurnStep.Reasoning -> {
-                    var expanded by rememberSaveable(item.id, index, step.complete) { mutableStateOf(false) }
+                    var expanded by rememberSaveable(item.id, index, step.complete, collapseThinking) { mutableStateOf(!collapseThinking) }
                     TimelineRow {
                         Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (step.complete) "Thought for ${maxOf(1L, (step.durationMs + 999) / 1000)} seconds" else "Thinking",
+                                Text(if (step.complete) stringResource(R.string.thought_seconds, maxOf(1L, (step.durationMs + 999) / 1000)) else stringResource(R.string.thinking),
                                     Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
                                 Text(if (expanded) "⌃" else if (step.complete) "›" else "⌄", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -59,7 +61,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                             AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary)
                             Text(toolLabel(step), Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            TextButton(onClick = { detailsIndex = index }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Details", style = MaterialTheme.typography.labelMedium) }
+                            TextButton(onClick = { detailsIndex = index }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text(stringResource(R.string.details), style = MaterialTheme.typography.labelMedium) }
                             ToolStatusIcon(step.status)
                         }
                         if (step.status in listOf(ToolStatus.WAITING, ToolStatus.DENIED, ToolStatus.ERROR, ToolStatus.STOPPED)) {
@@ -77,7 +79,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     AppIcon(Glyph.DOCUMENT, color = MaterialTheme.colorScheme.primary)
                     Column(Modifier.weight(1f)) {
                         Text(artifact.fileName, style = MaterialTheme.typography.titleSmall)
-                        Text("Tap to preview · Share or save", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.tap_preview), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text("›")
                 }
@@ -96,26 +98,33 @@ private fun TimelineRow(content: @Composable () -> Unit) {
     }
 }
 
-private fun toolLabel(step: TurnStep.ToolCall): String = when {
-    step.status == ToolStatus.DONE && step.name.startsWith("create_") -> step.resultPreview.lineSequence().firstOrNull().orEmpty()
-    step.name == "web_fetch" -> if (step.status == ToolStatus.DONE) "Read a web page" else "Searching the web"
-    step.name == "read_file" -> "Read a file"
-    step.name == "list_files" -> "Browse files"
-    step.name == "create_pdf" -> "Create a PDF"
-    step.name == "create_svg" -> "Create an SVG"
-    step.name == "create_csv" -> "Create a CSV"
-    step.name == "create_markdown" -> "Create a Markdown file"
-    else -> step.name.replace('_', ' ')
+@Composable
+private fun toolLabel(step: TurnStep.ToolCall): String {
+    val args = remember(step.argsJson) { runCatching { LlmJson.parseToJsonElement(step.argsJson) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
+    fun arg(key: String): String = (args?.get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+    val resultName = if(step.status == ToolStatus.DONE && step.resultPreview.startsWith("Created ")) step.resultPreview.lineSequence().first().removePrefix("Created ") else ""
+    val done = step.status == ToolStatus.DONE
+    val zippedCount = if(done) Regex("^Zipped (\\d+) files").find(step.resultPreview)?.groupValues?.get(1)?.toIntOrNull() else null
+    return when {
+        step.name == "web_search" -> stringResource(if(done) R.string.searched_query else R.string.searching_query, arg("query"))
+        step.name in listOf("web_fetch", "visit_web") -> stringResource(if(done) R.string.visited_site else R.string.visiting_site, runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty())
+        step.name == "zip_files" -> if(zippedCount != null) stringResource(R.string.zipped_files, zippedCount) else stringResource(if(done) R.string.zipped_archive else R.string.zipping_files)
+        step.name.startsWith("create_") -> listOf(resultName, arg("path"), arg("fileName")).firstOrNull { it.isNotBlank() }?.let { stringResource(if(done) R.string.created_file else R.string.creating_file, it.substringAfterLast('/')) } ?: stringResource(if(done) R.string.created_artifact else R.string.creating_artifact)
+        step.name == "read_file" -> stringResource(R.string.read_file)
+        step.name in listOf("list_files", "list_dir", "list_zip") -> stringResource(R.string.browse_files)
+        else -> step.name.replace('_', ' ')
+    }
 }
 
-private fun statusLabel(status: ToolStatus): String = when (status) {
-    ToolStatus.RUNNING -> "Running"
-    ToolStatus.WAITING -> "Waiting for you"
-    ToolStatus.DONE -> "Done"
-    ToolStatus.ERROR -> "Failed"
-    ToolStatus.DENIED -> "Denied"
-    ToolStatus.STOPPED -> "Stopped"
-}
+@Composable
+private fun statusLabel(status: ToolStatus): String = stringResource(when(status) {
+    ToolStatus.RUNNING -> R.string.status_running
+    ToolStatus.WAITING -> R.string.status_waiting
+    ToolStatus.DONE -> R.string.status_done
+    ToolStatus.ERROR -> R.string.status_error
+    ToolStatus.DENIED -> R.string.status_denied
+    ToolStatus.STOPPED -> R.string.status_stopped
+})
 
 @Composable
 private fun ToolStatusIcon(status: ToolStatus) {
@@ -144,12 +153,12 @@ private fun ToolDetails(step: TurnStep.ToolCall) {
     }
     Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(step.name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
-        Text(statusLabel(step.status) + (step.durationMs?.let { " · $it ms" } ?: ""))
-        Text("Arguments", style = MaterialTheme.typography.titleSmall)
+        Text(statusLabel(step.status) + (step.durationMs?.let { " · " + stringResource(R.string.duration_ms, it) } ?: ""))
+        Text(stringResource(R.string.arguments), style = MaterialTheme.typography.titleSmall)
         SelectionContainer { Text(arguments, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-        Text("Result", style = MaterialTheme.typography.titleSmall)
-        TextButton(onClick = { clipboard.setText(AnnotatedString(step.resultPreview)) }, enabled = step.resultPreview.isNotEmpty()) { Text("Copy result") }
-        SelectionContainer { Text(step.resultPreview.ifBlank { "No result yet." }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
+        Text(stringResource(R.string.result), style = MaterialTheme.typography.titleSmall)
+        TextButton(onClick = { clipboard.setText(AnnotatedString(step.resultPreview)) }, enabled = step.resultPreview.isNotEmpty()) { Text(stringResource(R.string.copy_result)) }
+        SelectionContainer { Text(step.resultPreview.ifBlank { stringResource(R.string.no_result) }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.height(24.dp))
     }
 }

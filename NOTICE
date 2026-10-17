@@ -22,3 +22,9 @@ PDF text extraction:
   Apache License, Version 2.0
   https://github.com/TomRoush/PdfBox-Android
   Android port of Apache PDFBox; upstream notices and licenses remain applicable.
+
+SVG preview and PNG rendering:
+  AndroidSVG 1.4 (com.caverock:androidsvg-aar)
+  Apache License, Version 2.0
+  https://bigbadaboom.github.io/androidsvg/
+  Dependency notices and licenses remain applicable; artwork and chart code are original.

@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,13 +83,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
             Column(Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(90.dp))
-                Text("How can I help you?", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(28.dp))
-                listOf("Make a one-page PDF summary of…", "Draw an SVG logo for…", "Turn this into a CSV…").forEach { example ->
-                    TextButton(onClick = { draft = example.removeSuffix("…") }, modifier = Modifier.fillMaxWidth()) {
-                        Text(example, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                Text(stringResource(R.string.greeting), style = MaterialTheme.typography.headlineSmall)
             }
         } else {
             LazyColumn(Modifier.weight(1f).widthIn(max = 840.dp).fillMaxWidth(), state = listState,
@@ -98,26 +92,28 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                     when (item) {
                         is ChatItem.User -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             Surface(Modifier.widthIn(max = 600.dp).fillMaxWidth(0.86f), shape = RoundedCornerShape(18.dp),
-                                color = if (isSystemInDarkTheme()) Color(0xFF24304F) else Color(0xFFEEF3FF)) {
+                                color = if (MaterialTheme.colorScheme.background == Color(0xFF121212)) Color(0xFF24304F) else Color(0xFFEEF3FF)) {
                                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     item.attachments.forEach { Text("▧ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                     if (item.text.isNotEmpty()) Text(item.text, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }
                         }
-                        is ChatItem.Assistant -> AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id, openArtifact)
+                        is ChatItem.Assistant -> AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id, openArtifact, settings.collapseThinking)
                     }
                 }
                 item(key = "conversation-tail") { Spacer(Modifier.height(1.dp)) }
             }
         }
         Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, state, settings.supportsVision(think),
-            { attachSheet = true }, { if (vm.send(draft, think, search)) draft = "" }, vm::stop, vm::removeAttachment)
+            { attachSheet = true }, { if (vm.send(draft, think, search)) draft = "" }, vm::stop, vm::removeAttachment,
+            settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError)
     }
     if (attachSheet) ModalBottomSheet(onDismissRequest = { attachSheet = false }) {
-        Text("Add to your message", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.attach_title), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.attachment_limits), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AttachmentTile("Camera", Glyph.CAMERA, Modifier.weight(1f)) {
+            AttachmentTile(stringResource(R.string.camera), Glyph.CAMERA, Modifier.weight(1f)) {
                 attachSheet = false
                 try {
                     val name = "${UUID.randomUUID()}.jpg"
@@ -128,18 +124,18 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                     camera.launch(cameraUri(name))
                 } catch (_: Exception) {
                     cameraName?.let { cameraFile(it).delete() }; cameraName = null
-                    vm.showError("No camera app is available. Try Photo or Document.")
+                    vm.showError(context.getString(R.string.camera_unavailable))
                 }
             }
-            AttachmentTile("Photo", Glyph.PHOTO, Modifier.weight(1f)) {
+            AttachmentTile(stringResource(R.string.photo), Glyph.PHOTO, Modifier.weight(1f)) {
                 attachSheet = false
                 try { photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-                catch (_: Exception) { vm.showError("The photo picker is unavailable. Try Document.") }
+                catch (_: Exception) { vm.showError(context.getString(R.string.photo_unavailable)) }
             }
-            AttachmentTile("Document", Glyph.DOCUMENT, Modifier.weight(1f)) {
+            AttachmentTile(stringResource(R.string.document), Glyph.DOCUMENT, Modifier.weight(1f)) {
                 attachSheet = false
                 try { documents.launch(arrayOf("*/*")) }
-                catch (_: Exception) { vm.showError("The document picker is unavailable.") }
+                catch (_: Exception) { vm.showError(context.getString(R.string.document_unavailable)) }
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -158,10 +154,12 @@ private fun AttachmentTile(label: String, glyph: Glyph, modifier: Modifier, clic
 
 @Composable
 private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setThink: (Boolean) -> Unit, search: Boolean, setSearch: (Boolean) -> Unit,
-    state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit) {
+    state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit,
+    audioLanguage: String, dictate: (String) -> Unit, report: (String) -> Unit) {
     val enabled = state.settingsReady && !state.saving && !state.signingIn && !state.running && !state.importing
+    val placeholder = stringResource(R.string.message_placeholder)
     Surface(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(24.dp), color = if (isSystemInDarkTheme()) Color(0xFF1E1E1E) else Color.White,
+        shape = RoundedCornerShape(24.dp), color = if (MaterialTheme.colorScheme.background == Color(0xFF121212)) Color(0xFF1E1E1E) else Color.White,
         shadowElevation = 3.dp, border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             if (state.attachments.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -170,31 +168,32 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                         Column(Modifier.widthIn(max = 230.dp)) {
                             Text(upload.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(if (upload.kind == AttachmentKind.IMAGE) {
-                                if (vision) "Image · ready" else "image not readable by this model"
-                            } else "${upload.text.length} chars" + if (upload.text.isBlank()) " · no text found" else "", style = MaterialTheme.typography.labelSmall)
+                                if (vision) stringResource(R.string.image_ready) else stringResource(R.string.image_unreadable)
+                            } else stringResource(R.string.attachment_chars, upload.text.length) + if (upload.text.isBlank()) " · " + stringResource(R.string.no_text) else "", style = MaterialTheme.typography.labelSmall)
                         }
                     }, trailingIcon = {
-                        IconButton(onClick = { remove(upload.id) }, enabled = !state.running, modifier = Modifier.size(36.dp)) { AppIcon(Glyph.CLOSE, "Remove ${upload.name}", Modifier.size(16.dp)) }
+                        IconButton(onClick = { remove(upload.id) }, enabled = !state.running, modifier = Modifier.size(36.dp)) { AppIcon(Glyph.CLOSE, stringResource(R.string.remove_attachment, upload.name), Modifier.size(16.dp)) }
                     })
                 }
             }
-            if (state.importing) Text("Reading attachments…", Modifier.padding(8.dp), style = MaterialTheme.typography.labelSmall)
+            if (state.importing) Text(stringResource(R.string.reading_attachments), Modifier.padding(8.dp), style = MaterialTheme.typography.labelSmall)
             BasicTextField(draft, edit, Modifier.fillMaxWidth().heightIn(min = 52.dp, max = 144.dp).padding(horizontal = 8.dp, vertical = 12.dp)
-                .semantics { contentDescription = "Type a message" },
+                .semantics { contentDescription = placeholder },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6,
-                decorationBox = { field -> Box { if (draft.isEmpty()) Text("Type a message", color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
+                decorationBox = { field -> Box { if (draft.isEmpty()) Text(stringResource(R.string.message_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ComposerChip("Think", Glyph.THINK, think, enabled) { setThink(!think) }
-                ComposerChip("Search", Glyph.SEARCH, search, enabled) { setSearch(!search) }
+                ComposerChip(stringResource(R.string.think), Glyph.THINK, think, enabled) { setThink(!think) }
+                ComposerChip(stringResource(R.string.search), Glyph.SEARCH, search, enabled) { setSearch(!search) }
                 Spacer(Modifier.weight(1f))
+                VoiceDictation(enabled, audioLanguage, dictate, report)
                 IconButton(onClick = attach, enabled = enabled, modifier = Modifier.size(44.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
-                    AppIcon(Glyph.PLUS, "Attach files")
+                    AppIcon(Glyph.PLUS, stringResource(R.string.attach_files))
                 }
                 FilledIconButton(onClick = if (state.running) stop else send, modifier = Modifier.size(44.dp),
                     enabled = state.running || (enabled && (draft.isNotBlank() || state.attachments.isNotEmpty())),
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = AccentBlue, contentColor = Color.White)) {
-                    AppIcon(if (state.running) Glyph.STOP else Glyph.SEND, if (state.running) "Stop generating" else "Send message")
+                    AppIcon(if (state.running) Glyph.STOP else Glyph.SEND, if (state.running) stringResource(R.string.stop_generating) else stringResource(R.string.send_message))
                 }
             }
         }
@@ -203,8 +202,12 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
 
 @Composable
 private fun ComposerChip(label: String, glyph: Glyph, selected: Boolean, enabled: Boolean, click: () -> Unit) {
-    FilterChip(selected = selected, onClick = click, enabled = enabled, label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-        leadingIcon = { AppIcon(glyph, modifier = Modifier.size(16.dp)) }, shape = CircleShape,
-        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer, selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer))
+    Surface(onClick = click, enabled = enabled, shape = CircleShape,
+        color = if(selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if(selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) {
+        Row(Modifier.padding(horizontal = 6.dp).heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            AppIcon(glyph, modifier = Modifier.size(14.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
 }

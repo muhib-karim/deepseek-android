@@ -29,7 +29,7 @@ falls back to API key. We do not work around it.
 
 ## v0.1 features
 - English UI, Material 3, light/dark; chat with streaming (SSE), Markdown + code rendering, reasoning toggle,
-  model picker (deepseek chat/reasoner ids from /models), conversation list in memory for v0.1 (Room persistence in v0.2).
+  model picker (deepseek chat/reasoner ids from /models), durable JSON conversations and resumable runs in v0.1.
 - Tool calling via the OpenAI-compatible `tools` API. v0.1 tools:
   create_pdf (Markdown/HTML -> PDF via Android PdfDocument), create_svg (validated, preview), create_markdown,
   create_csv, create_image (render SVG/chart to PNG), save/share (Android share sheet + SAF "Save as"),
@@ -37,7 +37,7 @@ falls back to API key. We do not work around it.
 - Every artifact appears as a card in chat: preview, Open, Share, Save to Downloads.
 - Confirm dialog (shows the exact action + arguments) for: any write outside the app folder, any shell command,
   any package install/intent launch. Shell and install are OFF by default (Settings > Advanced).
-- Minimal permissions: INTERNET only. Files outside the app go through the Storage Access Framework picker
+- Minimal permissions: INTERNET plus ACCESS_NETWORK_STATE for run recovery; RECORD_AUDIO requested at first dictation use. Files outside the app go through the Storage Access Framework picker
   (no MANAGE_EXTERNAL_STORAGE). No notification permission in v0.1.
 
 ## Architecture
@@ -120,25 +120,37 @@ OpenCode Android: same pattern for OpenCode (sign in to OpenCode, use its free m
 The owner's full spec is now the roadmap. Items 1-12 above map onto it as shown. `[x]` = in the tree, `[ ]` = to do.
 
 ### Phase 1 — parity MVP (v0.1.0)
-- [ ] Sign in with DeepSeek via PKCE in the system browser (Custom Tab); the app never sees the password (Sign-in 1)
-- [ ] API key and any OpenAI-compatible endpoint as a second path (Sign-in 2-3)
-- [ ] Tokens and keys encrypted with the Android Keystore
-- [ ] Clear "sign in again" prompt on 401 / session expiry, never a silent hang (item 5)
+- [ ] Sign in with DeepSeek via PKCE in the system browser (Custom Tab); configurable standard S256 flow exists, but a supported DeepSeek-specific endpoint contract and device verification are still required (Sign-in 1)
+- [x] API key and any OpenAI-compatible endpoint as a second path (Sign-in 2-3)
+- [x] Tokens and keys encrypted with the Android Keystore AES-GCM master key
+- [x] Clear "sign in again" prompt on 401/403/session expiry with a tested renewal state machine and pending-run resume (item 5)
 - [x] Streaming chat (SSE)
 - [x] Markdown, tables, code blocks with per-block copy, message copy (item 4)
 - [x] Deep Think toggle with a visible thinking + tool-step timeline (item 8)
-- [ ] Web search toggle (item 10: web_search + visit_web)
+- [x] Web search toggle (item 10: web_search + visit_web; DuckDuckGo HTML or configured SearXNG)
 - [x] File and image upload through the system picker (item 1)
-- [ ] Text extraction from PDF, Word, Excel, PowerPoint and images; up to ~50 files per chat
-- [ ] Press-and-hold voice dictation in the input (Android speech recogniser, no extra permission until used)
+- [x] Text extraction from PDF, Word, Excel, PowerPoint and text; up to 50 files per chat with visible limits. Images attach as image parts where supported.
+- [ ] OCR for scanned PDF/image text (v0.2; text-only models explicitly identify unreadable images)
+- [x] Press-and-hold voice dictation in the input (Android speech recogniser, microphone permission requested only on first use)
 - [x] Quick / Expert = fast and pro model tiers, newest models picked automatically from /models (item 3)
-- [ ] Chat history that persists across restarts (Room); cloud sync only if a legitimate API exists
-- [ ] All strings in resources, English default, language toggle in Settings
+- [x] Chat history that persists across restarts (atomic JSON store); drawer search, rename and delete. Cloud sync requires a legitimate API.
+- [x] App UI strings in resources, English default, System/English per-app language toggle in Settings
 - [x] Look and flow of the official app, original assets (items 2, 9)
 - [x] Plain-English errors (item 5); in-app viewer for outputs (item 6)
-- [ ] Resilient runs: retry with backoff, checkpoint each step, resume after a network drop, "reconnecting" banner (item 12)
+- [x] Resilient runs: retry with backoff, checkpoint each step, resume after a network drop, reconnecting countdown/Retry now and restart Resume (item 12)
 - [x] File outputs PDF, SVG, Markdown, CSV saved and shared; confirm before any write outside the app folder
-- [ ] PowerPoint, Word and Excel makers (item 10; promised to the owner for v0.1, pulled forward from Phase 3)
+- [x] PowerPoint, Word and Excel makers with XML/relationships tests and in-app previews (item 10)
+- [x] Sandbox create/read/list/ZIP tools, SVG charts, on-device PNG generation/export and AndroidSVG preview (items 10-11)
+
+### Pass 3 remaining validation and TODOs
+
+Checkboxes above mean implementation is in the tree; they do not claim executed tests or a successful build.
+
+- [ ] Run CI Kotlin compilation, JVM suites, Android lint and assemble. The requested no-Gradle/no-SDK/no-network rule prevented execution here; no first-build guarantee is claimed.
+- [ ] Supply/validate a documented DeepSeek account flow. The existing standard browser PKCE adapter intentionally has no invented authorize/exchange URLs. API key and custom endpoints remain usable alternatives.
+- [ ] Device-check Keystore persistence, Custom Tab callback, microphone permission/hold/release/unavailable recognizer, locale recreation, network loss/return, Retry now and restart Resume.
+- [ ] Open generated PPTX/DOCX/XLSX in installed Office apps and verify PDF/AndroidSVG previews, PNG export, Share/Save and large-font layouts against the supplied references.
+- [ ] Provider-side account deletion, global logout, account email/binding details, shared links and voice catalogs need supported APIs. Local data/account screens explicitly describe local-only behavior.
 
 ### Phase 2 — differentiators
 - [ ] Artifacts panel: live HTML / SVG / Markdown preview with edit-and-rerun

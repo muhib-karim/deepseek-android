@@ -55,7 +55,7 @@ class OpenAiCompatibleClient(
             override fun onResponse(call: Call, response: Response) {
                 try {
                     val models = response.use {
-                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string())
+                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string(), it.header("Retry-After"))
                         val bytes = it.peekBody(2 * 1024 * 1024 + 1L).bytes()
                         require(bytes.size <= 2 * 1024 * 1024) { "Model list is too large" }
                         LlmJson.decodeFromString<ModelsResponse>(String(bytes, Charsets.UTF_8)).data
@@ -86,7 +86,7 @@ class OpenAiCompatibleClient(
                 activeResponse.set(response)
                 try {
                     response.use {
-                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string())
+                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string(), it.header("Retry-After"))
                         val body = it.body ?: throw IOException("Empty provider response")
                         if (body.contentType()?.subtype != "event-stream") throw IOException("Expected an SSE response")
                         val parser = SseParser()

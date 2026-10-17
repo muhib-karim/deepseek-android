@@ -4,7 +4,7 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.Locale
 
-class ProviderHttpException(val status: Int, body: String) : IOException(ErrorExplainer.http(status, body))
+class ProviderHttpException(val status: Int, val body: String, val retryAfter: String? = null) : IOException(ErrorExplainer.http(status, body))
 
 object ErrorExplainer {
     fun http(status: Int, body: String = ""): String {

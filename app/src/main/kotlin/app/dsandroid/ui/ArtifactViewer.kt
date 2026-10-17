@@ -1,5 +1,3 @@
-@file:android.annotation.SuppressLint("ProduceStateDoesNotAssignValue") // value is assigned via withContext; lint false positive
-
 package app.dsandroid.ui
 
 import android.graphics.Bitmap
@@ -22,11 +20,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.dsandroid.core.guard.WorkspacePath
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.tools.Csv
+import app.dsandroid.R
+import app.dsandroid.core.attachments.DocxTextExtractor
+import app.dsandroid.core.attachments.PptxTextExtractor
+import app.dsandroid.core.attachments.XlsxTextExtractor
+import app.dsandroid.core.attachments.SpreadsheetPreview
+import app.dsandroid.tools.AndroidSvgRasterizer
 import java.io.ByteArrayInputStream
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -38,19 +43,29 @@ private sealed interface Preview {
     data class Text(val text: String) : Preview
     data class Pdf(val pages: Int) : Preview
     data class Picture(val bitmap: Bitmap) : Preview
-    data class Error(val text: String) : Preview
+    data class Workbook(val sheets: List<SpreadsheetPreview>) : Preview
+    data object Error : Preview
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Unit, share: () -> Unit, save: () -> Unit) {
-    val preview by produceState<Preview?>(null, artifact.path, artifact.mimeType) {
-        value = withContext(Dispatchers.IO) {
+fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Unit, share: () -> Unit, save: () -> Unit,
+    openExternal: () -> Unit = {}, exportPng: () -> Unit = {}) {
+    var preview by remember(artifact.path, artifact.mimeType) { mutableStateOf<Preview?>(null) }
+    LaunchedEffect(artifact.path, artifact.mimeType) {
+        preview = withContext(Dispatchers.IO) {
             try {
                 val file = workspace.resolve(artifact.path)
                 require(file.isFile && file.length() <= 20 * 1024 * 1024)
                 when {
                     artifact.mimeType == "application/pdf" -> withPdf(file) { Preview.Pdf(it.pageCount) }
+                    artifact.fileName.endsWith(".docx", true) -> Preview.Text(file.inputStream().use { DocxTextExtractor.extract(it) })
+                    artifact.fileName.endsWith(".pptx", true) -> Preview.Text(file.inputStream().use { PptxTextExtractor.extract(it) })
+                    artifact.fileName.endsWith(".xlsx", true) -> Preview.Workbook(file.inputStream().use { XlsxTextExtractor.preview(it) })
+                    artifact.mimeType == "image/svg+xml" -> {
+                        require(file.length() <= 2 * 1024 * 1024)
+                        Preview.Picture(AndroidSvgRasterizer.bitmap(file.readText()))
+                    }
                     artifact.mimeType.startsWith("image/") && artifact.mimeType != "image/svg+xml" -> {
                         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         BitmapFactory.decodeFile(file.path, bounds)
@@ -64,34 +79,55 @@ fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Uni
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { Preview.Error("This artifact could not be previewed. You can still share or save it.") }
+            catch (_: Exception) { Preview.Error }
         }
     }
     Scaffold(topBar = {
-        TopAppBar(title = { Text(artifact.fileName, maxLines = 1) }, navigationIcon = { TextButton(onClick = back) { Text("Back") } })
+        TopAppBar(title = { Text(artifact.fileName, maxLines = 1) }, navigationIcon = { TextButton(onClick = back) { Text(stringResource(R.string.viewer_back)) } })
     }, bottomBar = {
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = share, modifier = Modifier.weight(1f)) { Text("Share") }
-            Button(onClick = save, modifier = Modifier.weight(1f)) { Text("Save") }
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = share, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
+                Button(onClick = save, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_save)) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                TextButton(onClick = openExternal) { Text(stringResource(R.string.viewer_open)) }
+                if (artifact.mimeType == "image/svg+xml") TextButton(onClick = exportPng) { Text(stringResource(R.string.viewer_export_png)) }
+            }
         }
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (val loaded = preview) {
                 null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                is Preview.Error -> Text(loaded.text, Modifier.padding(24.dp))
+                Preview.Error -> Text(stringResource(R.string.viewer_error), Modifier.padding(24.dp))
                 is Preview.Pdf -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(loaded.pages) { page -> PdfPage(workspace, artifact.path, page) }
                 }
                 is Preview.Picture -> Image(loaded.bitmap.asImageBitmap(), artifact.fileName, Modifier.fillMaxSize().padding(16.dp), contentScale = ContentScale.Fit)
+                is Preview.Workbook -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(loaded.sheets.size) { index ->
+                        val sheet = loaded.sheets[index]
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(sheet.name, style = MaterialTheme.typography.titleMedium)
+                            if (sheet.rows.isEmpty()) Text(stringResource(R.string.viewer_empty_csv))
+                            else DataTable(sheet.rows.first(), sheet.rows.drop(1))
+                        }
+                    }
+                    item { Text(stringResource(R.string.viewer_sheet_limit), style = MaterialTheme.typography.bodySmall) }
+                }
                 is Preview.Text -> when (artifact.mimeType) {
-                    "image/svg+xml", "text/html", "application/xhtml+xml" -> StaticWebPreview(loaded.text)
+                    "text/html", "application/xhtml+xml" -> StaticWebPreview(loaded.text)
                     "text/csv" -> {
                         val rows = remember(loaded.text) { Csv.decode(loaded.text) }
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                            if (rows.isEmpty()) Text("Empty CSV") else DataTable(rows.first(), rows.drop(1))
+                            if (rows.isEmpty()) Text(stringResource(R.string.viewer_empty_csv)) else DataTable(rows.first(), rows.drop(1))
                         }
                     }
-                    else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) { MarkdownText(loaded.text) }
+                    else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
+                        if (artifact.fileName.endsWith(".docx", true) || artifact.fileName.endsWith(".pptx", true) || artifact.fileName.endsWith(".xlsx", true)) {
+                            androidx.compose.foundation.text.selection.SelectionContainer { Text(loaded.text) }
+                        } else MarkdownText(loaded.text)
+                    }
                 }
             }
         }
@@ -104,9 +140,10 @@ private fun <T> withPdf(file: File, block: (PdfRenderer) -> T): T =
 @Composable
 private fun PdfPage(workspace: WorkspacePath, path: String, index: Int) {
     var failed by remember(path, index) { mutableStateOf(false) }
-    val bitmap by produceState<Bitmap?>(null, path, index) {
+    var bitmap by remember(path, index) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(path, index) {
         try {
-            value = withContext(Dispatchers.IO) {
+            bitmap = withContext(Dispatchers.IO) {
                 withPdf(workspace.resolve(path)) { renderer -> renderer.openPage(index).use { page ->
                     val ratio = minOf(1200f / page.width, 1600f / page.height)
                     Bitmap.createBitmap((page.width * ratio).roundToInt().coerceAtLeast(1), (page.height * ratio).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888).also {
@@ -120,11 +157,11 @@ private fun PdfPage(workspace: WorkspacePath, path: String, index: Int) {
     }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         val image = bitmap
-        if (image != null) Image(image.asImageBitmap(), "Page ${index + 1}", Modifier.fillMaxWidth().aspectRatio(image.width.toFloat() / image.height), contentScale = ContentScale.FillWidth)
+        if (image != null) Image(image.asImageBitmap(), stringResource(R.string.viewer_page, index + 1), Modifier.fillMaxWidth().aspectRatio(image.width.toFloat() / image.height), contentScale = ContentScale.FillWidth)
         else Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
-            if (failed) Text("Page could not be rendered") else CircularProgressIndicator()
+            if (failed) Text(stringResource(R.string.viewer_page_error)) else CircularProgressIndicator()
         }
-        Text("Page ${index + 1}", style = MaterialTheme.typography.labelSmall)
+        Text(stringResource(R.string.viewer_page, index + 1), style = MaterialTheme.typography.labelSmall)
     }
 }
 

@@ -3,7 +3,7 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-This is the v0.1 implementation, including pass 2. No local Gradle, SDK, network
+This is the v0.1 implementation, including pass 3. No local Gradle, SDK, network
 or git operations were run in this pass. Tests were written before the core
 implementation; execution, compilation and lint remain CI gates. Android 8.0
 (API 26) or newer is required.
@@ -12,13 +12,13 @@ implementation; execution, compilation and lint remain CI gates. Android 8.0
 
 - **DeepSeek-style interface:** original chat-and-spark mark, white/near-black
   Material 3 themes with a calm blue accent, conversation drawer with search and
-  Today / Yesterday / Earlier groups, centered title/model picker, and a rounded
+  Today / 30 Days / month groups, rename/delete, centered title/model picker, and a rounded
   composer with **Think**, **Search**, attach, send and stop controls. Dynamic colour
-  is off. The layout follows the owner's written spec; public screenshots were
-  not fetched during this offline pass.
-- **File upload:** Camera, Photo Picker and multi-document picker; up to eight
-  files, 20 MB each, copied to private storage without new permissions. PDF and
-  DOCX text extraction plus TXT/Markdown/CSV/JSON, capped at 200,000 characters
+  is off. Grouped Settings, language/appearance dialogs, personalization and local
+  account/data controls use original code and the supplied screenshots as references.
+- **File upload:** Camera, Photo Picker and multi-document picker; up to 50
+  files per chat, 20 MB each, copied to private storage without storage permissions. PDF,
+  DOCX, XLSX and PPTX text extraction plus TXT/Markdown/CSV/JSON, capped at 200,000 characters
   per file with a truncation marker. Images become JPEG data-URI parts, at most
   1568 px, only for vision-capable models. Text-only models show an explicit
   unreadable-image chip and receive no image bytes, including from earlier turns.
@@ -36,35 +36,43 @@ implementation; execution, compilation and lint remain CI gates. Android 8.0
   time, human-readable tool labels, live status, and a Details sheet with
   arguments, copyable bounded results and duration. **Think** selects a reasoning
   model when available, or sends the provider's `thinking: {type: enabled}` flag.
-  **Search** registers `web_fetch` only for that turn; it fetches public HTTPS
-  pages rather than supplying a separate search-engine API.
-- Tool calling with Markdown, RFC 4180 CSV, sanitized static SVG and multipage A4
-  text PDF artifacts; workspace file listing/reading and public HTTPS web fetch.
+  **Search** enables `web_search`, `visit_web` and the `web_fetch` alias for that turn.
+  DuckDuckGo HTML is the default; Settings accepts a public HTTPS SearXNG URL.
+- Tool calling with Markdown, RFC 4180 CSV, sanitized static SVG, PNG images and multipage A4
+  text PDF artifacts, real PPTX/DOCX/XLSX makers, bar/line/pie charts, and sandbox text/ZIP tools.
 - **In-app artifact previews:** PDF pages, static SVG/HTML, Markdown, CSV tables
-  and images. Every viewer has **Share** and **Save** through system actions.
+  and images, plus Office text/table previews. Every viewer has **Share**, **Save** and
+  **Open in app** through system actions. SVGs use AndroidSVG and offer PNG export.
   Table previews display up to 500 rows; exported files retain all rows.
 - Plain-English authentication, quota, refusal, rate-limit and network error cards
   with **Open Settings**. One active provider/account, without automatic switching.
 - A confirmation dialog with **Allow once** / **Deny**, an eight-step agent limit,
   and Stop. Keystore-backed encrypted settings; no analytics or account rotation.
+- **Resilient runs:** bounded exponential retry with jitter and Retry-After, a calm
+  reconnecting countdown, Retry now, durable JSON checkpoints and explicit Resume
+  after restart. Completed tools are retained. Network return wakes waiting runs;
+  401/403 prompts for deliberate reauthentication instead of silently retrying.
+- **Dictation and language:** hold the mic for Android SpeechRecognizer; microphone
+  permission is requested at first use. System/English app locales and voice language
+  are selectable. Recognition availability and processing depend on the system service.
 - Pure JVM `:core` for protocol, attachments, Markdown, model ranking, errors,
   agent timeline, authentication primitives, guards and tools; `:app` for Android
   UI, sign-in, encrypted storage, PDF extraction/creation and viewers.
 
-Conversation history is in memory and disappears when the process ends. Artifacts
-remain in the private app workspace until app data is cleared or the app is
-uninstalled; their cards currently belong to the in-memory conversation. Use
-Save as… or Share for durable copies. PDF output lays out text; Markdown and HTML
-are not converted into rich PDF styling. SVG-to-PNG rendering is a v0.2 TODO.
+Conversations persist as private JSON in `filesDir/conversations`; run checkpoints
+live in `filesDir/runs` and artifacts in `filesDir/workspace`. Deleting a conversation
+also deletes its checkpoints. Artifacts remain until app data is cleared or the app
+is uninstalled; Share and Save provide external copies. PDF output lays out plain
+text; Markdown and HTML are not converted into rich PDF styling.
 
 ## Connect a provider
 
-Open **Settings**, choose a provider, save the settings, and return to chat.
+Open **Settings → Account settings**, choose a provider, save, and return to chat.
 
 | Provider | Configuration | Authentication |
 | --- | --- | --- |
 | API key | Enter your own Platform API key | `Authorization: Bearer …` |
-| DeepSeek account | Configure supported endpoints in Advanced, then sign in | `x-dsh-auth-token`, without Bearer |
+| DeepSeek account | Configure supported authorize/exchange endpoints, then sign in | `x-dsh-auth-token`, without Bearer |
 | Custom OpenAI-compatible | Base URL, model and optional separate key | Bearer key when supplied |
 
 The default base URL is `https://api.deepseek.com`. Leave the model override blank
@@ -108,14 +116,15 @@ are refused to avoid forwarding credentials to a different origin.
 
 ## Safety and permissions
 
-**Only `android.permission.INTERNET` is requested.** There are no storage,
-notification, microphone, install, location or broad package-query permissions.
-Artifacts live under the app's private `files/artifacts` directory. The
-non-exported FileProvider exposes only the artifact directory and a narrow camera
+**Install-time permissions are INTERNET and ACCESS_NETWORK_STATE.** RECORD_AUDIO
+is requested at first dictation use. There are no storage, notification, install,
+location or broad package-query permissions.
+Artifacts live under the app's private `filesDir/workspace` directory. The
+non-exported FileProvider exposes only artifact directories and a narrow camera
 cache directory. Camera uses the system intent without CAMERA permission. Uploads
 live under private `files/uploads`; they are copied immediately, so persistable
 URI permission is not taken. Imported copies are deleted after message preparation or when discarded; only
-the prepared text/image context remains in the in-memory conversation. Exports use the Storage Access
+the prepared text/image context remains in the private persisted conversation. Exports use the Storage Access
 Framework. PDF text extraction has no OCR: scanned PDFs may contain no readable
 text, and encrypted/damaged files can be rejected.
 
@@ -133,9 +142,10 @@ call timeout. HTML extraction is intentionally simple. Fetched text remains
 untrusted and may contain prompt injection; the guard checks subsequent tool
 calls regardless of model instructions. SVG output uses a conservative element
 and attribute allowlist; scripts, event handlers, styles, external references,
-DTDs and processing instructions are removed or rejected. In-app SVG/HTML viewers
-disable JavaScript, file/content access, network loads and navigation, and apply
-a restrictive content policy. They support static content, not interactive pages. CSV cells follow RFC 4180; spreadsheet applications
+DTDs and processing instructions are removed or rejected. AndroidSVG renders sanitized
+SVG without external resources; the HTML viewer disables JavaScript, file/content
+access, network loads and navigation and applies a restrictive content policy.
+They support static content, not interactive pages. CSV cells follow RFC 4180; spreadsheet applications
 may interpret formula-like cells when opened, so review untrusted CSVs there.
 
 Do not send secrets in chat or model-generated tool arguments. Prompts, reasoning,
@@ -175,19 +185,20 @@ Pass 2 adds in-memory DOCX fixtures, bounded text/charset handling, attachment
 context, Markdown blocks/inlines/streaming, quota/status errors, CSV preview parsing,
 and reasoning → tool → reasoning → tool → answer ordering and status updates.
 MockWebServer fixtures cover `/models`, thinking flags, errors and streaming.
-The Android module retains JVM tests for token-response validation.
+Pass 3 adds Office package integrity and extraction fixtures, traversal-safe ZIP tests,
+chart/search fixtures, retry/checkpoint/cancellation/session tests, conversation recovery
+and store tests, and image-tool sanitization tests.
 
 Tests were authored first but have not been executed locally. See
-[docs/PASS2_VALIDATION.md](docs/PASS2_VALIDATION.md) for CI and device checks.
+[docs/PASS3.md](docs/PASS3.md) for source checks and remaining CI/device validation.
 Device validation is still needed for pickers, camera handoff, PDFBox extraction,
-PDF/WebView previews, sharing/export, configuration changes, large fonts and
+PDF/AndroidSVG/Office previews, dictation/locales, reconnecting, sharing/export, configuration changes, large fonts and
 light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- v0.2: Room persistence for the existing conversation list; recover artifact cards.
 - v0.2: OCR for scanned documents/images and full LaTeX rendering.
-- v0.2: SVG → PNG, charts and voice with permission requests only when needed.
+- v0.2: richer artifact editing, text-to-speech and live voice conversations.
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.
 
