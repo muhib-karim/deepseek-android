@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Test, lint and assemble
+        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-android-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-android-failure-reports
+          path: |
+            core/build/reports/tests/
+            core/build/test-results/
+            app/build/reports/tests/
+            app/build/test-results/
+            app/build/reports/lint-results-*
+          if-no-files-found: ignore
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan working tree for secrets
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 dir /repo --no-banner

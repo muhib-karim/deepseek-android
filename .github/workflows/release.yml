@@ -1,0 +1,41 @@
+name: Debug release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build debug APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Name release APK
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9A-Za-z._-]+$ ]] || exit 1
+          mkdir -p release
+          cp app/build/outputs/apk/debug/app-debug.apk "release/deepseek-android-${RELEASE_TAG}-debug.apk"
+      - name: Publish debug APK
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/deepseek-android-*-debug.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            DeepSeek Android testing build, signed with the automatically generated debug key.
+            Not intended for Play distribution. CI debug keys can differ between runs;
+            replacing an existing installation may require uninstalling it first.
