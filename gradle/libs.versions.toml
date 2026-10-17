@@ -11,6 +11,7 @@ navigation = "2.8.4"
 security = "1.1.0-alpha06"
 browser = "1.8.0"
 junit = "4.13.2"
+pdfbox = "2.0.27.0"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
@@ -32,6 +33,7 @@ navigation-compose = { module = "androidx.navigation:navigation-compose", versio
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "security" }
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
 junit = { module = "junit:junit", version.ref = "junit" }
+pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

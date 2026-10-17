@@ -47,5 +47,6 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.security.crypto)
     implementation(libs.browser)
+    implementation(libs.pdfbox.android)
     testImplementation(libs.junit)
 }

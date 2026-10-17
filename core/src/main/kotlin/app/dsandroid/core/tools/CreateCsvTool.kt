@@ -3,6 +3,29 @@ package app.dsandroid.core.tools
 import kotlinx.serialization.json.*
 
 object Csv {
+    fun decode(text: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        var row = mutableListOf<String>()
+        val cell = StringBuilder()
+        var quoted = false
+        var index = 0
+        while (index < text.length) {
+            val char = text[index]
+            when {
+                char == '"' && quoted && index + 1 < text.length && text[index + 1] == '"' -> { cell.append('"'); index++ }
+                char == '"' -> quoted = !quoted
+                char == ',' && !quoted -> { row.add(cell.toString()); cell.clear() }
+                (char == '\r' || char == '\n') && !quoted -> {
+                    row.add(cell.toString()); cell.clear(); rows.add(row); row = mutableListOf()
+                    if (char == '\r' && index + 1 < text.length && text[index + 1] == '\n') index++
+                }
+                else -> cell.append(char)
+            }
+            index++
+        }
+        if (cell.isNotEmpty() || row.isNotEmpty()) { row.add(cell.toString()); rows.add(row) }
+        return rows
+    }
     fun encode(rows: List<List<String>>): String = rows.joinToString("") { row ->
         row.joinToString(",") { cell ->
             if (cell.any { it == ',' || it == '"' || it == '\r' || it == '\n' }) "\"${cell.replace("\"", "\"\"")}\"" else cell

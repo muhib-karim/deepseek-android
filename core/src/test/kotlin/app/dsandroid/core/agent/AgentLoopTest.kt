@@ -25,6 +25,28 @@ class AgentLoopTest {
         reasoningContent = "Make a file", toolCalls = listOf(ToolCallDelta(0, "call1", function = FunctionDelta(name, arguments)))), finishReason = "tool_calls"))))
     private val answer = listOf(ChatChunk(listOf(StreamChoice(delta = StreamDelta(content = "Finished"), finishReason = "stop"))))
 
+    @Test fun timelineKeepsReasoningToolReasoningToolAnswerInOrder() = runTest {
+        val client = FakeLlmClient(listOf(
+            toolTurn("create_markdown", """{"fileName":"first.md","content":"one"}"""),
+            toolTurn("create_markdown", """{"fileName":"second.md","content":"two"}"""), answer))
+        val workspace = WorkspacePath(temporary.newFolder())
+        val registry = ToolRegistry(listOf(CreateMarkdownTool()))
+        val events = AgentLoop(client, registry, GuardPolicy(registry, workspace), ToolContext(workspace), Confirmer { _, _ -> false })
+            .run(mutableListOf(ChatMessage("user", "Write two notes"))).toList()
+        val snapshots = events.filterIsInstance<AgentEvent.StepsUpdated>()
+        val steps = snapshots.last().steps
+        assertEquals(listOf("reasoning", "tool", "reasoning", "tool", "answer"), steps.map {
+            when (it) { is TurnStep.Reasoning -> "reasoning"; is TurnStep.ToolCall -> "tool"; is TurnStep.Answer -> "answer" }
+        })
+        assertEquals("Finished", (steps.last() as TurnStep.Answer).text)
+        val calls = steps.filterIsInstance<TurnStep.ToolCall>()
+        assertTrue(calls.all { it.status == ToolStatus.DONE && it.durationMs != null && it.durationMs!! >= 0 })
+        assertTrue(calls[0].argsJson.contains("first.md"))
+        assertTrue(calls[1].resultPreview.contains("second.md"))
+        assertTrue(snapshots.any { event -> event.steps.any { it is TurnStep.ToolCall && it.status == ToolStatus.RUNNING } })
+        assertEquals(1, snapshots.first().steps.size)
+    }
+
     @Test fun runsToolReturnsResultToModelAndEmitsArtifact() = runTest {
         val client = FakeLlmClient(listOf(toolTurn("create_markdown", """{"fileName":"note.md","content":"Hello"}"""), answer))
         val workspace = WorkspacePath(temporary.newFolder())
@@ -61,6 +83,9 @@ class AgentLoopTest {
         assertFalse(ran)
         assertTrue(events.any { it is AgentEvent.ToolNeedsConfirm })
         assertFalse(events.any { it is AgentEvent.ToolStarted })
+        val snapshots = events.filterIsInstance<AgentEvent.StepsUpdated>()
+        assertTrue(snapshots.any { e -> e.steps.any { it is TurnStep.ToolCall && it.status == ToolStatus.WAITING } })
+        assertEquals(ToolStatus.DENIED, snapshots.last().steps.filterIsInstance<TurnStep.ToolCall>().single().status)
         assertTrue(client.requests[1].last().content!!.contains("declined", ignoreCase = true))
     }
     @Test fun unknownToolAndInvalidArgumentsReturnToolErrors() = runTest {

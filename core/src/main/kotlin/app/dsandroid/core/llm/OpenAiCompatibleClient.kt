@@ -7,9 +7,14 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -25,6 +30,8 @@ class OpenAiCompatibleClient(
     private val auth: AuthProvider,
     private val identity: ClientIdentity,
     client: OkHttpClient = OkHttpClient(),
+    private val thinking: Boolean = false,
+    private val vision: Boolean = false,
 ) : LlmClient {
     private val endpoint = (baseUrl.trimEnd('/') + "/chat/completions").toHttpUrl().also {
         require(it.username.isEmpty() && it.password.isEmpty() && it.query == null && it.fragment == null) { "Invalid base URL" }
@@ -33,10 +40,39 @@ class OpenAiCompatibleClient(
     private val http = client.newBuilder().followRedirects(false).followSslRedirects(false)
         .connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
         .callTimeout(5, TimeUnit.MINUTES).build()
+    private val modelsEndpoint = (baseUrl.trimEnd('/') + "/models").toHttpUrl()
+
+    override suspend fun listModels(): List<ModelInfo> = suspendCancellableCoroutine { continuation ->
+        val request = Request.Builder().url(modelsEndpoint).header("Accept", "application/json")
+        identity.headers().forEach { (name, value) -> request.header(name, value) }
+        auth.headers().forEach { (name, value) -> request.header(name, value) }
+        val call = http.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request.build())
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+            override fun onResponse(call: Call, response: Response) {
+                try {
+                    val models = response.use {
+                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string())
+                        val bytes = it.peekBody(2 * 1024 * 1024 + 1L).bytes()
+                        require(bytes.size <= 2 * 1024 * 1024) { "Model list is too large" }
+                        LlmJson.decodeFromString<ModelsResponse>(String(bytes, Charsets.UTF_8)).data
+                            .filter { model -> model.id.isNotBlank() }.distinctBy { model -> model.id }
+                    }
+                    if (continuation.isActive) continuation.resume(models)
+                } catch (error: Exception) {
+                    if (continuation.isActive) continuation.resumeWithException(error)
+                }
+            }
+        })
+    }
 
     override fun stream(messages: List<ChatMessage>, tools: List<ToolSpec>): Flow<ChatChunk> = callbackFlow {
-        val requestBody = LlmJson.encodeToString(ChatRequest(model, messages, tools,
-            if (tools.isEmpty()) null else JsonPrimitive("auto")))
+        val requestBody = LlmJson.encodeToString(ChatRequest(model, messages.map { it.forVision(vision) }, tools,
+            if (tools.isEmpty()) null else JsonPrimitive("auto"),
+            thinking = if (thinking) buildJsonObject { put("type", "enabled") } else null))
         val request = Request.Builder().url(endpoint)
             .header("Accept", "text/event-stream")
             .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))
@@ -50,7 +86,7 @@ class OpenAiCompatibleClient(
                 activeResponse.set(response)
                 try {
                     response.use {
-                        if (!it.isSuccessful) throw IOException("Provider returned HTTP ${it.code}")
+                        if (!it.isSuccessful) throw ProviderHttpException(it.code, it.peekBody(8192).string())
                         val body = it.body ?: throw IOException("Empty provider response")
                         if (body.contentType()?.subtype != "event-stream") throw IOException("Expected an SSE response")
                         val parser = SseParser()

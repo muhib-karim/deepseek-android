@@ -7,6 +7,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ModelsTest {
+    @Test fun switchingToTextOnlyModelsStripsImageBytesFromExistingHistory() {
+        val original = ChatMessage("user", parts = listOf(ContentPart.text("Describe"), ContentPart.image("data:image/jpeg;base64,AA==")))
+        assertEquals("Describe", original.forVision(false).content)
+        assertNull(original.forVision(false).parts)
+        assertEquals(original, original.forVision(true))
+        assertFalse(LlmJson.encodeToString(original.forVision(false)).contains("base64"))
+    }
     @Test fun omitsAbsentOptionalFieldsFromUserMessages() {
         val message = LlmJson.parseToJsonElement(LlmJson.encodeToString(ChatMessage("user", "Hello"))).jsonObject
         assertFalse(message.containsKey("tool_calls"))

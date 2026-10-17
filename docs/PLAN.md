@@ -1,4 +1,4 @@
-# DeepSeek Android (formerly DeepSeek Android) — plan (v0.1)
+# DeepSeek Android — plan (v0.1)
 
 An English, open-source Android agent app for DeepSeek models: chat that can actually *do* things
 (make PDFs, SVGs, CSVs, Markdown, images; fetch the web; work with files) with a confirm step
@@ -29,7 +29,7 @@ falls back to API key. We do not work around it.
 
 ## v0.1 features
 - English UI, Material 3, light/dark; chat with streaming (SSE), Markdown + code rendering, reasoning toggle,
-  model picker (deepseek chat/reasoner ids from /models), conversation list stored locally (Room).
+  model picker (deepseek chat/reasoner ids from /models), conversation list in memory for v0.1 (Room persistence in v0.2).
 - Tool calling via the OpenAI-compatible `tools` API. v0.1 tools:
   create_pdf (Markdown/HTML -> PDF via Android PdfDocument), create_svg (validated, preview), create_markdown,
   create_csv, create_image (render SVG/chart to PNG), save/share (Android share sheet + SAF "Save as"),
@@ -38,7 +38,7 @@ falls back to API key. We do not work around it.
 - Confirm dialog (shows the exact action + arguments) for: any write outside the app folder, any shell command,
   any package install/intent launch. Shell and install are OFF by default (Settings > Advanced).
 - Minimal permissions: INTERNET only. Files outside the app go through the Storage Access Framework picker
-  (no MANAGE_EXTERNAL_STORAGE). Notifications optional (POST_NOTIFICATIONS, asked at use).
+  (no MANAGE_EXTERNAL_STORAGE). No notification permission in v0.1.
 
 ## Architecture
 Single-activity Compose app, modules: `:app` (UI), `:core` (agent loop, tool registry, guard policy),
@@ -60,7 +60,7 @@ max N steps, cancel anywhere. Pure-Kotlin core so most logic is JVM-unit-testabl
 - Account sign-in for third-party clients may be refused or changed by DeepSeek (developer preview, breaking
   changes). Mitigation: API key + custom endpoint paths; no spoofing.
 - "Free": account inference may draw on the account's Platform balance/bonus, not unlimited free chat. Say so in README.
-- Trademark: name avoids "DeepSeek"; README states unofficial, not affiliated.
+- Trademark: display name is "DeepSeek Android" with an explicit unofficial/not-affiliated notice and original artwork.
 - Prompt injection from fetched pages -> mitigated by guard + confirm + shell off by default.
 - Debug-signed APK is for testing, not Play distribution.
 
@@ -70,7 +70,7 @@ max N steps, cancel anywhere. Pure-Kotlin core so most logic is JVM-unit-testabl
    DOCX: text from word/document.xml. TXT/MD/CSV/JSON: read as text. Extracted text goes to the model as
    context (size-capped, with a visible "attached: name, N chars" chip). Images go as image parts to models that
    accept images; for text-only models the app says so instead of pretending (OCR is v0.2).
-2. **Interface like the official DeepSeek app** (original code and assets, no DeepSeek logo or name): clean chat,
+2. **Interface like the official DeepSeek app** (original code and assets, no DeepSeek logo or copied assets): clean chat,
    a left drawer with conversation history and New chat, a composer with attach (+), a "Think" (reasoning)
    toggle and a "Web" (search/fetch) toggle, the model name at the top as a picker.
 3. **Latest models automatically.** After sign-in or entering a key, and on every app start, fetch GET /models
@@ -82,7 +82,7 @@ max N steps, cancel anywhere. Pure-Kotlin core so most logic is JVM-unit-testabl
 4) MARKDOWN RENDERING done properly: core MarkdownParser (pure Kotlin, tested) producing blocks: headings, paragraphs, bullet/numbered lists, block quotes, fenced code (with language), GFM tables (header + alignment row + rows), horizontal rules; inline spans: bold, italic, inline code, links, strikethrough. App renders them with Compose (AnnotatedString for inline, a scrollable bordered table for tables, monospace surface with a Copy button for code). No raw ** or backticks ever shown. Streaming-safe (re-parse on each delta; unfinished fences render as code).
 5) PLAIN-ENGLISH ERRORS: core ErrorExplainer maps HTTP status/body to user text, tested: 401 -> "Sign-in expired or key invalid. Sign in again or check your API key."; 402 or a body saying insufficient balance/quota -> "This account has no remaining DeepSeek balance or free quota. Add a DeepSeek API key in Settings, or top up on the DeepSeek platform."; 403 -> "DeepSeek refused this request for this account (403). This can happen when the account has no access or quota for this app. Try an API key in Settings."; 429 -> rate limit with retry; 5xx -> service busy; network errors. Shown as an error card with a "Open Settings" action. Never auto-switch accounts; there is exactly one account at a time.
 6) INLINE ARTIFACT VIEWER: tapping an artifact card opens an in-app viewer screen: PDF via android.graphics.pdf.PdfRenderer (pages rendered to bitmaps in a LazyColumn, pinch-zoom optional), SVG and HTML via WebView with JavaScript disabled, file and content access disabled, loadDataWithBaseURL(null, ...); Markdown via the Markdown renderer; CSV as a table; images via Image. Each viewer has Share (FileProvider + ACTION_SEND) and Save (ACTION_CREATE_DOCUMENT) actions.
-7) RENAME: the app is now called "DeepSeek Android" (display name, README title, About screen) with a clear "Unofficial. Not affiliated with or endorsed by DeepSeek." line in README and in an About screen reachable from the drawer. No DeepSeek logo; use an original simple launcher icon (adaptive icon vector, e.g. a stylised chat bubble with a spark). Package/namespace/applicationId is app.dsandroid (already renamed before this pass; verify no "deepseek-android"/"DeepSeek Android" strings remain anywhere). ClientIdentity app name "DeepSeek-Android-Unofficial" so the server can always tell it apart from the official clients; never claim to be an official client.
+7) RENAME: the app is now called "DeepSeek Android" (display name, README title, About screen) with a clear "Unofficial. Not affiliated with or endorsed by DeepSeek." line in README and in an About screen reachable from the drawer. No DeepSeek logo; use an original simple launcher icon (adaptive icon vector, e.g. a stylised chat bubble with a spark). Package/namespace/applicationId is app.dsandroid (already renamed before this pass; verify no legacy project-name strings remain anywhere). ClientIdentity app name "DeepSeek-Android-Unofficial" so the server can always tell it apart from the official clients; never claim to be an official client.
 
 8) THINKING AND TOOL-CALL TIMELINE (owner screenshot of dsh-android, copy the UX pattern only): under the user bubble, the assistant turn is a vertical timeline of light-grey rounded cards in the exact order they happened, interleaving: (a) "Thinking" cards: small grey label "Thinking" + chevron, collapsed by default to a single-line ellipsised preview of the reasoning text, tap to expand the full text (live-updating while streaming); a new Thinking card starts each time reasoning resumes after a tool call; (b) tool cards: wrench icon + tool name in the accent colour + a "Details" link; Details opens a bottom sheet with the pretty-printed arguments, the result (truncated, copyable) and duration; add a trailing status icon (spinner while running, check when done, red x on error, shield/"waiting for you" when a confirm is pending, "denied" when declined); (c) an animated three-dot typing indicator while the model is working between steps; (d) the final answer rendered with the Markdown renderer, then artifact cards. Core: AgentLoop records an ordered List<TurnStep> (Reasoning(text), ToolCall(id, name, argsJson, status, resultPreview, durationMs), Answer(text)) and emits updates; unit-test the ordering for reasoning -> tool -> reasoning -> tool -> answer.
 
@@ -100,3 +100,18 @@ max N steps, cancel anywhere. Pure-Kotlin core so most logic is JVM-unit-testabl
 
 ## Next project (not started)
 OpenCode Android: same pattern for OpenCode (sign in to OpenCode, use its free models and features). Do not start until DeepSeek Android v0.1.0 ships.
+
+10) WORKSPACE FILE + OFFICE TOOLS (owner screenshot 7:55 AM: dsh-android building a .pptx by hand-writing OOXML and zipping). All in the app sandbox (filesDir/workspace), no Python, no shell needed:
+ - create_file(path, content) [text], read_file(path, max_chars), list_dir(path), zip_files(sources[], zip_path), list_zip(zip_path). Core, pure JVM, path-traversal safe via WorkspacePath, tested.
+ - visit_web(url) = the web_fetch tool renamed/aliased: fetch https page -> readable text (title, headings, paragraphs, links list), size/time capped. web_search(query): default backend the DuckDuckGo HTML endpoint (https://html.duckduckgo.com/html/?q=) parsed for title/url/snippet, honest User-Agent, max 8 results; backend configurable in Settings (DuckDuckGo HTML, or a user SearXNG URL). Search/visit only run when the "Search" chip is on or the user allows it.
+ - Real Office output with tested Kotlin builders (core, pure JVM, java.util.zip, minimal hand-written OOXML templates, original code): create_pptx(title, slides[{title, bullets[], notes?}]) -> .pptx (16:9, one title slide + content slides, [Content_Types].xml, _rels, presentation.xml, slideMaster/slideLayout/theme minimal valid parts); create_docx(title, blocks[{heading|paragraph|bullets|table}]) -> .docx; create_xlsx(sheets[{name, rows[][]}]) -> .xlsx (inline strings, numbers detected). Unit tests reopen each file with ZipInputStream, check every part listed in [Content_Types].xml exists, every _rels target exists, and every XML part parses with javax.xml DocumentBuilder; plus a docx round trip through DocxTextExtractor.
+ - Keep create_pdf and create_svg. Viewer: pptx/docx/xlsx open with a simple in-app text/table preview plus Share/Save (open with an installed Office app via ACTION_VIEW).
+ - Tool cards show human labels: "Created deck.pptx", "Visited example.com", "Searched: query", "Zipped 12 files".
+
+11) PRODUCT VISION (owner, 7:55 AM): "Study the DeepSeek official Android app. It is text-based only. I am trying to get an app just like ChatGPT or Claude so that people can have a much richer user experience." Keep the official look and feel; add the richer ChatGPT/Claude-app experience: visible thinking and tool steps, files made in-app (PDF, SVG, PPTX, DOCX, XLSX, charts, images) that open in a preview and can be shared, web browsing and search, file and image upload. Every v0.1 choice is judged by whether it is richer than the official app. Concretely for this pass: create_chart(type bar|line|pie, title, labels[], series[{name, values[]}]) -> core ChartSvgBuilder (pure JVM, tested, original) producing a clean SVG; create_image(svg) and chart PNG export rendered on device with com.caverock:androidsvg-aar:1.4 (Apache-2.0; add to NOTICE), which is also used for SVG previews instead of a WebView when possible.
+
+12) RESILIENT RUNS (owner screenshot 7:56 AM: dsh-android lost a long agent run to a momentary DNS failure "Unable to resolve host api.deepseek.com"). v0.1 must:
+ - Core RetryPolicy (pure JVM, tested): on IOException/UnknownHostException/timeout/5xx/429, retry with exponential backoff and jitter (1 s, 2 s, 4 s ... capped at 30 s, up to ~5 min total), never retry 400/401/402/403; honour Retry-After.
+ - Core RunCheckpoint: AgentLoop is resumable. After every completed tool call and every finished assistant step, serialise the run (messages so far incl. tool results, ordered TurnSteps, pending step index, model, flags) to JSON via a CheckpointStore interface; resume(checkpoint) continues from the last completed step without re-running finished tools (tool calls are only re-issued if they had not completed). Unit tests: kill the fake LLM mid-run with UnknownHostException after a tool result, then resume and assert the tool did not run twice and the final answer arrives; plus a JSON round-trip test.
+ - App: FileCheckpointStore in filesDir/runs; a ConnectivityManager.NetworkCallback (needs android.permission.ACCESS_NETWORK_STATE, a normal install-time permission; the only addition to INTERNET) resumes a waiting run as soon as the network returns; on app start an unfinished run shows "Resume this task" on its conversation.
+ - UI: a calm banner "Connection lost, retrying..." (with a countdown and a Retry now button) instead of a raw red error; raw details only in the Details sheet. Persist conversations to disk too (simple JSON files in filesDir/conversations) so the drawer history survives restarts.

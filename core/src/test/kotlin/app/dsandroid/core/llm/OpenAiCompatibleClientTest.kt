@@ -12,6 +12,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpenAiCompatibleClientTest {
+    @Test fun listsModelsWithSameIdentityAndAuthentication() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"data":[{"id":"model-v2","created":123}]}"""))
+            val client = OpenAiCompatibleClient(server.url("/v1").toString(), "unused", CustomEndpointAuth("test-value"), ClientIdentity("test", "en", 0))
+            assertEquals(listOf(ModelInfo("model-v2", 123)), client.listModels())
+            val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+            assertEquals("GET", request.method)
+            assertEquals("/v1/models", request.path)
+            assertEquals("Bearer test-value", request.getHeader("Authorization"))
+            assertEquals("DeepSeek-Android-Unofficial", request.getHeader("x-dsh-client-name"))
+        }
+    }
+    @Test fun reportsQuotaBodyAndSendsThinkingFlag() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"insufficient_quota"}"""))
+            val client = OpenAiCompatibleClient(server.url("/").toString(), "model", CustomEndpointAuth(""), ClientIdentity("test", "en", 0), thinking = true)
+            try { client.stream(emptyList(), emptyList()).toList(); fail() }
+            catch (error: ProviderHttpException) { assertTrue(ErrorExplainer.explain(error).contains("no remaining")) }
+            val body = LlmJson.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+            assertEquals("enabled", body.getValue("thinking").jsonObject.getValue("type").jsonPrimitive.content)
+        }
+    }
     @Test fun streamsToolCallAndSendsExpectedWireContract() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(

@@ -21,6 +21,7 @@ fun interface Confirmer {
 }
 
 sealed interface AgentEvent {
+    data class StepsUpdated(val steps: List<TurnStep>) : AgentEvent
     data class TextDelta(val text: String, val turn: Int) : AgentEvent
     data class ReasoningDelta(val text: String, val turn: Int) : AgentEvent
     data class ToolStarted(val callId: String, val name: String) : AgentEvent
@@ -44,16 +45,38 @@ class AgentLoop(
 
     /** Caller owns history and must not mutate it while a run is active. */
     fun run(history: MutableList<ChatMessage>): Flow<AgentEvent> = flow {
+        val timeline = mutableListOf<TurnStep>()
+        var reasoningStarted = 0L
+        fun finishReasoning() {
+            val last = timeline.lastOrNull()
+            if (last is TurnStep.Reasoning && !last.complete) timeline[timeline.lastIndex] = last.copy(
+                durationMs = (System.nanoTime() - reasoningStarted) / 1_000_000, complete = true)
+        }
+        suspend fun publish() { emit(AgentEvent.StepsUpdated(timeline.toList())) }
         repeat(maxSteps) { step ->
             coroutineContext.ensureActive()
             val accumulator = StreamAccumulator()
             client.stream(history.toList(), registry.specs()).collect { chunk ->
                 accumulator.accept(chunk)
                 chunk.choices.filter { it.index == 0 }.forEach { choice ->
-                    choice.delta.content?.let { emit(AgentEvent.TextDelta(it, step)) }
-                    choice.delta.reasoningContent?.let { emit(AgentEvent.ReasoningDelta(it, step)) }
+                    choice.delta.reasoningContent?.takeIf { it.isNotEmpty() }?.let { text ->
+                        val last = timeline.lastOrNull()
+                        if (last is TurnStep.Reasoning && !last.complete) timeline[timeline.lastIndex] = last.copy(text = last.text + text,
+                            durationMs = (System.nanoTime() - reasoningStarted) / 1_000_000)
+                        else { reasoningStarted = System.nanoTime(); timeline.add(TurnStep.Reasoning(text)) }
+                        emit(AgentEvent.ReasoningDelta(text, step)); publish()
+                    }
+                    choice.delta.content?.takeIf { it.isNotEmpty() }?.let { text ->
+                        finishReasoning()
+                        val last = timeline.lastOrNull()
+                        if (last is TurnStep.Answer) timeline[timeline.lastIndex] = last.copy(text = last.text + text)
+                        else timeline.add(TurnStep.Answer(text))
+                        emit(AgentEvent.TextDelta(text, step)); publish()
+                    }
                 }
             }
+            finishReasoning()
+            publish()
             val assistant = accumulator.message()
             val calls = assistant.toolCalls.orEmpty()
             if (calls.isEmpty()) {
@@ -65,6 +88,11 @@ class AgentLoop(
             val completedTurn = mutableListOf(assistant)
             for (call in calls) {
                 coroutineContext.ensureActive()
+                val position = timeline.size
+                val started = System.nanoTime()
+                var denied = false
+                timeline.add(TurnStep.ToolCall(call.id, call.function.name, call.function.arguments))
+                publish()
                 val args = runCatching { LlmJson.parseToJsonElement(call.function.arguments) as? JsonObject }.getOrNull()
                 val result = if (args == null) ToolResult("Invalid tool arguments: expected a JSON object", isError = true)
                 else {
@@ -73,20 +101,30 @@ class AgentLoop(
                         Decision.ALLOW -> true
                         Decision.DENY -> false
                         Decision.CONFIRM -> {
+                            timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.WAITING)
+                            publish()
                             emit(AgentEvent.ToolNeedsConfirm(call.id, call.function.name, args))
                             confirmer.confirm(call.function.name, args)
                         }
                     }
+                    denied = !allowed
                     if (!allowed) ToolResult(if (decision == Decision.DENY) "Denied by safety policy or unknown tool" else "User declined this tool call", isError = true)
                     else {
                         coroutineContext.ensureActive()
                         emit(AgentEvent.ToolStarted(call.id, call.function.name))
+                        timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.RUNNING)
+                        publish()
                         try {
                             withContext(Dispatchers.IO) { registry[call.function.name]!!.run(args, context) }
                         } catch (cancelled: CancellationException) { throw cancelled }
                         catch (_: Exception) { ToolResult("Tool failed: check the arguments, file name, size limit and workspace restrictions", isError = true) }
                     }
                 }
+                timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(
+                    status = if (denied) ToolStatus.DENIED else if (result.isError) ToolStatus.ERROR else ToolStatus.DONE,
+                    resultPreview = result.content.take(8000) + if (result.content.length > 8000) "\n[Result truncated]" else "",
+                    durationMs = (System.nanoTime() - started) / 1_000_000)
+                publish()
                 completedTurn.add(ChatMessage("tool", LlmJson.encodeToString(result), toolCallId = call.id))
                 emit(AgentEvent.ToolFinished(call.id, call.function.name, result))
                 result.artifacts.forEach { emit(AgentEvent.ArtifactCreated(it)) }
@@ -96,6 +134,6 @@ class AgentLoop(
         emit(AgentEvent.Error("Stopped after $maxSteps assistant steps. Send a new message to continue."))
     }.catch { error ->
         if (error is CancellationException) throw error
-        emit(AgentEvent.Error("The assistant request failed or its stream was incomplete. Check provider settings and connection."))
+        emit(AgentEvent.Error(ErrorExplainer.explain(error)))
     }
 }

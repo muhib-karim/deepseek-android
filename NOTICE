@@ -16,3 +16,9 @@ copied. No code from other unlicensed projects is included.
 DeepSeek Android is unofficial and is not affiliated with, endorsed by, or sponsored
 by DeepSeek. Third-party trademarks belong to their respective owners.
 Dependency licenses remain with their respective authors.
+
+PDF text extraction:
+  pdfbox-android 2.0.27.0 (com.tom-roush:pdfbox-android)
+  Apache License, Version 2.0
+  https://github.com/TomRoush/PdfBox-Android
+  Android port of Apache PDFBox; upstream notices and licenses remain applicable.
