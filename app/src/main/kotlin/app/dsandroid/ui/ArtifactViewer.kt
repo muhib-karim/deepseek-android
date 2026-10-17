@@ -1,3 +1,5 @@
+@file:android.annotation.SuppressLint("ProduceStateDoesNotAssignValue") // value is assigned via withContext; lint false positive
+
 package app.dsandroid.ui
 
 import android.graphics.Bitmap
