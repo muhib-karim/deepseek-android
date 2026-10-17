@@ -7,7 +7,10 @@ Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the 
 - Pass B (code interpreter sandbox, charts, artifacts canvas, file downloads, image OCR input)
   merged to main after CI green (compile, JVM tests, lint, assemble). Two CI fixes:
   explicit OkHttp Dns objects, and the attachment-edit test now covers the OCR block.
-- Pass C (remaining v0.2.0 matrix rows) in progress.
+- Pass C in progress: clean baseline inspected; extending existing registry, cards and JSON storage.
+- Core Pass C contracts/tests and implementations written: facts/projects/prompt composition, temporary checkpoint routing, exports, HTTPS MCP and research phases.
+- Existing registry/guard/timeline retained; disabled tools are removed from specs and execution.
+- Current brief forbids local Gradle, heavy tools, sub-agents, commits and pushes.
 - v0.1.0 released (debug testing build); QC GO with 4 notes, all scheduled for v0.2.0: network-security-config, confirm fetches with query strings or long URLs, SECURITY.md wording on confirmations, CI SHA-pinning/permissions/release gate.
 - Pass A (agent tools, confirmations, Chat/Agent toggle, thinking display, turn controls, cited web search/fetch, the 4 notes) committed and pushed; CI green.
 - Chat controls, source persistence, web guards and release/network hardening are integrated.
@@ -16,7 +19,7 @@ Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the 
 - No local Gradle execution; compilation, JVM tests and Android lint require CI.
 
 ## Next step
-0. Pass C: remaining v0.2.0 rows, then CI green and merge. Do not run Gradle locally.
+0. Wire core features into the ViewModel and Settings/chat UI, complete Bangla resources, then static checks. CI executes JVM tests/lint later.
 1. Release v0.2.0: identity check, manifest permissions check, secret scan, tag, APK link check, QC request.
 4. Then Phase 3 / v0.3.0 (phone control with a confirm before every action).
 

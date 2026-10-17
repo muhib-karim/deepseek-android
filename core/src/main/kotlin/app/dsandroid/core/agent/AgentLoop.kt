@@ -52,13 +52,14 @@ class AgentLoop(
     private val retryPolicy: RetryPolicy = RetryPolicy(),
     private val retryWait: suspend (Long) -> Unit = { delay(it) },
 ) {
-    init { require(maxSteps in 1..8) }
+    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS) }
 
     /** Caller owns history and must not mutate it while a run is active. */
     fun run(history: MutableList<ChatMessage>): Flow<AgentEvent> = execute(history, RunCheckpoint(
         runId = runConfig.runId, conversationId = runConfig.conversationId, model = runConfig.model,
         thinking = runConfig.thinking, searchEnabled = runConfig.searchEnabled, providerKey = runConfig.providerKey,
-        agentEnabled = runConfig.agentEnabled, messages = history.toList()))
+        agentEnabled = runConfig.agentEnabled, deepResearch = runConfig.deepResearch,
+        researchPhase = if (runConfig.deepResearch) ResearchPhase.PLAN else ResearchPhase.NONE, messages = history.toList()))
 
     fun resume(checkpoint: RunCheckpoint, history: MutableList<ChatMessage> = checkpoint.messages.toMutableList()): Flow<AgentEvent> {
         require(checkpoint.providerKey == runConfig.providerKey) { "Resume requires the original provider and account" }
@@ -96,7 +97,11 @@ class AgentLoop(
             val accumulator = StreamAccumulator()
             val requestStarted = System.nanoTime()
             try {
-            client.stream(HistoryPolicy.forRequest(history), if (initial.agentEnabled) registry.specs() else emptyList()).collect { chunk ->
+            val requestHistory = HistoryPolicy.forRequest(history).let { messages ->
+                if (checkpoint.researchPhase == ResearchPhase.NONE) messages
+                else messages + ChatMessage("system", ResearchPolicy.guidance(checkpoint.researchPhase))
+            }
+            client.stream(requestHistory, if (initial.agentEnabled && ResearchPolicy.toolsAllowed(checkpoint.researchPhase)) registry.specs() else emptyList()).collect { chunk ->
                 accumulator.accept(chunk)
                 chunk.choices.filter { it.index == 0 }.forEach { choice ->
                     choice.delta.reasoningContent?.takeIf { it.isNotEmpty() }?.let { text ->
@@ -148,7 +153,7 @@ class AgentLoop(
             }
             val finishedAssistant = requireNotNull(assistant)
             val calls = finishedAssistant.toolCalls.orEmpty()
-            if (!initial.agentEnabled && calls.isNotEmpty()) {
+            if ((!initial.agentEnabled || !ResearchPolicy.toolsAllowed(checkpoint.researchPhase)) && calls.isNotEmpty()) {
                 checkpoint = checkpoint.copy(complete = true)
                 save()
                 emit(AgentEvent.Error("Tools are unavailable in Chat mode"))
@@ -156,6 +161,14 @@ class AgentLoop(
             }
             if (calls.isEmpty()) {
                 history.add(finishedAssistant)
+                if (checkpoint.researchPhase == ResearchPhase.PLAN || checkpoint.researchPhase == ResearchPhase.INVESTIGATE) {
+                    checkpoint = checkpoint.copy(assistantStep = step + 1, pendingAssistant = null, pendingToolIndex = 0,
+                        researchPhase = ResearchPolicy.afterAnswer(checkpoint.researchPhase))
+                    // Preserve visible phase boundaries, even if two consecutive phases contain prose.
+                    timeline.add(TurnStep.Answer("\n\n"))
+                    save()
+                    continue
+                }
                 checkpoint = checkpoint.copy(assistantStep = step + 1, pendingAssistant = null, pendingToolIndex = 0, complete = true)
                 save()
                 emit(AgentEvent.Done)
@@ -231,7 +244,10 @@ class AgentLoop(
                 emit(AgentEvent.ToolFinished(call.id, call.function.name, result))
                 result.artifacts.forEach { emit(AgentEvent.ArtifactCreated(it)) }
             }
-            checkpoint = checkpoint.copy(pendingAssistant = null, pendingToolIndex = 0, assistantStep = step + 1)
+            checkpoint = checkpoint.copy(pendingAssistant = null, pendingToolIndex = 0, assistantStep = step + 1,
+                researchPhase = if (checkpoint.researchPhase == ResearchPhase.INVESTIGATE &&
+                    (ResearchPolicy.enoughEvidence(timeline) || step >= maxSteps - 2 ||
+                        timeline.filterIsInstance<TurnStep.ToolCall>().any { it.status == ToolStatus.DENIED })) ResearchPhase.REPORT else checkpoint.researchPhase)
             save()
         }
         checkpoint = checkpoint.copy(complete = true)

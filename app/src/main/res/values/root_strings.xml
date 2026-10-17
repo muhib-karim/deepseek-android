@@ -32,6 +32,7 @@
     <string name="resume_provider_changed">This task belongs to another provider. Restore its original provider in Settings to resume.</string>
     <string name="resume_unavailable">This saved task could not be resumed.</string>
     <string name="resume_before_send">Resume this task or start a new chat before sending another message.</string>
+    <string name="research_tools_required">Deep research needs the agent, web search and web fetch turned on.</string>
     <string name="error_signin">Sign-in expired or key invalid. Sign in again or check your API key.</string>
     <string name="error_balance">This account has no remaining DeepSeek balance or free quota. Add a DeepSeek API key in Settings, or top up on the DeepSeek platform.</string>
     <string name="error_refused">DeepSeek refused this request for this account (403). This can happen when the account has no access or quota for this app. Try an API key in Settings.</string>

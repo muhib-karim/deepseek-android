@@ -11,6 +11,7 @@ data class RunConfig(
     val model: String = "", val thinking: Boolean = false, val searchEnabled: Boolean = false,
     val providerKey: String = "",
     val agentEnabled: Boolean = true,
+    val deepResearch: Boolean = false,
 )
 
 /** Contains conversation data only. Credentials must never be put in this record. */
@@ -22,7 +23,9 @@ data class RunCheckpoint(
     val pendingToolIndex: Int = 0, val assistantStep: Int = 0,
     val pendingAssistant: ChatMessage? = null, val complete: Boolean = false,
     val agentEnabled: Boolean = true,
+    val deepResearch: Boolean = false,
     val sources: List<WebSource> = emptyList(), val searchHosts: Set<String> = emptySet(),
+    val researchPhase: ResearchPhase = ResearchPhase.NONE,
 )
 
 interface CheckpointStore {
