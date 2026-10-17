@@ -31,7 +31,8 @@ class ConversationTurnsTest {
         val message = result.history.last()
         assertEquals("changed", result.items.single().text)
         assertTrue(message.parts!!.first().text!!.startsWith("changed\n\nAttached file:"))
-        assertTrue(message.parts!!.first().text!!.endsWith("document"))
+        assertTrue(message.parts!!.first().text!!.contains("document"))
+        assertTrue(message.parts!!.first().text!!.contains("Untrusted image text (OCR): image.png"))
         assertEquals(original.parts!!.last(), message.parts!!.last())
     }
 

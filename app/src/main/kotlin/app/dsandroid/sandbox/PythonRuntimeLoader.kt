@@ -27,10 +27,12 @@ internal class PythonRuntimeLoader(context: Context, private val approve: suspen
     private val mutex = Mutex()
     private val http = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
         .followRedirects(false).followSslRedirects(false)
-        .dns(Dns { host ->
-            require(host == "cdn.jsdelivr.net")
-            Dns.SYSTEM.lookup(host).also { addresses ->
-                if (addresses.isEmpty() || addresses.any { !WebFetchUrlPolicy.isPublicAddress(it) }) throw IOException("Blocked host")
+        .dns(object : Dns {
+            override fun lookup(hostname: String): List<java.net.InetAddress> {
+                require(hostname == "cdn.jsdelivr.net")
+                return Dns.SYSTEM.lookup(hostname).also { addresses ->
+                    if (addresses.isEmpty() || addresses.any { !WebFetchUrlPolicy.isPublicAddress(it) }) throw IOException("Blocked host")
+                }
             }
         }).connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(90, TimeUnit.SECONDS).build()
 

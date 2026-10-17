@@ -20,9 +20,12 @@ import okhttp3.Request
 object SandboxWebViews {
     private val previewHttp = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
         .followRedirects(false).followSslRedirects(false)
-        .dns(Dns { host -> Dns.SYSTEM.lookup(host).also { addresses ->
-            if (addresses.isEmpty() || addresses.any { !WebFetchUrlPolicy.isPublicAddress(it) }) throw IOException("Blocked host")
-        } })
+        .dns(object : Dns {
+            override fun lookup(hostname: String): List<java.net.InetAddress> =
+                Dns.SYSTEM.lookup(hostname).also { addresses ->
+                    if (addresses.isEmpty() || addresses.any { !WebFetchUrlPolicy.isPublicAddress(it) }) throw IOException("Blocked host")
+                }
+        })
         .connectTimeout(5, TimeUnit.SECONDS).readTimeout(5, TimeUnit.SECONDS)
         .callTimeout(10, TimeUnit.SECONDS).build()
 
