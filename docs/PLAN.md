@@ -115,3 +115,48 @@ OpenCode Android: same pattern for OpenCode (sign in to OpenCode, use its free m
  - Core RunCheckpoint: AgentLoop is resumable. After every completed tool call and every finished assistant step, serialise the run (messages so far incl. tool results, ordered TurnSteps, pending step index, model, flags) to JSON via a CheckpointStore interface; resume(checkpoint) continues from the last completed step without re-running finished tools (tool calls are only re-issued if they had not completed). Unit tests: kill the fake LLM mid-run with UnknownHostException after a tool result, then resume and assert the tool did not run twice and the final answer arrives; plus a JSON round-trip test.
  - App: FileCheckpointStore in filesDir/runs; a ConnectivityManager.NetworkCallback (needs android.permission.ACCESS_NETWORK_STATE, a normal install-time permission; the only addition to INTERNET) resumes a waiting run as soon as the network returns; on app start an unfinished run shows "Resume this task" on its conversation.
  - UI: a calm banner "Connection lost, retrying..." (with a countdown and a Retry now button) instead of a raw red error; raw details only in the Details sheet. Persist conversations to disk too (simple JSON files in filesDir/conversations) so the drawer history survives restarts.
+
+## Roadmap (owner feature spec, Oct 18) — authoritative
+The owner's full spec is now the roadmap. Items 1-12 above map onto it as shown. `[x]` = in the tree, `[ ]` = to do.
+
+### Phase 1 — parity MVP (v0.1.0)
+- [ ] Sign in with DeepSeek via PKCE in the system browser (Custom Tab); the app never sees the password (Sign-in 1)
+- [ ] API key and any OpenAI-compatible endpoint as a second path (Sign-in 2-3)
+- [ ] Tokens and keys encrypted with the Android Keystore
+- [ ] Clear "sign in again" prompt on 401 / session expiry, never a silent hang (item 5)
+- [x] Streaming chat (SSE)
+- [x] Markdown, tables, code blocks with per-block copy, message copy (item 4)
+- [x] Deep Think toggle with a visible thinking + tool-step timeline (item 8)
+- [ ] Web search toggle (item 10: web_search + visit_web)
+- [x] File and image upload through the system picker (item 1)
+- [ ] Text extraction from PDF, Word, Excel, PowerPoint and images; up to ~50 files per chat
+- [ ] Press-and-hold voice dictation in the input (Android speech recogniser, no extra permission until used)
+- [x] Quick / Expert = fast and pro model tiers, newest models picked automatically from /models (item 3)
+- [ ] Chat history that persists across restarts (Room); cloud sync only if a legitimate API exists
+- [ ] All strings in resources, English default, language toggle in Settings
+- [x] Look and flow of the official app, original assets (items 2, 9)
+- [x] Plain-English errors (item 5); in-app viewer for outputs (item 6)
+- [ ] Resilient runs: retry with backoff, checkpoint each step, resume after a network drop, "reconnecting" banner (item 12)
+- [x] File outputs PDF, SVG, Markdown, CSV saved and shared; confirm before any write outside the app folder
+- [ ] PowerPoint, Word and Excel makers (item 10; promised to the owner for v0.1, pulled forward from Phase 3)
+
+### Phase 2 — differentiators
+- [ ] Artifacts panel: live HTML / SVG / Markdown preview with edit-and-rerun
+- [ ] Save As to any folder through the Storage Access Framework
+- [ ] In-app editor with syntax highlighting, Save As and share
+- [ ] Account manager: several accounts listed with each one's quota; the user switches manually. NO automatic switching or rotation.
+- [ ] Deep research: multi-step browsing into a report with inline clickable citations
+- [ ] Vision: charts, diagrams, camera input; SVG and chart generation (item 11)
+- [ ] Text-to-speech with sentence highlighting
+- [ ] Custom instructions / per-chat system prompt; text size and display controls
+
+### Phase 3 — ecosystem (every device action behind a per-action confirm; permissions asked at the moment of use)
+- [ ] Share target (send text or images from any app into a new chat)
+- [ ] Storage, shell and app-install tools
+- [ ] Screen awareness and phone control (screenshots, taps)
+- [ ] System actions: SMS draft, calendar, alarms, maps, Health Connect
+- [ ] Floating bubble; Chat / Agent mode toggle; pinned chats and project folders
+- [ ] Real-time voice mode; long-context document view; batch analysis of ~50 files
+
+### Never
+- Automatic account rotation, impersonating DeepSeek's own clients, a third-party relay, or copying code from unlicensed projects (ideas only; we build on the MIT harness).
