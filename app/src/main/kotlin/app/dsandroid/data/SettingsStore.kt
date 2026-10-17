@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import app.dsandroid.core.guard.GuardSettings
+import app.dsandroid.core.mcp.RemoteServer
 import app.dsandroid.core.llm.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
@@ -37,6 +38,10 @@ data class AppSettings(
     val audioLanguage: String = "",
     val searchBackend: String = "duckduckgo",
     val searxngUrl: String = "",
+    val memoryEnabled: Boolean = true,
+    val customInstructions: String = "",
+    val disabledTools: Set<String> = emptySet(),
+    val remoteServers: List<RemoteServer> = emptyList(),
 ) {
     val accountConfigured: Boolean get() = authorizeUrl.isNotBlank() && exchangeUrl.isNotBlank() && clientId.isNotBlank()
     fun guardSettings() = GuardSettings(shellEnabled, installEnabled)
@@ -83,6 +88,10 @@ class SettingsStore(context: Context) {
         audioLanguage = preferences.getString("audio_language", "")!!,
         searchBackend = preferences.getString("search_backend", "duckduckgo")!!,
         searxngUrl = preferences.getString("searxng_url", "")!!,
+        memoryEnabled = preferences.getBoolean("memory_enabled", true),
+        customInstructions = preferences.getString("custom_instructions", "")!!.take(8000),
+        disabledTools = preferences.getStringSet("disabled_tools", emptySet())!!.toSet(),
+        remoteServers = runCatching { LlmJson.decodeFromString<List<RemoteServer>>(preferences.getString("remote_servers", "[]")!!) }.getOrDefault(emptyList()),
     )
 
     fun save(value: AppSettings) {
@@ -100,6 +109,8 @@ class SettingsStore(context: Context) {
             .putString("appearance", value.appearance.name).putFloat("font_scale", value.fontScale.coerceIn(0.85f, 1.3f))
             .putBoolean("collapse_thinking", value.collapseThinking).putString("audio_language", value.audioLanguage)
             .putString("search_backend", value.searchBackend).putString("searxng_url", value.searxngUrl)
+            .putBoolean("memory_enabled", value.memoryEnabled).putString("custom_instructions", value.customInstructions.take(8000))
+            .putStringSet("disabled_tools", value.disabledTools).putString("remote_servers", LlmJson.encodeToString(value.remoteServers))
             .commit()) { "Could not save encrypted settings" }
     }
 }

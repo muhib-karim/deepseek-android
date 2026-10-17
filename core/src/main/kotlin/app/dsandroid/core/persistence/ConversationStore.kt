@@ -35,6 +35,10 @@ data class ConversationRecord(
     val attachmentCount: Int = 0,
     val pendingRunId: String? = null,
     val supersededRunIds: Set<String> = emptySet(),
+    val pinned: Boolean = false,
+    val projectId: String? = null,
+    val systemPrompt: String = "",
+    val temporary: Boolean = false,
 )
 
 /** Private JSON files, replaced atomically so a process exit cannot leave a partial record. */
@@ -78,9 +82,11 @@ class JsonFileStore(private val directory: File, private val maxBytes: Int = 64 
 
 class ConversationStore(directory: File) {
     private val files = JsonFileStore(directory)
-    fun save(record: ConversationRecord) = files.write(record.id, LlmJson.encodeToString(record))
+    fun save(record: ConversationRecord) {
+        if (!record.temporary) files.write(record.id, LlmJson.encodeToString(record))
+    }
     fun delete(id: String) = files.delete(id)
     fun loadAll(): List<ConversationRecord> = files.ids().mapNotNull { id ->
-        runCatching { files.read(id)?.let { LlmJson.decodeFromString<ConversationRecord>(it) }?.takeIf { it.id == id } }.getOrNull()
-    }.sortedByDescending { it.createdAt }
+        runCatching { files.read(id)?.let { LlmJson.decodeFromString<ConversationRecord>(it) }?.takeIf { it.id == id && !it.temporary } }.getOrNull()
+    }.sortedWith(compareByDescending<ConversationRecord> { it.pinned }.thenByDescending { it.createdAt })
 }
