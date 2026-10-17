@@ -112,11 +112,17 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 | 50 | Multi-file website / slide-deck builder in the artifacts panel, export as a zip | ✓ | ✓ | ✓ | v0.3.0 |
 | 51 | Study mode: step-by-step tutoring instead of straight answers | ✓ | ✓ | — | v0.3.0 |
 | 52 | Suggested follow-up questions under an answer | ✓ | — | ✓ | v0.3.0 |
+| 53 | Branch a conversation from any message into a new chat | ✓ | ✓ | — | v0.3.0 |
+| 54 | Library: every generated file, artifact and image from all chats in one place | ✓ | ✓ | ✓ | v0.3.0 |
+| 55 | Parallel sub-agents for big tasks: one plan, several agents at once, progress shown per agent | ✓ | — | ✓ | v0.3.0 |
+| 56 | Memory upkeep: suggested memory updates drawn from past chats, each approved by the user | ✓ | ✓ | ✓ | v0.3.0 |
+| 57 | Share the camera or screen into voice mode (vision when the model supports it) | ✓ | — | — | v0.3.0 |
 
 ## Not planned
 
 - Image and video generation: DeepSeek has no image model. Drawings come out as SVG/HTML artifacts instead (row 13).
 - Automatic account rotation: never (terms-of-service and ban risk).
+- Group chats with other people: needs a shared server, and this app is client-only.
 
 ## Totals
 
@@ -124,5 +130,5 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 |---|---|
 | v0.1.0 (released) | 6 |
 | v0.2.0 | 26 |
-| v0.3.0 | 20 |
-| **All** | **52** |
+| v0.3.0 | 25 |
+| **All** | **57** |
