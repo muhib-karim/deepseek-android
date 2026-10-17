@@ -4,6 +4,7 @@ import app.dsandroid.core.agent.TurnStep
 import app.dsandroid.core.llm.ChatMessage
 import app.dsandroid.core.llm.LlmJson
 import app.dsandroid.core.tools.Artifact
+import app.dsandroid.core.tools.WebSource
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.AtomicMoveNotSupportedException
@@ -21,6 +22,7 @@ data class StoredChatItem(
     val attachments: List<String> = emptyList(),
     val steps: List<TurnStep> = emptyList(),
     val artifacts: List<Artifact> = emptyList(),
+    val sources: List<WebSource> = emptyList(),
 )
 
 @Serializable
@@ -32,6 +34,7 @@ data class ConversationRecord(
     val items: List<StoredChatItem>,
     val attachmentCount: Int = 0,
     val pendingRunId: String? = null,
+    val supersededRunIds: Set<String> = emptySet(),
 )
 
 /** Private JSON files, replaced atomically so a process exit cannot leave a partial record. */

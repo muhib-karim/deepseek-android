@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MarkdownParserTest {
+    @Test fun numberedCitationBeforeMarkdownLinkStaysPlainText() {
+        val spans = MarkdownParser.inline("Evidence [1]. See [docs](https://example.org)")
+        assertEquals("Evidence [1]. See docs", spans.joinToString("") { it.text })
+        assertTrue(spans.filter { it.link == null }.joinToString("") { it.text }.contains("[1]"))
+        assertEquals("docs", spans.single { it.link != null }.text)
+    }
     @Test fun parsesBlocksIncludingListsQuotesRulesAndFences() {
         val blocks = MarkdownParser.parse("# Title\n\nOne\nparagraph\n\n- alpha\n- beta\n\n3. three\n4. four\n\n> quoted\n> again\n\n---\n\n```kotlin\nval n = 1\n```")
         assertEquals(MarkdownBlock.Heading(1, "Title"), blocks[0])

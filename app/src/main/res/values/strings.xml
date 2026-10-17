@@ -9,7 +9,7 @@
     <string name="provider_key">API key</string>
     <string name="provider_custom">Custom OpenAI-compatible</string>
     <string name="base_url">Base URL</string>
-    <string name="local_http_notice">HTTP custom endpoints expose prompts and credentials to the local network.</string>
+    <string name="local_http_notice">All provider endpoints require HTTPS. HTTP endpoints cannot connect.</string>
     <string name="model_override">Model override (blank = automatic newest)</string>
     <string name="api_key">API key</string>
     <string name="custom_key">Custom endpoint key (optional)</string>
@@ -176,4 +176,26 @@
     <string name="zipped_archive">Zipped files</string>
     <string name="creating_file">Creating %1$s</string>
     <string name="creating_artifact">Creating an artifact</string>
+    <string name="mode_chat">Chat</string>
+    <string name="mode_agent">Agent</string>
+    <string name="mode_description">Agent can use tools. Search queries and unfamiliar web addresses ask first.</string>
+    <string name="turn_retry">Retry</string>
+    <string name="turn_regenerate">Regenerate</string>
+    <string name="turn_edit">Edit</string>
+    <string name="turn_edit_title">Edit message</string>
+    <string name="turn_edit_warning">Resending replaces this reply and every later message. Attached files stay included.</string>
+    <string name="turn_resend">Save and resend</string>
+    <string name="turn_pending_attachments">Send or remove the attached draft files before retrying or editing an earlier message.</string>
+    <string name="turn_edit_unavailable">This message could not be restarted. Try again or send a new message.</string>
+    <string name="tool_output_show">Show output</string>
+    <string name="tool_output_hide">Hide output</string>
+    <string name="sources_title">Sources</string>
+    <string name="sources_count">Sources (%1$d)</string>
+    <string name="source_number">[%1$d] %2$s</string>
+    <string name="source_open">Open source</string>
+    <string name="source_open_error">No browser could open this source.</string>
+    <string name="confirm_search_explanation">This sends the exact search query below to your configured search provider. Check that it contains no private information.</string>
+    <string name="confirm_fetch_explanation">This address has a query, is longer than 200 characters, or is outside the search result hosts for this turn. Check the full address before allowing it.</string>
+    <string name="confirm_tool_explanation">Review this action and its arguments. Allow once applies only to this call.</string>
+    <string name="error_chat_tools">The provider requested a tool in Chat mode. Choose Agent to allow tools.</string>
 </resources>

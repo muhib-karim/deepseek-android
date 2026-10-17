@@ -15,7 +15,7 @@ data class Artifact(val fileName: String, val mimeType: String, val path: String
 @Serializable
 data class ToolResult(val content: String, val isError: Boolean = false, val artifacts: List<Artifact> = emptyList())
 
-data class ToolContext(val workspace: WorkspacePath)
+data class ToolContext(val workspace: WorkspacePath, val web: TurnWebContext = TurnWebContext())
 
 interface Tool {
     val name: String

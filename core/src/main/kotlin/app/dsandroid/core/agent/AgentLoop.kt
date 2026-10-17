@@ -31,6 +31,7 @@ sealed interface AgentEvent {
     data class ToolNeedsConfirm(val callId: String, val name: String, val arguments: JsonObject) : AgentEvent
     data class ToolFinished(val callId: String, val name: String, val result: ToolResult) : AgentEvent
     data class ArtifactCreated(val artifact: Artifact) : AgentEvent
+    data class SourcesUpdated(val sources: List<WebSource>) : AgentEvent
     data class Error(val message: String) : AgentEvent
     data class RetryWaiting(val remainingMs: Long, val attempt: Int, val details: String) : AgentEvent
     data class RecoverableWaiting(val checkpoint: RunCheckpoint, val message: String, val details: String) : AgentEvent
@@ -56,7 +57,8 @@ class AgentLoop(
     /** Caller owns history and must not mutate it while a run is active. */
     fun run(history: MutableList<ChatMessage>): Flow<AgentEvent> = execute(history, RunCheckpoint(
         runId = runConfig.runId, conversationId = runConfig.conversationId, model = runConfig.model,
-        thinking = runConfig.thinking, searchEnabled = runConfig.searchEnabled, providerKey = runConfig.providerKey, messages = history.toList()))
+        thinking = runConfig.thinking, searchEnabled = runConfig.searchEnabled, providerKey = runConfig.providerKey,
+        agentEnabled = runConfig.agentEnabled, messages = history.toList()))
 
     fun resume(checkpoint: RunCheckpoint, history: MutableList<ChatMessage> = checkpoint.messages.toMutableList()): Flow<AgentEvent> {
         require(checkpoint.providerKey == runConfig.providerKey) { "Resume requires the original provider and account" }
@@ -66,13 +68,16 @@ class AgentLoop(
 
     private fun execute(history: MutableList<ChatMessage>, initial: RunCheckpoint): Flow<AgentEvent> = flow {
         var checkpoint = initial
+        context.web.restore(initial.sources, initial.searchHosts)
         val timeline = initial.steps.toMutableList()
         suspend fun save() {
-            checkpoint = checkpoint.copy(messages = history.toList(), steps = timeline.toList())
+            checkpoint = checkpoint.copy(messages = history.toList(), steps = timeline.toList(),
+                sources = context.web.sources, searchHosts = context.web.searchHosts)
             withContext(NonCancellable) { checkpointStore?.save(checkpoint) }
         }
         if (initial.complete) { emit(AgentEvent.StepsUpdated(timeline.toList())); emit(AgentEvent.Done); return@flow }
         save()
+        emit(AgentEvent.SourcesUpdated(context.web.sources))
         if (initial.steps.isNotEmpty()) emit(AgentEvent.StepsUpdated(timeline.toList()))
         var reasoningStarted = 0L
         fun finishReasoning() {
@@ -91,7 +96,7 @@ class AgentLoop(
             val accumulator = StreamAccumulator()
             val requestStarted = System.nanoTime()
             try {
-            client.stream(history.toList(), registry.specs()).collect { chunk ->
+            client.stream(HistoryPolicy.forRequest(history), if (initial.agentEnabled) registry.specs() else emptyList()).collect { chunk ->
                 accumulator.accept(chunk)
                 chunk.choices.filter { it.index == 0 }.forEach { choice ->
                     choice.delta.reasoningContent?.takeIf { it.isNotEmpty() }?.let { text ->
@@ -143,6 +148,12 @@ class AgentLoop(
             }
             val finishedAssistant = requireNotNull(assistant)
             val calls = finishedAssistant.toolCalls.orEmpty()
+            if (!initial.agentEnabled && calls.isNotEmpty()) {
+                checkpoint = checkpoint.copy(complete = true)
+                save()
+                emit(AgentEvent.Error("Tools are unavailable in Chat mode"))
+                return@flow
+            }
             if (calls.isEmpty()) {
                 history.add(finishedAssistant)
                 checkpoint = checkpoint.copy(assistantStep = step + 1, pendingAssistant = null, pendingToolIndex = 0, complete = true)
@@ -177,7 +188,7 @@ class AgentLoop(
                 val args = runCatching { LlmJson.parseToJsonElement(call.function.arguments) as? JsonObject }.getOrNull()
                 val result = if (args == null) ToolResult("Invalid tool arguments: expected a JSON object", isError = true)
                 else {
-                    val decision = guard.decide(call.function.name, args, settings)
+                    val decision = guard.decide(call.function.name, args, settings, context.web.searchHosts)
                     val allowed = when (decision) {
                         Decision.ALLOW -> true
                         Decision.DENY -> false
@@ -195,20 +206,24 @@ class AgentLoop(
                         emit(AgentEvent.ToolStarted(call.id, call.function.name))
                         timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.RUNNING)
                         publish()
-                        // Once a bounded tool starts, preserve its result durably before cancellation
-                        // can stop the run. Cancellation is checked before the next tool.
-                        withContext(NonCancellable) {
+                        val tool = requireNotNull(registry[call.function.name])
+                        suspend fun executeTool(): ToolResult {
                             val completed = try {
-                                withContext(Dispatchers.IO) { registry[call.function.name]!!.run(args, context) }
+                                withContext(Dispatchers.IO) { tool.run(args, context) }
                             } catch (cancelled: CancellationException) { throw cancelled }
                             catch (_: Exception) { ToolResult("Tool failed: check the arguments, file name, size limit and workspace restrictions", isError = true) }
-                            record(completed)
-                            completed
+                            withContext(NonCancellable) { record(completed) }
+                            return completed
                         }
+                        // Network calls are cancellable. Bounded local operations finish their
+                        // durable record before Stop can interrupt, avoiding replayed writes.
+                        if (tool.kind == ToolKind.NETWORK) executeTool()
+                        else withContext(NonCancellable) { executeTool() }
                     }
                 }
                 if (!recorded) record(result)
                 publish()
+                emit(AgentEvent.SourcesUpdated(context.web.sources))
                 emit(AgentEvent.ToolFinished(call.id, call.function.name, result))
                 result.artifacts.forEach { emit(AgentEvent.ArtifactCreated(it)) }
             }

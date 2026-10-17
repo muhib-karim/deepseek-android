@@ -34,6 +34,8 @@ import kotlinx.serialization.json.JsonElement
 @Composable
 fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, collapseThinking: Boolean = true) {
     var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
+    var sourcesVisible by remember(item.id) { mutableStateOf(false) }
+    var selectedSource by remember(item.id) { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item.steps.forEachIndexed { index, step ->
             when (step) {
@@ -56,23 +58,37 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     }
                 }
                 is TurnStep.ToolCall -> TimelineRow {
+                    var outputExpanded by rememberSaveable(item.id, index) { mutableStateOf(false) }
                     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary)
-                            Text(toolLabel(step), Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
+                            Text(step.name, Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             TextButton(onClick = { detailsIndex = index }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text(stringResource(R.string.details), style = MaterialTheme.typography.labelMedium) }
                             ToolStatusIcon(step.status)
                         }
-                        if (step.status in listOf(ToolStatus.WAITING, ToolStatus.DENIED, ToolStatus.ERROR, ToolStatus.STOPPED)) {
-                            Text(statusLabel(step.status), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(toolLabel(step), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(statusLabel(step.status), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        if (step.resultPreview.isNotEmpty()) {
+                            TextButton(onClick = { outputExpanded = !outputExpanded }) {
+                                Text(stringResource(if (outputExpanded) R.string.tool_output_hide else R.string.tool_output_show))
+                            }
+                            if (outputExpanded) SelectionContainer {
+                                Text(step.resultPreview, Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
-                is TurnStep.Answer -> MarkdownText(step.text, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                is TurnStep.Answer -> MarkdownText(step.text, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
+                    selectedSource = it; sourcesVisible = true
+                }
             }
         }
         if (working && item.steps.lastOrNull() !is TurnStep.Answer) TypingIndicator()
+        if (item.sources.isNotEmpty()) TextButton(onClick = { selectedSource = null; sourcesVisible = true }) {
+            Text(stringResource(R.string.sources_count, item.sources.size))
+        }
         item.artifacts.forEach { artifact ->
             OutlinedCard(onClick = { openArtifact(artifact) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -88,6 +104,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
     }
     val detail = detailsIndex?.let { item.steps.getOrNull(it) as? TurnStep.ToolCall }
     if (detail != null) ModalBottomSheet(onDismissRequest = { detailsIndex = null }) { ToolDetails(detail) }
+    if (sourcesVisible) SourcesSheet(item.sources, selectedSource) { sourcesVisible = false }
 }
 
 @Composable

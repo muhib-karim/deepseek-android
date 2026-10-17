@@ -20,7 +20,7 @@
     <string name="credentials_required">Enter an API key or sign in, and check the endpoint in Settings.</string>
     <string name="chat_new_title">New chat</string>
     <string name="attachment_prepare_error">An attachment could not be prepared. Remove it or choose another file, then retry.</string>
-    <string name="settings_urls_error">Check the URLs. Account, API-key and search providers require HTTPS.</string>
+    <string name="settings_urls_error">Check the URLs. All providers and search services require HTTPS.</string>
     <string name="settings_save_error">Could not save encrypted settings.</string>
     <string name="signin_not_configured">Account sign-in endpoint not configured; use an API key.</string>
     <string name="signin_browser_prompt">Complete sign-in in your browser.</string>

@@ -47,6 +47,9 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
     var draft by rememberSaveable(state.conversationId) { mutableStateOf("") }
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
+    var agentEnabled by rememberSaveable { mutableStateOf(false) }
+    var editingId by rememberSaveable(state.conversationId) { mutableStateOf<String?>(null) }
+    var editedText by rememberSaveable(state.conversationId) { mutableStateOf("") }
     var attachSheet by remember { mutableStateOf(false) }
     var cameraName by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -90,7 +93,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 items(state.items, key = { it.id }) { item ->
                     when (item) {
-                        is ChatItem.User -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
                             Surface(Modifier.widthIn(max = 600.dp).fillMaxWidth(0.86f), shape = RoundedCornerShape(18.dp),
                                 color = if (MaterialTheme.colorScheme.background == Color(0xFF121212)) Color(0xFF24304F) else Color(0xFFEEF3FF)) {
                                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -98,17 +101,44 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                                     if (item.text.isNotEmpty()) Text(item.text, style = MaterialTheme.typography.bodyLarge)
                                 }
                             }
+                            Row {
+                                TextButton(onClick = { vm.retryTurn(item.id, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
+                                    Text(stringResource(R.string.turn_retry))
+                                }
+                                TextButton(onClick = { editingId = item.id; editedText = item.text }, enabled = !state.running && !state.importing) {
+                                    Text(stringResource(R.string.turn_edit))
+                                }
+                            }
                         }
-                        is ChatItem.Assistant -> AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id, openArtifact, settings.collapseThinking)
+                        is ChatItem.Assistant -> Column {
+                            AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id, openArtifact, settings.collapseThinking)
+                            val user = state.items.takeWhile { it.id != item.id }.filterIsInstance<ChatItem.User>().lastOrNull()
+                            if (user != null) TextButton(onClick = { vm.restartTurn(user.id, null, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
+                                Text(stringResource(R.string.turn_regenerate))
+                            }
+                        }
                     }
                 }
                 item(key = "conversation-tail") { Spacer(Modifier.height(1.dp)) }
             }
         }
-        Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, state, settings.supportsVision(think),
-            { attachSheet = true }, { if (vm.send(draft, think, search)) draft = "" }, vm::stop, vm::removeAttachment,
+        Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { agentEnabled = it }, state, settings.supportsVision(think),
+            { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
             settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError)
     }
+    if (editingId != null) AlertDialog(onDismissRequest = { editingId = null },
+        title = { Text(stringResource(R.string.turn_edit_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.turn_edit_warning))
+                OutlinedTextField(editedText, { editedText = it }, modifier = Modifier.fillMaxWidth(), maxLines = 8,
+                    label = { Text(stringResource(R.string.message_placeholder)) })
+            }
+        },
+        confirmButton = { TextButton(onClick = {
+            editingId?.let { if (vm.restartTurn(it, editedText, think, search, agentEnabled)) editingId = null }
+        }) { Text(stringResource(R.string.turn_resend)) } },
+        dismissButton = { TextButton(onClick = { editingId = null }) { Text(stringResource(R.string.cancel)) } })
     if (attachSheet) ModalBottomSheet(onDismissRequest = { attachSheet = false }) {
         Text(stringResource(R.string.attach_title), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.attachment_limits), Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -154,7 +184,7 @@ private fun AttachmentTile(label: String, glyph: Glyph, modifier: Modifier, clic
 
 @Composable
 private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setThink: (Boolean) -> Unit, search: Boolean, setSearch: (Boolean) -> Unit,
-    state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit,
+    agentEnabled: Boolean, setAgent: (Boolean) -> Unit, state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit,
     audioLanguage: String, dictate: (String) -> Unit, report: (String) -> Unit) {
     val enabled = state.settingsReady && !state.saving && !state.signingIn && !state.running && !state.importing
     val placeholder = stringResource(R.string.message_placeholder)
@@ -182,10 +212,19 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6,
                 decorationBox = { field -> Box { if (draft.isEmpty()) Text(stringResource(R.string.message_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !agentEnabled, onClick = { setAgent(false) }, enabled = enabled,
+                    label = { Text(stringResource(R.string.mode_chat)) })
+                FilterChip(selected = agentEnabled, onClick = { setAgent(true) }, enabled = enabled,
+                    label = { Text(stringResource(R.string.mode_agent)) })
                 ComposerChip(stringResource(R.string.think), Glyph.THINK, think, enabled) { setThink(!think) }
-                ComposerChip(stringResource(R.string.search), Glyph.SEARCH, search, enabled) { setSearch(!search) }
-                Spacer(Modifier.weight(1f))
+                ComposerChip(stringResource(R.string.search), Glyph.SEARCH, search && agentEnabled, enabled && agentEnabled) { setSearch(!search) }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(if (agentEnabled) R.string.mode_description else R.string.mode_chat), Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
                 VoiceDictation(enabled, audioLanguage, dictate, report)
                 IconButton(onClick = attach, enabled = enabled, modifier = Modifier.size(44.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
                     AppIcon(Glyph.PLUS, stringResource(R.string.attach_files))

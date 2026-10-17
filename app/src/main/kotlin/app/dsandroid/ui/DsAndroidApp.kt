@@ -195,14 +195,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
             SelectionContainer { Text(state.runDetails.orEmpty(), Modifier.padding(24.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) }
         }
         state.confirmation?.let { confirmation ->
-            AlertDialog(onDismissRequest = { vm.answerConfirmation(false) }, title = { Text(stringResource(R.string.allow_tool)) }, text = {
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text(confirmation.name, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(12.dp))
-                    SelectionContainer { Text(confirmation.arguments.toString(), fontFamily = FontFamily.Monospace) }
-                }
-            }, confirmButton = { TextButton(onClick = { vm.answerConfirmation(true) }) { Text(stringResource(R.string.allow_once)) } },
-                dismissButton = { TextButton(onClick = { vm.answerConfirmation(false) }) { Text(stringResource(R.string.deny)) } })
+            ToolConfirmationSheet(confirmation, vm::answerConfirmation)
         }
     }
 }

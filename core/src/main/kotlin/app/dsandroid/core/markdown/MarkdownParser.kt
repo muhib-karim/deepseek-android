@@ -129,8 +129,8 @@ object MarkdownParser {
             if (char == '\\' && index + 1 < text.length) { plain.append(text[index + 1]); index += 2; continue }
             if (char == '[' || (char == '!' && index + 1 < text.length && text[index + 1] == '[')) {
                 val start = if (char == '!') index + 2 else index + 1
-                val labelEnd = text.indexOf("](", start)
-                val urlEnd = if (labelEnd >= 0) text.indexOf(')', labelEnd + 2) else -1
+                val labelEnd = text.indexOf(']', start)
+                val urlEnd = if (labelEnd >= 0 && text.getOrNull(labelEnd + 1) == '(') text.indexOf(')', labelEnd + 2) else -1
                 if (urlEnd >= 0) {
                     flush()
                     val url = text.substring(labelEnd + 2, urlEnd).substringBefore(' ').trim('<', '>')

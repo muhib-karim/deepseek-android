@@ -15,6 +15,9 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -38,8 +41,8 @@ class OpenAiCompatibleClient(
         require(it.isHttps || auth is CustomEndpointAuth) { "Provider credentials require HTTPS" }
     }
     private val http = client.newBuilder().followRedirects(false).followSslRedirects(false)
-        .connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(5, TimeUnit.MINUTES).build()
+        .connectTimeout(20, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS)
+        .callTimeout(0, TimeUnit.MILLISECONDS).build()
     private val modelsEndpoint = (baseUrl.trimEnd('/') + "/models").toHttpUrl()
 
     override suspend fun listModels(): List<ModelInfo> = suspendCancellableCoroutine { continuation ->
@@ -70,9 +73,11 @@ class OpenAiCompatibleClient(
     }
 
     override fun stream(messages: List<ChatMessage>, tools: List<ToolSpec>): Flow<ChatChunk> = callbackFlow {
-        val requestBody = LlmJson.encodeToString(ChatRequest(model, messages.map { it.forVision(vision) }, tools,
+        val payload = LlmJson.encodeToJsonElement(ChatRequest(model, HistoryPolicy.forRequest(messages).map { it.forVision(vision) }, tools,
             if (tools.isEmpty()) null else JsonPrimitive("auto"),
-            thinking = if (thinking) buildJsonObject { put("type", "enabled") } else null))
+            thinking = if (thinking) buildJsonObject { put("type", "enabled") } else null)).jsonObject.toMutableMap()
+        if (tools.isEmpty()) payload.remove("tools")
+        val requestBody = JsonObject(payload).toString()
         val request = Request.Builder().url(endpoint)
             .header("Accept", "text/event-stream")
             .post(requestBody.toRequestBody("application/json; charset=utf-8".toMediaType()))

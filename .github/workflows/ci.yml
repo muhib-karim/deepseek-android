@@ -13,25 +13,27 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4.2.1
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.2
         with:
           gradle-version: '8.10.2'
       - name: Test, lint and assemble
         run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deepseek-android-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Upload reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deepseek-android-failure-reports
           path: |
@@ -44,6 +46,8 @@ jobs:
   gitleaks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Scan working tree for secrets
-        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 dir /repo --no-banner
+        run: docker run --rm --network none -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.21.2 dir /repo --no-banner

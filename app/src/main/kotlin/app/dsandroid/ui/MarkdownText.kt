@@ -25,10 +25,15 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.dsandroid.core.markdown.*
+import app.dsandroid.core.tools.WebSource
+
+private data class CitationLinks(val numbers: Set<Int> = emptySet(), val open: (Int) -> Unit = {})
+private val LocalCitations = compositionLocalOf { CitationLinks() }
 
 @Composable
-fun MarkdownText(text: String, modifier: Modifier = Modifier) {
+fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebSource> = emptyList(), onCitation: (Int) -> Unit = {}) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
+    CompositionLocalProvider(LocalCitations provides CitationLinks(sources.map { it.number }.toSet(), onCitation)) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         blocks.forEach { block ->
             when (block) {
@@ -56,6 +61,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
             }
         }
     }
+    }
 }
 
 @Suppress("DEPRECATION")
@@ -63,7 +69,8 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
 private fun InlineText(text: String, modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge) {
     val uriHandler = LocalUriHandler.current
     val linkColor = MaterialTheme.colorScheme.primary
-    val annotated = remember(text, linkColor) {
+    val citations = LocalCitations.current
+    val annotated = remember(text, linkColor, citations.numbers) {
         buildAnnotatedString {
             MarkdownParser.inline(text).forEach { part ->
                 val link = part.link
@@ -75,14 +82,30 @@ private fun InlineText(text: String, modifier: Modifier = Modifier, style: andro
                     fontFamily = if (part.code) FontFamily.Monospace else null,
                     color = if (link != null) linkColor else androidx.compose.ui.graphics.Color.Unspecified,
                     textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
-                )) { append(part.text) }
+                )) {
+                    val start = length
+                    append(part.text)
+                    if (link == null && !part.code) Regex("\\[(\\d+)\\]").findAll(part.text).forEach { match ->
+                        val number = match.groupValues[1].toIntOrNull()
+                        if (number != null && number in citations.numbers) {
+                            val from = start + match.range.first
+                            val until = start + match.range.last + 1
+                            addStringAnnotation("citation", number.toString(), from, until)
+                            addStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline), from, until)
+                        }
+                    }
+                }
                 if (link != null) pop()
             }
         }
     }
     SelectionContainer {
         ClickableText(annotated, modifier, style = style.copy(color = if (style.color == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else style.color),
-            onClick = { offset -> annotated.getStringAnnotations("url", offset, offset).firstOrNull()?.let { runCatching { uriHandler.openUri(it.item) } } })
+            onClick = { offset ->
+                val citation = annotated.getStringAnnotations("citation", offset, offset).firstOrNull()?.item?.toIntOrNull()
+                if (citation != null) citations.open(citation)
+                else annotated.getStringAnnotations("url", offset, offset).firstOrNull()?.let { runCatching { uriHandler.openUri(it.item) } }
+            })
     }
 }
 

@@ -11,6 +11,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ResilienceTest {
+    @Test fun oldCheckpointDefaultsAndNewSourceModeFieldsRoundTrip() {
+        val old = LlmJson.decodeFromString<RunCheckpoint>("""{"runId":"legacy"}""")
+        assertTrue(old.agentEnabled)
+        assertTrue(old.sources.isEmpty())
+        assertTrue(old.searchHosts.isEmpty())
+        val current = old.copy(agentEnabled = false,
+            sources = listOf(app.dsandroid.core.tools.WebSource(1, "Report", "https://example.org/report")),
+            searchHosts = setOf("example.org"))
+        assertEquals(current, LlmJson.decodeFromString<RunCheckpoint>(LlmJson.encodeToString(current)))
+    }
     @Test fun retriesOnlyTransientFailuresAndHonoursBudgetAndRetryAfter() {
         val policy = RetryPolicy(jitter = { 1.0 })
         assertEquals(1000L, policy.delayMs(UnknownHostException(), 0, 0))
