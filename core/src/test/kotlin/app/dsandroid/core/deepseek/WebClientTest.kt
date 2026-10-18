@@ -19,7 +19,7 @@ class WebClientTest {
         try {
             server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"id":"chat-1"}}}"""))
             repeat(2) {
-                server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999,"signature":"sig"}}}}"""))
+                server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"sig"}}}}"""))
                 server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: {\"v\":{\"response_message_id\":12,\"response\":{\"fragments\":[{\"type\":\"RESPONSE\",\"content\":\"Hi\"}]}}}\n\ndata: [DONE]\n\n"))
             }
             val client = DeepSeekWebClient(OkHttpClient(), server.url("/"))
@@ -52,7 +52,7 @@ class WebClientTest {
     @Test fun terminalEventFinishesWithoutWaitingForConnectionClose() = runBlocking {
         val server = MockWebServer(); server.start()
         try {
-            server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999,"signature":"sig"}}}}"""))
+            server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"sig"}}}}"""))
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
                 .setBody("""data: {"v":{"response_message_id":2,"response":{"fragments":[{"type":"RESPONSE","content":"Done"}]}}}
 
