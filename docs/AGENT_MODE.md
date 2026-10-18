@@ -163,22 +163,22 @@ disabled but not removed.
 
 ## Feature status
 
-Every row stays **PENDING CI** until the release worker records CI and emulator results.
+Results recorded 2026-10-18 from PR #18 CI on head e60e723 (android job: core + app unit tests, lint, debug + signed release builds; smoke job: 62/62 instrumented tests on an API 34 x86_64 emulator).
 
 | # | Feature | Evidence | Status |
 | --- | --- | --- | --- |
-| 1 | Fenced tool-call parser (valid, whitespace, malformed, multiple blocks, nested backticks) | `ToolCallParserTest` | PENDING CI |
-| 2 | AgentLoop over the web backend: tool result round trip, step limit, per-tool timeout, repair | `WebAgentLoopTest` | PENDING CI |
-| 3 | Native tool_calls stream assembly and `tool` results on the OpenAI-compatible client | `NativeToolCallStreamTest` | PENDING CI |
-| 4 | PDF layout engine: pagination, wrapping, tables, lists, code, images, page breaks | `PdfLayoutEngineTest` | PENDING CI |
-| 5 | DOCX and CSV writers | `DocumentWritersTest` | PENDING CI |
-| 6 | write / read / present / write_file in the chat folder; guard decisions | `AgentFileToolsTest` | PENDING CI |
-| 7 | run_python contract, PEP 440/508 helpers, wheel installer (checksums, native refusal, dependencies) | `PythonToolsTest` | PENDING CI |
-| 8 | Skill manifest loader, zip/folder packs, store, skill tool, main.py harness | `SkillsTest` | PENDING CI |
-| 9 | Account mode: mocked model emits create_pdf → PDF with ≥ 1 page → artifact card shown | `AgentModeTest.createPdfToolBlockProducesAPdfAndAnArtifactCard` | PENDING CI |
-| 10 | Account mode: web_fetch asks first; a denial is reported to the model | `AgentModeTest.networkToolsAskFirstAndADenialIsReportedToTheModel` | PENDING CI |
-| 11 | run_python prints 2 + 2 = 4 on the emulator (skipped with an assumption message on other ABIs) | `PythonRuntimeTest.printsTwoPlusTwo` | PENDING CI |
-| 12 | matplotlib figure becomes a PNG card; sockets refused; timeout kills and restarts the worker | `PythonRuntimeTest` | PENDING CI |
-| 13 | Built-in data-analysis skill runs its main.py on the device | `PythonRuntimeTest.builtInDataAnalysisSkillRunsItsMainPy` | PENDING CI |
-| 14 | Debug and signed release APK build with Chaquopy; merged manifest keeps INTERNET + RECORD_AUDIO only | CI and release workflows | PENDING CI |
-| 15 | Live: agent turn on chat.deepseek.com with a real account | not automated | PENDING CI |
+| 1 | Fenced tool-call parser (valid, whitespace, malformed, multiple blocks, nested backticks) | `ToolCallParserTest` | PASS (CI unit tests, run 39147503682) |
+| 2 | AgentLoop over the web backend: tool result round trip, step limit, per-tool timeout, repair | `WebAgentLoopTest` | PASS (CI unit tests, run 39147503682) |
+| 3 | Native tool_calls stream assembly and `tool` results on the OpenAI-compatible client | `NativeToolCallStreamTest` | PASS (CI unit tests, run 39147503682) |
+| 4 | PDF layout engine: pagination, wrapping, tables, lists, code, images, page breaks | `PdfLayoutEngineTest` | PASS (CI unit tests, run 39147503682) |
+| 5 | DOCX and CSV writers | `DocumentWritersTest` | PASS (CI unit tests, run 39147503682) |
+| 6 | write / read / present / write_file in the chat folder; guard decisions | `AgentFileToolsTest` | PASS (CI unit tests, run 39147503682) |
+| 7 | run_python contract, PEP 440/508 helpers, wheel installer (checksums, native refusal, dependencies) | `PythonToolsTest` | PASS (CI unit tests, run 39147503682) |
+| 8 | Skill manifest loader, zip/folder packs, store, skill tool, main.py harness | `SkillsTest` | PASS (CI unit tests, run 39147503682) |
+| 9 | Account mode: mocked model emits create_pdf → PDF with ≥ 1 page → artifact card shown | `AgentModeTest.createPdfToolBlockProducesAPdfAndAnArtifactCard` | PASS (emulator API 34 x86_64, 62/62 androidTests, run 39147503705) |
+| 10 | Account mode: web_fetch asks first; a denial is reported to the model | `AgentModeTest.networkToolsAskFirstAndADenialIsReportedToTheModel` | PASS (emulator API 34 x86_64, 62/62 androidTests, run 39147503705) |
+| 11 | run_python prints 2 + 2 = 4 on the emulator (skipped with an assumption message on other ABIs) | `PythonRuntimeTest.printsTwoPlusTwo` | PASS (emulator API 34 x86_64, 62/62 androidTests, run 39147503705) |
+| 12 | matplotlib figure becomes a PNG card; sockets refused; timeout kills and restarts the worker | `PythonRuntimeTest` | PASS (emulator API 34 x86_64, 62/62 androidTests, run 39147503705) |
+| 13 | Built-in data-analysis skill runs its main.py on the device | `PythonRuntimeTest.builtInDataAnalysisSkillRunsItsMainPy` | PASS (emulator API 34 x86_64, 62/62 androidTests, run 39147503705) |
+| 14 | Debug and signed release APK build with Chaquopy; merged manifest keeps INTERNET + RECORD_AUDIO only | CI and release workflows | PASS (CI assembleDebug + signed assembleRelease, run 39147503682; release.yml) |
+| 15 | Live: agent turn on chat.deepseek.com with a real account | not automated | NOT RUN (manual live check on chat.deepseek.com, not automated) |
