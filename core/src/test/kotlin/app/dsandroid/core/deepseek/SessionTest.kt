@@ -51,4 +51,11 @@ class SessionTest {
             assertFalse(DeepSeekOrigin.isTrusted(it))
         }
     }
+
+    @Test fun liveCookieJarWithoutASessionCookieIsUsable() {
+        val token = SessionToken.parse("opaque-64-char-token")!!
+        WebCredentials(token, "aws-waf-token=waf; smidV2=x").requireUsable(Long.MAX_VALUE)
+        WebCredentials(token, "").requireUsable(Long.MAX_VALUE)
+        assertThrows(SessionExpired::class.java) { WebCredentials(token, "a=b\r\nX: y").requireUsable(0) }
+    }
 }

@@ -134,7 +134,6 @@ class DeepSeekWebView(
         if (epoch != generation || !DeepSeekOrigin.isTrusted(view.url)) return@withContext null
         val token = SessionToken.fromJavascript(result) ?: return@withContext null
         if (token.isExpired(System.currentTimeMillis())) return@withContext null
-        if (DeepSeekCookies.read().split(';').none { it.trim().startsWith("ds_session_id=") && it.substringAfter('=').isNotBlank() }) return@withContext null
         token
     }
 

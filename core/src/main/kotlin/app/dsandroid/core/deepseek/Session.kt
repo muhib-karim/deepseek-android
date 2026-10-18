@@ -55,8 +55,9 @@ class SessionToken private constructor(private val value: String) {
 class WebCredentials(val token: SessionToken, val cookies: String) {
     override fun toString() = "WebCredentials([redacted])"
     fun requireUsable(nowMillis: Long) {
-        if (token.isExpired(nowMillis) || cookies.isBlank() || cookies.any { it == '\r' || it == '\n' } ||
-            cookies.split(';').none { it.trim().startsWith("ds_session_id=") && it.substringAfter('=').isNotBlank() }) throw SessionExpired()
+        // The bearer token is what the service authenticates (invalid token -> code 40003). Cookies are passed through
+        // as the WebView holds them (WAF token etc.); no specific cookie is required.
+        if (token.isExpired(nowMillis) || cookies.any { it == '\r' || it == '\n' }) throw SessionExpired()
     }
 }
 

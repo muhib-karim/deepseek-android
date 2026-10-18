@@ -117,7 +117,8 @@ class DeepSeekWebClient(
     private fun authenticatedRequest(credentials: WebCredentials, path: String): Request.Builder {
         credentials.requireUsable(System.currentTimeMillis())
         return Request.Builder().url(origin.resolve(path) ?: throw EndpointChanged())
-            .header("Authorization", "Bearer ${credentials.token.bearer()}").header("Cookie", credentials.cookies)
+            .header("Authorization", "Bearer ${credentials.token.bearer()}")
+            .apply { if (credentials.cookies.isNotBlank()) header("Cookie", credentials.cookies) }
             .header("Origin", DeepSeekOrigin.URL).header("Referer", "${DeepSeekOrigin.URL}/")
             .header("x-client-platform", "web").header("x-client-version", "2.5.0")
             .header("x-client-locale", "en_US").header("x-client-bundle-id", "com.deepseek.chat")
