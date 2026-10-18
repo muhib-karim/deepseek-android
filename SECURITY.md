@@ -112,6 +112,21 @@ numbers become citation links. The model can still make unsupported claims, so c
 the underlying sources. URL/path exfiltration on a trusted host cannot be ruled out
 by this rule alone, and allowing a search query can disclose its contents.
 
+## Remote tool servers
+
+- Only public HTTPS endpoints are accepted (at most 2,048 characters). Plain
+  HTTP, localhost, private or link-local addresses, credentials in the URL and
+  fragments are rejected; every resolved address is checked again before
+  connecting, so a public name that resolves to a private address is blocked.
+- No redirects, no proxy, no cookies, and no DeepSeek or other provider
+  credentials are ever sent to a tool server.
+- Responses are capped at 1 MiB.
+- Every remote tool is registered as CONFIRM: each call shows the server, tool
+  name and arguments and runs only after you approve it. Each tool can be
+  switched off in Settings → Tools, and removing a server removes its tools.
+- A tool server sees the arguments you approve and can return misleading text;
+  treat its output like any web page.
+
 ## CI and release boundary
 
 All third-party workflow actions use full commit SHA pins with version comments.
