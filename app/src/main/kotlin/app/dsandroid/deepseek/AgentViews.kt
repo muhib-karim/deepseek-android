@@ -222,11 +222,13 @@ private fun size(bytes: Long) = when {
 /** A generated file: preview (PDF first page, image thumbnail or text), then Open, Save and Share. */
 @Composable
 fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit) {
-    val preview by produceState<CardPreview?>(null, artifact.path, file?.lastModified()) {
+    val previewKey = file?.lastModified()
+    var preview by remember(artifact.path, previewKey) { mutableStateOf<CardPreview?>(null) }
+    LaunchedEffect(artifact.path, previewKey) {
         val loaded = try { withContext(Dispatchers.IO) { file?.let { loadPreview(it, artifact) } ?: CardPreview.None } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { CardPreview.None }
-        value = loaded
+        preview = loaded
     }
     val bytes = remember(artifact.path, file?.lastModified()) { file?.takeIf { it.isFile }?.length() ?: 0L }
     Surface(Modifier.fillMaxWidth().testTag("artifact-card-${artifact.fileName}"), shape = RoundedCornerShape(12.dp),
