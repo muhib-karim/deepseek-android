@@ -50,9 +50,12 @@ class AgentLoop(
     private val checkpointStore: CheckpointStore? = null,
     private val runConfig: RunConfig = RunConfig(),
     private val retryPolicy: RetryPolicy = RetryPolicy(),
+    private val manualRateLimit: Boolean = false,
+    private val budget: app.dsandroid.core.agents.AgentBudget? = null,
+    private val budgetRequestReserve: Int = 0,
     private val retryWait: suspend (Long) -> Unit = { delay(it) },
 ) {
-    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS) }
+    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS && budgetRequestReserve >= 0) }
 
     /** Caller owns history and must not mutate it while a run is active. */
     fun run(history: MutableList<ChatMessage>): Flow<AgentEvent> = execute(history, RunCheckpoint(
@@ -101,6 +104,7 @@ class AgentLoop(
                 if (checkpoint.researchPhase == ResearchPhase.NONE) messages
                 else messages + ChatMessage("system", ResearchPolicy.guidance(checkpoint.researchPhase))
             }
+            budget?.request(budgetRequestReserve)
             client.stream(requestHistory, if (initial.agentEnabled && ResearchPolicy.toolsAllowed(checkpoint.researchPhase)) registry.specs() else emptyList()).collect { chunk ->
                 accumulator.accept(chunk)
                 chunk.choices.filter { it.index == 0 }.forEach { choice ->
@@ -129,6 +133,7 @@ class AgentLoop(
                 if (error is ProviderHttpException && (error.status == 401 || error.status == 403)) {
                     emit(AgentEvent.AuthenticationRequired(checkpoint, error.status)); return@flow
                 }
+                if (manualRateLimit && error is ProviderHttpException && error.status == 429) throw error
                 // A successful tool turn does not replenish the run's retry budget.
                 retryElapsedMs += (System.nanoTime() - requestStarted) / 1_000_000
                 val pause = retryPolicy.delayMs(error, attempt, retryElapsedMs)
@@ -213,13 +218,20 @@ class AgentLoop(
                             timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.WAITING)
                             publish()
                             emit(AgentEvent.ToolNeedsConfirm(call.id, call.function.name, args))
-                            confirmer.confirm(call.function.name, args)
+                            val tool = registry[call.function.name]
+                            val preview = if (tool is app.dsandroid.core.browser.PreviewTool)
+                                runCatching { tool.confirmationArguments(args, context) }.getOrElse { error ->
+                                    if (error is CancellationException) throw error
+                                    null
+                                } else args
+                            preview != null && confirmer.confirm(call.function.name, preview)
                         }
                     }
                     denied = !allowed
                     if (!allowed) ToolResult(if (decision == Decision.DENY) "Denied by safety policy or unknown tool" else "User declined this tool call", isError = true)
                     else {
                         coroutineContext.ensureActive()
+                        budget?.tool()
                         emit(AgentEvent.ToolStarted(call.id, call.function.name))
                         timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.RUNNING)
                         publish()

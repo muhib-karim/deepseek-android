@@ -58,6 +58,14 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
     val navigation = rememberNavController()
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.refreshTasks()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(sharedInput, state.settingsReady, state.running, state.importing) {
         if (sharedInput != null && state.settingsReady && !state.running && !state.importing) {
             vm.receiveShare(sharedInput)
@@ -150,8 +158,16 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                                     IconButton(onClick = { scope.launch { drawer.open() } }) { AppIcon(Glyph.MENU, stringResource(R.string.open_navigation)) }
                                 }, actions = {
                                     Box {
-                                        IconButton(onClick = { chatMenu = true }) { AppIcon(Glyph.MORE, stringResource(R.string.details)) }
+                                        IconButton(onClick = { chatMenu = true }) {
+                                            BadgedBox(badge = { if (state.tasksUnread > 0) Badge { Text(state.tasksUnread.toString()) } }) {
+                                                AppIcon(Glyph.MORE, stringResource(R.string.details))
+                                            }
+                                        }
                                         DropdownMenu(expanded = chatMenu, onDismissRequest = { chatMenu = false }) {
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.tasks_inbox_count, state.tasksUnread)) }, onClick = { chatMenu = false; navigation.navigate("tasks") })
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.browser_agent)) }, onClick = { chatMenu = false; navigation.navigate("browser") })
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.accounts)) }, onClick = { chatMenu = false; navigation.navigate("accounts") })
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.assistants)) }, onClick = { chatMenu = false; navigation.navigate("assistants") })
                                             DropdownMenuItem(text = { Text(stringResource(R.string.export_conversation)) }, enabled = state.items.isNotEmpty() && !state.running && !state.exporting,
                                                 onClick = { chatMenu = false; exportVisible = true })
                                             DropdownMenuItem(text = { Text(stringResource(R.string.chat_instructions)) }, enabled = !state.running,
@@ -171,6 +187,22 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                                 }
                             }
                         }
+                    }
+                    composable("tasks") { LaunchedEffect(Unit) { vm.refreshTasks() }; TasksScreen(state, vm) { navigation.popBackStack() } }
+                    composable("browser") { BrowserScreen(vm) { navigation.popBackStack() } }
+                    composable("accounts") {
+                        Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.accounts)) }, navigationIcon = {
+                            TextButton(onClick = { navigation.popBackStack() }) { Text(stringResource(R.string.back)) }
+                        }) }) { padding ->
+                            Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp)) {
+                                AccountPicker(settings, state.running || state.saving || state.signingIn, vm)
+                            }
+                        }
+                    }
+                    composable("assistants") {
+                        AssistantsScreen(state, vm, { navigation.popBackStack() }, { assistant ->
+                            vm.newConversation(assistant = assistant); navigation.popBackStack("chat", false)
+                        }, ::save)
                     }
                     composable("library") {
                         LaunchedEffect(Unit) { vm.refreshLibrary() }

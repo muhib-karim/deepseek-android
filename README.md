@@ -7,6 +7,49 @@ Current release: **v0.2.0**, a debug testing build (debug-key signed, not audite
 The debug APK and SHA256SUMS are attached to each GitHub release. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
+## v0.3.0 Pass E features (working tree, not yet released)
+
+- **Saved assistants:** create, edit and delete named personas with a built-in icon,
+  instructions, default tools and response style. Start a chat from Assistants in
+  the chat-header menu. Existing chats keep their assistant snapshot. Export JSON
+  through the existing Save flow.
+- **Manual accounts:** keep up to 20 DeepSeek API-key/account profiles in encrypted
+  storage. Select one in Settings → Account settings or the chat-header Accounts
+  picker. Quota and rate errors are shown without account switching; removing the
+  selected profile leaves no other profile selected.
+- **Browser agent:** watch public HTTPS pages in the in-app browser and take over
+  using native controls. `open_url`, `read_page`, `click`, `type`, `submit`, `scroll`
+  and `back` extend the existing registry. Every click, entry and submission shows
+  its target and fields before approval. Reading follows the existing fetch policy.
+  This is a restricted browser for static pages and simple forms: site scripts,
+  login/password fields, cookies, remote resources and downloads are unavailable.
+- **Read-only connectors:** configure a public OAuth2 PKCE provider and its search
+  and item-read GET endpoints in Settings → Connectors. Sign in yourself in the
+  system browser. The first call asks for access for that chat; disconnect deletes
+  the encrypted local token. See [connector setup](docs/CONNECTORS.md).
+- **Parallel agents:** the model supplies a plan and up to four independent tasks.
+  Each gets its own read-only tool loop; a card shows individual progress. They
+  share 24 inference requests and 40 tool executions, with capacity reserved for
+  the parent to merge results. Stop cancels the entire group. Child agents cannot
+  delegate, use the browser or write files.
+- **Memory upkeep:** opt in under Settings → Memory to propose additions, edits
+  and deletions after answers using recent messages from up to three saved chats.
+  Review each suggestion there; nothing is applied without approval. Temporary
+  chats are excluded. This uses an additional provider request.
+- **Scheduled prompts:** create one-off or repeating prompts in Tasks, or approve
+  the model's `schedule_prompt` call. WorkManager runs a bounded, tool-free request
+  and stores its answer/error in the Tasks inbox, with an unread badge in the chat
+  header. The original account must still be selected. Times are approximate,
+  repeats are at least 15 minutes, and no notification or exact-alarm permission
+  is used. Reopen the app after reboot or force-stop to reconcile schedules.
+- New controls and notices have English and natural Bangla resources. Existing
+  registry, confirmations, artifacts, export and attachment paths are retained.
+
+WorkManager 2.9.1 is the only new dependency. No new install permission is granted;
+minSdk 26 and targetSdk 35 remain unchanged. JVM coverage is included, but local
+verification was static only. CI compilation/tests/lint and device validation are
+still required; see [build notes](docs/BUILD_NOTES.md).
+
 ## v0.3.0 Pass D features (merged on main, not yet released)
 
 - **Files out:** `create_document`, `create_spreadsheet` and `create_presentation`
@@ -250,7 +293,7 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- Remaining v0.3.0 passes: voice, device actions, assistants and the other undelivered
+- Remaining v0.3.0 passes: voice, device actions and the other undelivered
   rows in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
 - Full LaTeX rendering and OCR for scanned PDF pages.
 - Supported account-provider adapter, token lifecycle and integration validation.

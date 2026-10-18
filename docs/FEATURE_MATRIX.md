@@ -4,7 +4,7 @@ What the big assistant apps (ChatGPT, Claude, Kimi) do on Android, and when Deep
 The goal: the official DeepSeek app only chats; this app lets DeepSeek *do* things — call tools mid-conversation and show the results inside the chat.
 
 Legend: ✓ = the app has it · — = it doesn't · **Release** = the version of this app that ships it.
-v0.1.0 and v0.2.0 are released. Pass D delivery notes describe the implementation in
+v0.1.0 and v0.2.0 are released. Pass D and E delivery notes describe the implementation in
 this working tree; CI and device validation are still required before a v0.3.0 tag.
 
 ## Core: the agent loop
@@ -59,7 +59,7 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 | 26 | Custom instructions (global) and per-chat system prompt | ✓ | ✓ | ✓ | v0.2.0 |
 | 27 | Projects: folders with shared files and instructions | ✓ | ✓ | — | v0.2.0 |
 | 28 | Temporary (no-history) chat | ✓ | ✓ | — | v0.2.0 |
-| 29 | Saved assistants / personas | ✓ | ✓ | ✓ | v0.3.0 |
+| 29 | Saved assistants / personas | ✓ | ✓ | ✓ | v0.3.0 — Pass E |
 | 30 | Response styles (concise, explanatory, formal) | ✓ | ✓ | — | v0.3.0 — Pass D |
 
 ## Tools and integrations
@@ -68,7 +68,7 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 |---|---|---|---|---|---|
 | 31 | Custom tools (MCP-style): add remote HTTPS tool servers, each call confirmed | ✓ | ✓ | — | v0.2.0 |
 | 32 | Built-in tool settings: turn each tool on/off | ✓ | ✓ | ✓ | v0.2.0 |
-| 33 | Scheduled tasks / reminders run by the assistant | ✓ | — | — | v0.3.0 |
+| 33 | Scheduled tasks / reminders run by the assistant | ✓ | — | — | v0.3.0 — Pass E |
 
 ## Voice
 
@@ -100,7 +100,7 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 |---|---|---|---|---|---|
 | 43 | Sign in with your own account (system browser) or API key | ✓ | ✓ | ✓ | v0.1.0 |
 | 44 | Model / mode picker (fast vs reasoning) | ✓ | ✓ | ✓ | v0.1.0 |
-| 45 | Several accounts listed, switched manually only (never automatic) | ✓ | ✓ | — | v0.3.0 |
+| 45 | Several accounts listed, switched manually only (never automatic) | ✓ | ✓ | — | v0.3.0 — Pass E |
 | 46 | Language toggle; Bangla interface | ✓ | ✓ | ✓ | v0.2.0 |
 | 47 | Text size and display controls; dark/light | ✓ | ✓ | ✓ | v0.2.0 |
 
@@ -108,15 +108,15 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 
 | # | Feature | ChatGPT | Claude | Kimi | Release |
 |---|---|---|---|---|---|
-| 48 | Browser agent: the model opens and reads pages in an in-app browser for you, every click/submit confirmed | ✓ | ✓ | ✓ | v0.3.0 |
-| 49 | Connectors to your own accounts (e.g. cloud drive, mail), read-only first, signed in by you | ✓ | ✓ | — | v0.3.0 |
+| 48 | Browser agent: the model opens and reads pages in an in-app browser for you, every click/submit confirmed | ✓ | ✓ | ✓ | v0.3.0 — Pass E |
+| 49 | Connectors to your own accounts (e.g. cloud drive, mail), read-only first, signed in by you | ✓ | ✓ | — | v0.3.0 — Pass E |
 | 50 | Multi-file website / slide-deck builder in the artifacts panel, export as a zip | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
 | 51 | Study mode: step-by-step tutoring instead of straight answers | ✓ | ✓ | — | v0.3.0 — Pass D |
 | 52 | Suggested follow-up questions under an answer | ✓ | — | ✓ | v0.3.0 — Pass D |
 | 53 | Branch a conversation from any message into a new chat | ✓ | ✓ | — | v0.3.0 — Pass D |
 | 54 | Library: every generated file, artifact and image from all chats in one place | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
-| 55 | Parallel sub-agents for big tasks: one plan, several agents at once, progress shown per agent | ✓ | — | ✓ | v0.3.0 |
-| 56 | Memory upkeep: suggested memory updates drawn from past chats, each approved by the user | ✓ | ✓ | ✓ | v0.3.0 |
+| 55 | Parallel sub-agents for big tasks: one plan, several agents at once, progress shown per agent | ✓ | — | ✓ | v0.3.0 — Pass E |
+| 56 | Memory upkeep: suggested memory updates drawn from past chats, each approved by the user | ✓ | ✓ | ✓ | v0.3.0 — Pass E |
 | 57 | Share the camera or screen into voice mode (vision when the model supports it) | ✓ | — | — | v0.3.0 |
 
 ## Pass D delivery status
@@ -124,7 +124,20 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 Rows **17, 18, 21, 22, 23, 30, 50, 51, 52, 53 and 54** — Status note:
 **shipped in v0.3.0 pass D**. This denotes delivered implementation, not a new tagged release.
 JVM coverage is included; compilation, tests, lint and device checks remain CI/release gates.
-Other v0.3.0 rows remain planned.
+Other v0.3.0 rows are tracked below.
+
+## Pass E delivery status
+
+Rows **29, 33, 45, 48, 49, 55 and 56** — Status note:
+**shipped in v0.3.0 pass E**. This denotes delivered working-tree implementation,
+not a new tagged release or a successful build. JVM cases accompany the core logic;
+compilation, test execution, lint and device checks remain CI/release gates.
+
+The browser supports static public pages and simple confirmed forms, with site
+scripts and login disabled. The generic connector supports configurable public-client
+OAuth2 PKCE and read-only GET search/read endpoints, requiring a compatible provider
+registration. Scheduled prompts run without tools, notifications or exact timing;
+the original account must remain manually selected. Other v0.3.0 rows remain planned.
 
 ## Not planned
 

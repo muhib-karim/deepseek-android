@@ -32,9 +32,15 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     var clearConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }.getOrDefault("") }
+    var displayedSettings by remember { mutableStateOf(settings) }
     LaunchedEffect(settings) {
-        draft = draft.copy(cachedModels = settings.cachedModels, modelCacheKey = settings.modelCacheKey,
+        val accountChanged = displayedSettings.runIdentity != settings.runIdentity ||
+            displayedSettings.apiKey != settings.apiKey || displayedSettings.accountToken != settings.accountToken
+        draft = draft.copy(connectors = settings.connectors, accounts = settings.accounts, activeAccountId = settings.activeAccountId, cachedModels = settings.cachedModels, modelCacheKey = settings.modelCacheKey,
             accountToken = settings.accountToken, accountOrigin = settings.accountOrigin, accountBinding = settings.accountBinding)
+        if (accountChanged) draft = draft.copy(provider = settings.provider, baseUrl = settings.baseUrl,
+            apiKey = settings.apiKey, customKey = settings.customKey, model = settings.model)
+        displayedSettings = settings
     }
     var page by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf("") }
@@ -46,10 +52,11 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     if(page.isNotEmpty()) {
         Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).verticalScroll(rememberScrollState()).imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             TextButton(onClick = { page = "" }) { Text(stringResource(R.string.back)) }
-            Text(stringResource(when(page) { "account" -> R.string.account; "data" -> R.string.data_management; "memory" -> R.string.memory; "tools" -> R.string.tools; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(when(page) { "account" -> R.string.account; "data" -> R.string.data_management; "memory" -> R.string.memory; "tools" -> R.string.tools; "connectors" -> R.string.connectors; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
             SettingsGroup {
                 when(page) {
                     "account" -> {
+                AccountPicker(settings, saving || state.running || state.signingIn, vm)
                 Text(stringResource(R.string.provider_notice), style = MaterialTheme.typography.bodySmall)
                 Provider.entries.forEach { provider ->
                     val label = stringResource(when(provider) { Provider.ACCOUNT -> R.string.provider_account; Provider.API_KEY -> R.string.provider_key; Provider.CUSTOM -> R.string.provider_custom })
@@ -76,8 +83,12 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                 CapabilitySetting(stringResource(R.string.images), flags.vision) { flag -> draft = draft.copy(capabilities = draft.capabilities + (modelId to flags.copy(vision = flag))) }
                 CapabilitySetting(stringResource(R.string.reasoning_model), flags.reasoning) { flag -> draft = draft.copy(capabilities = draft.capabilities + (modelId to flags.copy(reasoning = flag))) }
                     }
-                    "memory" -> MemorySettings(state.facts, draft.memoryEnabled, saving || state.personalizing,
-                        { draft = draft.copy(memoryEnabled = it) }, vm::saveFact, vm::deleteFact)
+                    "memory" -> {
+                        MemorySettings(state.facts, draft.memoryEnabled, saving || state.personalizing,
+                            { draft = draft.copy(memoryEnabled = it) }, vm::saveFact, vm::deleteFact)
+                        MemoryUpkeepSettings(draft.memoryUpkeep, { draft = draft.copy(memoryUpkeep = it) }, state, vm)
+                    }
+                    "connectors" -> ConnectorsSettings(settings, state, vm)
                     "tools" -> ToolsSettings(draft, remember { vm.builtInToolNames() }, saving) { draft = it }
                     "data" -> {
                         Text(stringResource(R.string.local_data_notice), style = MaterialTheme.typography.bodyMedium)
@@ -113,6 +124,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
             HorizontalDivider()
             SettingsRow(stringResource(R.string.personalization), "") { page = "personalization" }
             HorizontalDivider()
+            SettingsRow(stringResource(R.string.connectors), "") { page = "connectors" }
             SettingsRow(stringResource(R.string.memory), "") { page = "memory" }
             HorizontalDivider()
             SettingsRow(stringResource(R.string.tools), "") { page = "tools" }

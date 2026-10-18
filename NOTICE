@@ -40,6 +40,11 @@ Image orientation:
   Apache License, Version 2.0
   https://developer.android.com/jetpack/androidx/releases/exifinterface
 
+Scheduled background prompts:
+  AndroidX WorkManager 2.9.1 (androidx.work:work-runtime-ktx)
+  Apache License, Version 2.0
+  https://developer.android.com/jetpack/androidx/releases/work
+
 Optional Python runtime (downloaded only after user approval):
   Pyodide 0.26.4, Mozilla Public License 2.0
   https://github.com/pyodide/pyodide/blob/0.26.4/LICENSE

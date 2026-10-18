@@ -47,6 +47,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.security.crypto)
     implementation(libs.browser)
+    implementation(libs.work.runtime)
     implementation(libs.pdfbox.android)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.exifinterface)
