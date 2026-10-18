@@ -341,7 +341,7 @@ release keys can require uninstalling first, which clears app data. Use
 files separately. Restore merges records after confirmation; existing IDs win,
 preferences are restored and imported schedules stay paused. Credentials and
 provider/connector configuration must be entered separately. Keep the unencrypted
-backup private. The current version metadata remains 0.3.0 until release preparation.
+backup private. The current version is 0.4.0 (versionCode 4).
 
 ## Screenshots
 
