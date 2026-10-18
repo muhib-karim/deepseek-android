@@ -21,7 +21,10 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewModelScope
 import app.dsandroid.ui.ChatViewModel
 import app.dsandroid.core.llm.LlmClient
@@ -122,7 +125,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             // A fresh API ViewModel reads the latest encrypted key on each explicit entry.
             val apiOwner = remember { ViewModelStore() }
             val apiVm = remember {
-                ChatViewModel(context.applicationContext as Application, apiClient).also { apiOwner.put("api", it) }
+                ViewModelProvider(apiOwner, viewModelFactory { initializer { ChatViewModel(context.applicationContext as Application, apiClient) } })["api", ChatViewModel::class.java]
             }
             DisposableEffect(apiOwner) { onDispose { apiOwner.clear() } }
             var returning by remember { mutableStateOf(false) }
