@@ -100,10 +100,13 @@ class AccountFeaturesTest(private val dark: Boolean) {
             }
         }
         server.start()
+        // server.url() resolves the host name: never on the main thread (StrictMode NetworkOnMainThread).
+        val baseUrl = server.url("/").toString()
+        val signInUrl = server.url("/sign_in").toString()
         compose.runOnUiThread {
-            vm = AccountViewModel(app, baseUrl = server.url("/").toString(), powSolver = { 0L })
+            vm = AccountViewModel(app, baseUrl = baseUrl, powSolver = { 0L })
             owners.put("account", vm)
-            browser = DeepSeekWebView(compose.activity, loginUrl = server.url("/sign_in").toString(), notice = vm::notice)
+            browser = DeepSeekWebView(compose.activity, loginUrl = signInUrl, notice = vm::notice)
         }
         compose.waitUntil(15_000) { vm.state.value.ready }
     }
@@ -383,8 +386,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithText(if (dark) "Dark" else "Light", substring = false).performClick()
         assertEquals(theme.name, app.getSharedPreferences("deepseek_web_appearance", 0).getString("theme", null))
         lateinit var reloaded: AccountViewModel
+        val reloadBase = server.url("/").toString()
         compose.runOnIdle {
-            reloaded = AccountViewModel(app, baseUrl = server.url("/").toString(), powSolver = { 0L })
+            reloaded = AccountViewModel(app, baseUrl = reloadBase, powSolver = { 0L })
             owners.put("reloaded", reloaded)
         }
         compose.waitUntil(15_000) { reloaded.state.value.ready }
