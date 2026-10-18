@@ -3,12 +3,33 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-This is the v0.1 implementation, including pass 3. No local Gradle, SDK, network
-or git operations were run in this pass. Tests were written before the core
-implementation; execution, compilation and lint remain CI gates. Android 8.0
-(API 26) or newer is required.
+Current release: **v0.2.0**, a debug testing build (debug-key signed, not audited).
+The debug APK and SHA256SUMS are attached to each GitHub release. Builds, unit
+tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
-## What v0.1 includes
+## What v0.2.0 adds
+
+- **Agent loop:** real DeepSeek function calling with tool cards in the chat, a
+  confirmation sheet for anything that is not safe, Chat/Agent toggle, thinking
+  display, stop, retry and edit.
+- **Cited web search and fetch:** sources are numbered under the answer; fetches
+  with query strings, long URLs or unseen hosts ask first.
+- **Code interpreter:** a sandboxed offscreen WebView runtime with charts, an
+  artifacts panel and downloadable files.
+- **Image input with on-device OCR.**
+- **Deep research mode:** several search/fetch rounds into a structured, cited
+  report that exports as Markdown or HTML.
+- **Memory and custom instructions:** saved facts you can view, edit, delete or
+  switch off; global and per-chat instructions.
+- **Remote tool servers:** add a public HTTPS tool server; each of its tools needs
+  confirmation and can be switched off (see [SECURITY.md](SECURITY.md)).
+- **Projects, temporary chat, pins, and export** to Markdown, HTML or PDF.
+- **Full Bangla UI:** in-app language option plus Android per-app language.
+
+The full feature list and what comes next are in
+[docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
+
+## v0.1 foundation
 
 - **DeepSeek-style interface:** original chat-and-spark mark, white/near-black
   Material 3 themes with a calm blue accent, conversation drawer with search and
@@ -31,7 +52,7 @@ implementation; execution, compilation and lint remain CI gates. Android 8.0
 - Streaming Markdown: headings, paragraphs, lists, quotes, horizontal rules,
   bold/italic/strike/link/code spans, bordered scrollable GFM tables and fenced
   code with Copy. Unfinished fences remain code while streaming. Inline `$math$`
-  uses monospace in v0.1; full LaTeX rendering is a v0.2 TODO.
+  uses monospace in v0.1; full LaTeX rendering is on the roadmap.
 - An ordered reasoning/tool timeline with collapsed previews, elapsed thinking
   time, human-readable tool labels, live status, and a Details sheet with
   arguments, copyable bounded results and duration. **Think** selects a reasoning
@@ -125,7 +146,8 @@ cache directory. Camera uses the system intent without CAMERA permission. Upload
 live under private `files/uploads`; they are copied immediately, so persistable
 URI permission is not taken. Imported copies are deleted after message preparation or when discarded; only
 the prepared text/image context remains in the private persisted conversation. Exports use the Storage Access
-Framework. PDF text extraction has no OCR: scanned PDFs may contain no readable
+Framework. Images go through on-device OCR; PDF text extraction does not OCR
+scanned pages, so scanned PDFs may contain no readable
 text, and encrypted/damaged files can be rejected.
 
 Known, safe workspace tools are allowed. Unknown tools are denied. Reads stay
@@ -197,8 +219,10 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- v0.2: OCR for scanned documents/images and full LaTeX rendering.
-- v0.2: richer artifact editing, text-to-speech and live voice conversations.
+- v0.3.0 (in progress): office and PDF files out, many files at once, camera and
+  share-into-app input, a library, branching, follow-up suggestions, personas,
+  a confirmed in-app browser agent, read-only connectors, voice mode and a widget.
+- Full LaTeX rendering and OCR for scanned PDF pages.
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.
 
