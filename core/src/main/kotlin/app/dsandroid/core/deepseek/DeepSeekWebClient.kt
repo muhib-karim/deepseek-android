@@ -131,6 +131,8 @@ class DeepSeekWebClient(
             }
         } catch (error: IOException) {
             currentCoroutineContext().ensureActive()
+            // Our own cancel() closed the call: that is cancellation, never a connection failure.
+            if (call.isCanceled()) throw CancellationException("DeepSeek request cancelled")
             if (error is ProtocolException || error is EOFException) throw EndpointChanged()
             throw WebConnectionFailed()
         } finally { cancellation.cancel() }
