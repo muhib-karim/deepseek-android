@@ -3,6 +3,7 @@ package app.dsandroid.deepseek
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -129,7 +130,7 @@ fun DeepSeekShell(
                         Text(state.title.ifBlank { "New Chat" }, Modifier.align(Alignment.Center).padding(horizontal = 64.dp),
                             fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         IconButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterEnd).size(48.dp)) {
-                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) { AppIcon(Glyph.PLUS, "New Chat", Modifier.padding(5.dp)) }
+                            OutlinedCircle { AppIcon(Glyph.PLUS, "New Chat", Modifier.size(14.dp)) }
                         }
                     } else {
                         TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
@@ -231,12 +232,25 @@ fun DeepSeekShell(
 @Composable
 private fun OriginalMark() {
     val blue = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.size(56.dp).semantics { contentDescription = "Original abstract mark" }) {
-        // Three rising strokes; no official logo geometry or extracted assets.
-        listOf(0.25f to 0.70f, 0.50f to 0.50f, 0.75f to 0.30f).forEach { (x, y) ->
-            drawLine(blue, Offset(size.width * (x - .13f), size.height * (y + .13f)), Offset(size.width * (x + .13f), size.height * (y - .13f)), size.width * .13f, StrokeCap.Round)
+    Canvas(Modifier.size(width = 64.dp, height = 44.dp).semantics { contentDescription = "Original abstract mark" }) {
+        // Own simple whale silhouette drawn in code; no official logo geometry or extracted assets.
+        val w = size.width; val h = size.height
+        val body = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * .06f, h * .52f)
+            cubicTo(w * .08f, h * .18f, w * .52f, h * .10f, w * .70f, h * .40f)
+            lineTo(w * .86f, h * .12f); lineTo(w * .97f, h * .20f); lineTo(w * .84f, h * .48f)
+            cubicTo(w * .80f, h * .86f, w * .40f, h * 1.0f, w * .20f, h * .86f)
+            cubicTo(w * .10f, h * .78f, w * .05f, h * .66f, w * .06f, h * .52f); close()
         }
+        drawPath(body, blue)
+        drawCircle(androidx.compose.ui.graphics.Color.White, radius = w * .035f, center = Offset(w * .26f, h * .44f))
+        drawLine(androidx.compose.ui.graphics.Color.White, Offset(w * .16f, h * .66f), Offset(w * .50f, h * .70f), w * .03f, StrokeCap.Round)
     }
+}
+
+@Composable
+private fun OutlinedCircle(content: @Composable () -> Unit) {
+    Box(Modifier.size(26.dp).border(1.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape), contentAlignment = Alignment.Center) { content() }
 }
 
 @Composable
@@ -269,8 +283,9 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
         selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
     )
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), shape = RoundedCornerShape(22.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), shape = RoundedCornerShape(22.dp),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)),
+        color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             BasicTextField(state.draft, draft, Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(top = 8.dp).testTag("account-composer")
                 .semantics { contentDescription = "Type a message" }, maxLines = 6, enabled = !state.busy && state.ready,
@@ -279,18 +294,21 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.Center) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(selected = think, onClick = { think = !think }, label = { Text("Think", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors)
+                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
                     FilterChip(selected = search, onClick = { search = !search }, label = { Text("Search", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors)
+                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = attach, enabled = !state.busy && !state.importing) { AppIcon(Glyph.PLUS, "Add attachment") }
+                    IconButton(onClick = attach, enabled = !state.busy && !state.importing) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
                     VoiceDictation(!state.busy && state.ready, "", { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error)
                     IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy ||
                         (state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
+                        val canSend = state.busy || state.draft.isNotBlank() || state.attachments.isNotEmpty()
+                        if (canSend) Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                             AppIcon(if (state.busy) Glyph.STOP else Glyph.SEND, if (state.busy) "Stop response" else "Send message", Modifier.padding(6.dp))
-                        }
+                        } else OutlinedCircle { AppIcon(Glyph.SEND, "Send message", Modifier.size(14.dp)) }
                     }
                 }
             }
