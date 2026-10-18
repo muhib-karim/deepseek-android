@@ -1,16 +1,14 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-Complete the v0.5.0 DeepSeek account feature set and mocked-server coverage; validate Android builds and screenshots in CI.
+v0.6.0 "Agent": one AgentLoop + ToolRegistry with two backends (native tool_calls on the API-key client; fenced ```tool JSON protocol on account-mode web chat), on-device Python (Chaquopy), PDF/DOCX/CSV files with artifact cards, installable skills. CI validates.
 
 ## Status
-- Fourteen account features have implementation and first-written MockWebServer/Compose tests in both themes, plus 21 new core protocol, cancellation and persistence test methods.
-- Static core and Android reviews found no remaining blocking issue after fixes for dictation lifetime, renamed-branch titles and API settings writes on fallback exit.
-- Diff checks, dependency/XML parsing and synthetic artifact-checker checks pass. The artifact gate requires all 38 screenshots and rejects missing feature captures and credential markers.
-- No local Gradle/build, commit or push. Kotlin compilation, test execution and screenshots remain pending CI; real-account login has not been tested.
+- v0.6.0 work in progress on branch feature/agent-060 (no local Gradle; CI is the build).
+- Plan: core protocol/loop -> PDF engine -> writers/tools -> skills -> Python -> app wiring -> emulator tests -> docs.
 
 ## Next step
-Run the existing GitHub Actions JVM/lint/build and emulator workflows after an authorized push. Review all feature test results and 38 screenshot artifacts; use docs/feature-checklist.md for the mocked-only verification scope.
+Implement core ToolCallProtocol + WebToolProtocolClient + AgentLoop per-tool timeout with JVM tests, then continue the plan above.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.

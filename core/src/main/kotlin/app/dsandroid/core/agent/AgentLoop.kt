@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import kotlin.coroutines.coroutineContext
@@ -54,8 +55,14 @@ class AgentLoop(
     private val budget: app.dsandroid.core.agents.AgentBudget? = null,
     private val budgetRequestReserve: Int = 0,
     private val retryWait: suspend (Long) -> Unit = { delay(it) },
+    /** Wall-clock limit for one tool execution; a timed-out tool reports an error result to the model. */
+    private val toolTimeoutMs: Long = DEFAULT_TOOL_TIMEOUT_MS,
 ) {
-    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS && budgetRequestReserve >= 0) }
+    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS && budgetRequestReserve >= 0 && toolTimeoutMs > 0) }
+
+    companion object {
+        const val DEFAULT_TOOL_TIMEOUT_MS = 180_000L
+    }
 
     /** Caller owns history and must not mutate it while a run is active. */
     fun run(history: MutableList<ChatMessage>): Flow<AgentEvent> = execute(history, RunCheckpoint(
@@ -238,7 +245,9 @@ class AgentLoop(
                         val tool = requireNotNull(registry[call.function.name])
                         suspend fun executeTool(): ToolResult {
                             val completed = try {
-                                withContext(Dispatchers.IO) { tool.run(args, context) }
+                                // The timeout runs on the IO dispatcher's real clock, never a test scheduler's virtual time.
+                                withContext(Dispatchers.IO) { withTimeoutOrNull(toolTimeoutMs) { tool.run(args, context) } }
+                                    ?: ToolResult("Tool timed out after ${timeoutLabel()}", isError = true)
                             } catch (cancelled: CancellationException) { throw cancelled }
                             catch (_: Exception) { ToolResult("Tool failed: check the arguments, file name, size limit and workspace restrictions", isError = true) }
                             withContext(NonCancellable) { record(completed) }
@@ -269,4 +278,6 @@ class AgentLoop(
         if (error is CancellationException) throw error
         emit(AgentEvent.Error(ErrorExplainer.explain(error)))
     }
+
+    private fun timeoutLabel(): String = if (toolTimeoutMs % 1000 == 0L) "${toolTimeoutMs / 1000} seconds" else "$toolTimeoutMs ms"
 }
