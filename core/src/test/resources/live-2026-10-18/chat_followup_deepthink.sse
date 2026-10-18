@@ -1,0 +1,128 @@
+event: ready
+data: {"request_message_id":3,"response_message_id":4,"model_type":"default"}
+
+event: update_session
+data: {"updated_at":1792334786.077235}
+
+data: {"v":{"response":{"message_id":4,"parent_id":3,"model":"","role":"ASSISTANT","thinking_enabled":true,"ban_edit":false,"ban_regenerate":false,"status":"WIP","incomplete_message":null,"accumulated_token_usage":45,"feedback":null,"inserted_at":1792334786.063412,"search_enabled":false,"fragments":[{"id":2,"type":"THINK","content":"We","elapsed_secs":null,"references":[],"stage_id":1}],"conversation_mode":"DEFAULT","has_pending_fragment":false,"auto_continue":false,"search_triggered":false,"extra_search_providers":[]}}}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" need"}
+
+data: {"v":" answer"}
+
+data: {"v":" one"}
+
+data: {"v":" word"}
+
+data: {"v":"."}
+
+data: {"v":" User"}
+
+data: {"v":" asked"}
+
+data: {"v":" initially"}
+
+data: {"v":" \""}
+
+data: {"v":"Reply"}
+
+data: {"v":" with"}
+
+data: {"v":" exactly"}
+
+data: {"v":":"}
+
+data: {"v":" p"}
+
+data: {"v":"ong"}
+
+data: {"v":" "}
+
+data: {"v":"7"}
+
+data: {"v":"\"."}
+
+data: {"v":" Then"}
+
+data: {"v":" asks"}
+
+data: {"v":" \""}
+
+data: {"v":"What"}
+
+data: {"v":" number"}
+
+data: {"v":" did"}
+
+data: {"v":" I"}
+
+data: {"v":" ask"}
+
+data: {"v":" you"}
+
+data: {"v":" to"}
+
+data: {"v":" say"}
+
+data: {"v":"?"}
+
+data: {"v":" Answer"}
+
+data: {"v":" in"}
+
+data: {"v":" one"}
+
+data: {"v":" word"}
+
+data: {"v":".\""}
+
+data: {"v":" Number"}
+
+data: {"v":" in"}
+
+data: {"v":" phrase"}
+
+data: {"v":" is"}
+
+data: {"v":" "}
+
+data: {"v":"7"}
+
+data: {"v":"."}
+
+data: {"v":" Answer"}
+
+data: {"v":" one"}
+
+data: {"v":" word"}
+
+data: {"v":":"}
+
+data: {"v":" "}
+
+data: {"v":"7"}
+
+data: {"v":"."}
+
+data: {"v":" Need"}
+
+data: {"v":" only"}
+
+data: {"v":" word"}
+
+data: {"v":"."}
+
+data: {"p":"response/fragments/-1/elapsed_secs","o":"SET","v":0.809300272}
+
+data: {"p":"response/fragments","o":"APPEND","v":[{"id":3,"type":"RESPONSE","content":"7","references":[],"stage_id":1}]}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"accumulated_token_usage","v":105},{"p":"quasi_status","v":"FINISHED"}]}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: update_session
+data: {"updated_at":1792334786.348099}
+
+event: close
+data: {"click_behavior":"none","auto_resume":false}
+

@@ -3,7 +3,7 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current release: **v0.5.0** (not audited). Each GitHub release carries a debug APK,
+Current release: **v0.5.1** (not audited). Each GitHub release carries a debug APK,
 a signed minified release APK and SHA256SUMS.txt. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
@@ -22,10 +22,18 @@ live DeepSeek streams (chat, DeepThink, Search) in unit tests. Sign-in, streamed
 proof-of-work, DeepThink, Search, history, logout and expired-token handling were checked on
 the live web service with a test account.
 
-Not yet verified: a live chat completion sent by the app itself on a phone. The web client
-sends an extra signed header the app does not; if the service rejects the app's request, the
-app shows a clear error within its request timeouts rather than hanging or falling back to a
-paid API. Google sign-in is hidden in the embedded sign-in page. See
+Live result, 2026-10-18 (v0.5.1): a chat completion sent with the app's exact request
+contract (bearer token, the app's client headers and a proof-of-work answer from DeepSeek's
+own worker) was accepted by the live service in account mode. Real streamed replies were
+recorded for a basic chat, a follow-up with DeepThink and a Search turn; rename, history and
+delete also worked. The recorded streams are replayed in unit tests. Pass/fail list:
+[docs/LIVE_VERIFY_051.md](docs/LIVE_VERIFY_051.md) — 12 pass, 2 not verified, 1 not
+applicable.
+
+Not verified: Google sign-in in the embedded sign-in page (no Google test account; Google
+may refuse embedded browsers), and the proof-of-work step running inside the app's WebView on
+a real phone (the same worker code was proven outside a WebView). File upload is not
+applicable by design: the app sends extracted text and OCR, not the original files. See
 [the implementation and validation boundary](docs/ACCOUNT_CLIENT_050.md) for scope and
 attachment limitations. The historical feature lists below describe the API client, which
 remains available through Settings.

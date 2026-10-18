@@ -1,0 +1,67 @@
+event: ready
+data: {"request_message_id":1,"response_message_id":2,"model_type":"default"}
+
+event: update_session
+data: {"updated_at":1792334810.714393}
+
+data: {"v":{"response":{"message_id":2,"parent_id":1,"model":"","role":"ASSISTANT","thinking_enabled":false,"ban_edit":false,"ban_regenerate":false,"status":"WIP","incomplete_message":null,"accumulated_token_usage":0,"feedback":null,"inserted_at":1792334810.700903,"search_enabled":true,"fragments":[{"id":2,"type":"SEARCH","status":"WIP","content":null,"queries":[{"query":"What is the current version of Android Studio in October 2026"},{"query":"site:developer.android.com Android Studio release notes"}],"results":[]}],"conversation_mode":"DEFAULT","has_pending_fragment":false,"auto_continue":false,"search_triggered":true,"extra_search_providers":[]}}}
+
+data: {"p":"response/fragments/-1/results","v":[{"url":"https://androidstudio.googleblog.com/2026/10/android-studio-rabbit-1-now-available.html?hl=zh_CN","title":"Android Studio Rabbit 1 now available","snippet":"Android Studio Rabbit 1 now available 2026年10月1日星期四 Android Studio Rabbit 1 is now available in the Stable channel. If you already have an Android Studio build on the Stable channel, you can get the update by clicking Help > Check for Updates (or Android Studio > Check for Updates on macOS).","cite_index":1,"published_at":1790784000.0,"site_icon":"https://cdn.deepseek.com/site-icons/googleblog.com","site_name":"Android Studio Release Updates","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-panda-2-release-notes?authuser=19&%3Bhl=fr&hl=zh-cn#1","title":"Android Studio Panda 2（2026 年 3 月） | Android Developers","snippet":"Android Studio Panda 2（2026 年 3 月）使用集合让一切井井有条 根据您的偏好保存内容并对其进行分类。 以下是 Android Studio Panda 2 中的新功能。 ## 自定义视图预览功能已弃用 我们将在即将发布的版本中弃用 自定义视图 预览功能 ... 使用 AI 创建新项目 ... 创意素材中心支持单色图标 ... 布局检查器 3D 模式弃用","cite_index":2,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null},{"url":"https://androidstudio.googleblog.com/2026/?hl=zh_CN&m=1#1","title":"Android Studio Release Updates - Provides official announcements for new versions of Android Studio and other Android developer tools","snippet":"you can get the update by clicking Help > Check for Updates (or Android Studio > Check for Updates on macOS). Otherwise, you can download it here. ... 2026年9月18日星期五 ### Android Studio Quail 4 Patch 1 now available Android Studio Quail 4 Patch 1 is now available in the Stable channel.","cite_index":3,"published_at":1791388800.0,"site_icon":"https://cdn.deepseek.com/site-icons/googleblog.com","site_name":"Android Studio Release Updates","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-panda-1-release-notes?authuser=00&hl=fr#1","title":"Android Studio Panda 1 (février 2026) | Android Developers","snippet":"Android Studio Panda 1 (février 2026)Restez ... Voici les nouvelles fonctionnalités d'Android Studio Panda 1 : ## Gestion simplifiée du JDK avec les critères JVM du daemon Gradle ... Android Studio utilise désormais les critères JVM du daemon Gradle par défaut pour les nouveaux projets.","cite_index":4,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null},{"url":"https://developer.android.google.cn/studio/preview/features?hl=en#1","title":"Release notes for Android Studio preview | Android Developers","snippet":"Current versions of Android Studio The following table lists the current versions of Android Studio and their respective channels. ... Version: Android Studio Rabbit 1; Channel: Stable ... Version: Android Gradle plugin 9.4.0; Channel: Stable ... Version: Android Studio Rabbit 2; Channel: Canary","cite_index":5,"published_at":1790870400.0,"site_icon":"https://cdn.deepseek.com/site-icons/google.cn","site_name":"Android 开发者","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-quail-3-release-notes?authuser=6&%3Bhl=ko#1","title":"Android Studio Quail 3 (August 2026) | Android Developers - Android Studio Quail 3 (August 2026)Stay organized with collections Save and categorize content based on your preferences.","snippet":"Android Studio Quail 3 (August 2026)Stay ... The following are the release notes for Android Studio Quail 3. ... Android Studio Quail 3 | 2026.1.3 Patch 1 (August 2026) ... Improvements to Planning Mode ... Last updated 2026-09-01 UTC.","cite_index":6,"published_at":1767369600.0,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null},{"url":"https://www.chip.de/download/office-produktivitaet-finanzen/android-studio_c4d6ffd4-69b9-4efe-9a29-8349e93ff826.html?rejectedFromGetFileReason=expiredJSON&debug_pimid=150259","title":"Android Studio 2026.2.1 Englisch","snippet":"Android Studio - Virengeprüft & Kostenlos ... Android Studio 2026.2.1 Englisch von Android | Version 2026.2.1 vom 02.10.2026 Gut ... Alle Änderungen & Neuerungen der Version 2026 lesen Sie im offiziellen Changelog nach.","cite_index":7,"published_at":1790870400.0,"site_icon":"https://cdn.deepseek.com/site-icons/chip.de","site_name":"CHIP","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-quail-1-release-notes?hl=zh-cn","title":"Android Studio Quail 1（2026 年 6 月） | Android Developers","snippet":"Android Studio Quail 1 | 2026.1.2 补丁 1（2026 年 6 月） ... 从 Android Studio Quail 1 开始，gradle.properties 文件中的 org.gradle.parallel=true 属性不再在 Gradle 同步期间启用并行模型提取。这会导致大型项目的同步时间大幅回归。","cite_index":8,"published_at":1767283200.0,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null},{"url":"https://plugins.jetbrains.com/docs/intellij/android-studio-releases-list.html?_gl=1%2A1lfj8nq%2A_gcl_au%2AMTA3NTg5ODU3Ni4xNzg4OTYyMzg2%2AFPAU%2AMTA3NTg5ODU3Ni4xNzg4OTYyMzg2%2A_ga%2AOTg1Mjk3OTg0LjE3NDEwMTk1OTc.%2A_ga_9J976DJZ68%2AczE3ODkwNDE2NzUkbzQ3NiRnMSR0MTc4OTA0MTgyOSRqNTQkbDAkaDA.","title":"Android Studio Releases List | IntelliJ Platform Plugin SDK","snippet":"Quail 4 ... 2025.* Release Name ... 2025.3.4 Patch 1 ... 2025.3.4 Canary 4 ... Panda 3 ... Otter 3 Feature Drop 2025.2.3 ... Jan 15, 2026","cite_index":9,"published_at":1746460800.0,"site_icon":"https://cdn.deepseek.com/site-icons/jetbrains.com","site_name":"JetBrains Marketplace","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-quail-2-release-notes?hl=ar#1","title":"الإصدار 2 من استوديو Android Quail (يوليو 2026) | Android Developers","snippet":"الإصدار 2 من استوديو Android Quail (يوليو 2026)تنظيم صفحاتك في مجموعات يمكنك حفظ المحتوى وتصنيفه حسب إعداداتك المفضّلة. ... يتضمّن","cite_index":10,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null},{"url":"https://android-dot-devsite-v2-prod.appspot.com/studio/releases?authuser=0&hl=ko#1","title":"Android 스튜디오 Quail 3 | Android Studio | Android Developers - Android 스튜디오 Quail 3컬렉션을 사용해 정리하기 내 환경설정을 기준으로 콘텐츠를 저장하고 분류하세요.","snippet":"이 페이지에는 안정화 버전 채널인 Android 스튜디오 Quail 3 최신 버전의 새로운 기능과 개선사항이 나열되어 있습니다. ... 다운로드 Android Studio Quail 3 | 2026.1.3 Patch 1","cite_index":11,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/appspot.com","site_name":"appspot.com","query_indexes":[0],"provider":null},{"url":"https://developer.android.com/studio/releases/past-releases/as-otter-3-feature-drop-release-notes?hl=zh-cn#1","title":"Android Studio Otter 3 功能更新（2026 年 1 月） | Android Developers","snippet":"Android Studio Otter 3 功能更新（2026 年 1 月）使用集合让一切井井有条 根据您的偏好保存内容并对其进行分类 ... App Links AI 助理 ... Studio Labs 中的 Android Studio 学习之旅 在 Android Studio Otter 3 功能更新中，Android Studio 的“历程”将作为一项实验性功能移至 Studio Labs，您可以通过 Studio Labs 菜单在 Android Studio 的 RC 版和稳定版中使用该功能 ... 智能体模式下的界面开发 ... 支持远程 MCP 服务器 ... 2026-03-06。","cite_index":12,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/android.com","site_name":"Android Developers","query_indexes":[1],"provider":null}]}
+
+data: {"p":"response/fragments/-1","o":"BATCH","v":[{"p":"status","v":"FINISHED"},{"p":"content","v":"Found 12 web pages"}]}
+
+data: {"p":"response/conversation_mode","o":"SET","v":"SEARCH"}
+
+data: {"p":"response/has_pending_fragment","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":3,"type":"RESPONSE","content":"The","references":[],"stage_id":2}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" current"}
+
+data: {"v":" stable"}
+
+data: {"v":" version"}
+
+data: {"v":" of"}
+
+data: {"v":" Android"}
+
+data: {"v":" Studio"}
+
+data: {"v":" is"}
+
+data: {"v":" **"}
+
+data: {"v":"Android"}
+
+data: {"v":" Studio"}
+
+data: {"v":" Rabbit"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":"**"}
+
+data: {"v":" "}
+
+data: {"v":"[citation:1]"}
+
+data: {"v":"[citation:5]"}
+
+data: {"v":"."}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"accumulated_token_usage","v":68},{"p":"quasi_status","v":"FINISHED"}]}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: update_session
+data: {"updated_at":1792334812.2831109}
+
+event: title
+data: {"content":"Android Studio Rabbit 1"}
+
+event: close
+data: {"click_behavior":"none","auto_resume":false}
+
