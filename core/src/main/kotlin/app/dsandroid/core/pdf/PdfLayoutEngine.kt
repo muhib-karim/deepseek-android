@@ -56,7 +56,7 @@ class PdfLayoutEngine(private val measurer: TextMeasurer, private val spec: PdfP
         const val BODY = 11f
         const val LEADING = 1.4f
         private val HEADING_SIZES = floatArrayOf(18f, 15f, 13f, 12f, 11.5f, 11f)
-        private val BULLETS = listOf("•", "◦", "▪")
+        private val BULLETS = listOf("\u2022", "\u25E6", "\u25AA")
         private val TOKENS = Regex("\n|[ ]+|[^ \n]+")
     }
 

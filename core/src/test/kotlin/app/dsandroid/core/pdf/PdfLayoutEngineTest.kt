@@ -67,8 +67,8 @@ class PdfLayoutEngineTest {
         val layout = engine.layout(null, "## Section\n\n- first\n  - nested\n\n1. one\n2. two\n\n> quoted\n\n---\n\nEnd")
         val texts = bodyTexts(layout)
         assertEquals(PdfFont.BOLD, texts.first { it.text == "Section" }.font)
-        val bullet = texts.first { it.text == "•" }
-        val nestedBullet = texts.first { it.text == "◦" }
+        val bullet = texts.first { it.text == "\u2022" }
+        val nestedBullet = texts.first { it.text == "\u25E6" }
         assertTrue(nestedBullet.x > bullet.x)
         assertTrue(texts.first { it.text == "nested" }.x > texts.first { it.text == "first" }.x)
         assertTrue(texts.any { it.text == "1." } && texts.any { it.text == "2." })
