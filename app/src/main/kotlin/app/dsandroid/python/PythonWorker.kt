@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -117,14 +118,22 @@ class PythonWorker(context: Context, private val siteDir: File) : PythonExecutor
         return Connection(service, messenger).also { connection = it }
     }
 
-    /** Unbinds and, when [kill] is set, terminates the worker process (only this app's own ":python" process). */
-    private fun stop(kill: Boolean, pid: Int?) {
+    /**
+     * Unbinds and, when [kill] is set, terminates the worker process (only this app's own ":python" process),
+     * then waits briefly for it to exit so the next run binds to a fresh process instead of the dying one.
+     */
+    private suspend fun stop(kill: Boolean, pid: Int?) {
         val current = connection
         connection = null
         if (current != null) runCatching { app.unbindService(current.service) }
         if (!kill) return
         val target = pid?.takeIf { it > 0 } ?: workerPid()
-        if (target != null && target != Process.myPid()) Process.killProcess(target)
+        if (target == null || target == Process.myPid()) return
+        Process.killProcess(target)
+        repeat(40) {
+            if (workerPid() != target) return
+            delay(50)
+        }
     }
 
     private fun workerPid(): Int? = (app.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
