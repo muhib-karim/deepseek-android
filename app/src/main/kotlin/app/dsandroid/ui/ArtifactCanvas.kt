@@ -3,6 +3,7 @@ package app.dsandroid.ui
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -113,7 +115,7 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
             finally { busy = false }
         }
     }
-    Scaffold(topBar = {
+    Scaffold(modifier = Modifier.testTag("artifact-panel"), topBar = {
         TopAppBar(title = { Text(original.fileName, maxLines = 1) }, navigationIcon = {
             TextButton(onClick = ::leave, enabled = !busy) { Text(stringResource(R.string.viewer_back)) }
         })
@@ -133,14 +135,14 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
                 Tab(selected = !codeTab, onClick = { codeTab = false }, text = { Text(stringResource(R.string.canvas_preview)) })
                 Tab(selected = codeTab, onClick = { codeTab = true }, text = { Text(stringResource(R.string.interpreter_code)) })
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween,
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
                 Box {
                     TextButton(onClick = { historyOpen = true }, enabled = !busy && !dirty) { Text(stringResource(R.string.canvas_history, versions.size)) }
                     DropdownMenu(expanded = historyOpen, onDismissRequest = { historyOpen = false }) {
                         versions.forEachIndexed { index, artifact ->
                             DropdownMenuItem(text = { Text(stringResource(R.string.canvas_version, versions.size - index)) },
-                                onClick = { choose(artifact) }, trailingIcon = { if (artifact == selected) AppIcon(Glyph.CHECK) })
+                                onClick = { choose(artifact) }, trailingIcon = { if (artifact == selected) AppIcon(Glyph.CHECK, stringResource(R.string.a11y_selected)) })
                         }
                     }
                 }

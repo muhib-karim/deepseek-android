@@ -602,3 +602,117 @@ Remaining verification and supported limits:
 ## Release v0.3.0
 
 Version 0.3.0 (versionCode 3) bundles Passes D, E and F. CI compiles, runs the core and app unit tests, runs lint and assembles the debug APK; the tag workflow attaches the debug APK and SHA256SUMS to the GitHub release. Install permissions remain INTERNET only (RECORD_AUDIO is a runtime request). Alarms stay omitted (SET_ALARM would be an install permission). Device validation is still manual.
+
+## Pass G (v0.4.0)
+
+Hardening and packaging implementation is saved in the working tree. No new
+assistant feature, version bump, commit, push or tag is included. This section was
+written as the final edit. Compilation, lint and Android/JVM execution remain CI
+gates; no release or passing-build claim is made.
+
+Delivered:
+
+- Release-only R8 and resource shrinking, with environment-only signing through
+  `DSA_KEYSTORE_PATH`, `DSA_KEYSTORE_PASSWORD`, `DSA_KEY_ALIAS` and
+  `DSA_KEY_PASSWORD`. All four must be present to sign; otherwise release still
+  configures unsigned. Debug signing/minification, minSdk 26, targetSdk 35 and
+  versionCode/versionName remain unchanged. Existing `*.jks` and `*.keystore`
+  ignore entries were already present and retained.
+- Conservative PDFBox/fontbox and AndroidSVG keep rules, persisted Worker
+  constructor/name retention, and ML Kit/Firebase registrar retention. Library
+  consumer rules handle serialization, Compose/Lifecycle, OkHttp/Okio, coroutines,
+  security-crypto/Tink and WorkManager, including its internal Room database.
+  There are no app-defined Room/DataStore models or POI dependency; Office uses
+  the existing original ZIP/XML code. No blanket app keep or ignorewarnings rule.
+- Tag validation assembles unsigned release as well as debug. With nonempty
+  `DSA_KEYSTORE_BASE64`, CI decodes a restricted temporary keystore, builds the
+  signed release with configuration caching disabled, and removes the keystore
+  on exit. Debug is always retained; signed release is conditional. SHA256SUMS.txt
+  covers every attached APK and is verified again in the publishing job. Existing
+  action SHAs are unchanged. PR CI also assembles unsigned release after debug and
+  checks the merged release manifest for INTERNET/runtime RECORD_AUDIO only.
+- Four instrumentation cases: actual launcher activity, real app composable
+  launch and 48dp controls, Settings at 200% font scale, and partial/completed
+  streaming followed by opening an artifact. The latter uses an in-process fake
+  LlmClient behind the existing interface; no real provider key or transport.
+  The host activity is debug-only, and all test dependencies use androidTest.
+  API 34 x86_64 smoke CI has a 30-minute timeout and uploads test reports plus
+  actual chat/settings/artifact screenshots when the tests run successfully.
+- Accessibility: resource-backed meaningful image/selection labels, 48dp custom
+  targets, scrollable confirmation/large-font content and action rows, no fixed
+  composer text-height cap, and dark text/accent contrast coverage. Existing
+  decorative logos/icons remain unlabeled. New strings have Bangla translations.
+- Settings Backup uses SAF create/open contracts and one versioned JSON file.
+  Strict version/type/ID/path/count validation, bounded nesting and a 16 MiB input
+  limit precede a confirmed merge. Existing IDs win; display/personalization
+  preferences are restored. Imported schedules remain paused and unbound, with
+  no enqueue or account selection. Incomplete tool exchanges are removed using
+  the existing history sanitizer; unfinished timeline steps become stopped.
+  Typed settings allowlists exclude credentials and provider/connector config;
+  known credentials and recognizable secrets/emails in text are redacted. No
+  encrypted-preference dump, temporary chats, checkpoints or workspace binaries
+  are exported. Save generated files separately. Per-record atomic writes make
+  retries idempotent; a storage failure/process exit can leave a partial merge,
+  explicitly explained in the failure message and SECURITY.md.
+- Settings Diagnostics persists the latest 200 errors/tool failures, each capped
+  at 2,000 characters, with timestamps. Redaction runs before storage and covers
+  known credentials, token/key assignments, bearer/cookie headers, emails,
+  private-key blocks and long token-like strings. Call sites omit prompts, tool
+  arguments/results, URLs and stack traces. Copy is explicit; Clear is confirmed.
+  No upload, analytics, crash-reporting SDK or new network call was added.
+- README install/checksum instructions and honest screenshot placeholder;
+  SECURITY boundaries and FEATURE_MATRIX delivery notes (58–63 implemented,
+  64 partial). Main manifest, all removal directives, account-selection policy
+  and MIT attribution remain intact.
+
+Files touched, grouped:
+
+- Packaging: `app/build.gradle.kts`, `app/proguard-rules.pro`,
+  `gradle/libs.versions.toml`, `.github/workflows/{ci,release,emulator}.yml`,
+  `scripts/check_release_manifest.py`.
+- Core: new `backup/{Backup,BackupRepository,SecretText}.kt` and
+  `diagnostics/DiagnosticStore.kt`; `Personalization.kt`, `ScheduledTasks.kt` and
+  the visibility of the existing `ConversationBranch.completeExchanges` helper.
+- App: `data/BackupSettings.kt`; `ui/{BackupSettingsPanel,DiagnosticsPanel}.kt`;
+  ChatViewModel, SettingsScreen and ScheduledPromptWorker integration;
+  accessibility edits in ArtifactCanvas/Viewer, AssistantTurn, ChatScreen/Theme,
+  DsAndroidApp, InlineSvgArtifact, MessageActions, ReadAloud, ToolConfirmationSheet
+  and VoiceDictation; English/Bangla string resources.
+- Tests: core BackupTest/DiagnosticsTest, app BackupSettingsTest/ContrastTest,
+  androidTest LaunchTest/SmokeTest and the debug SmokeActivity/manifest.
+- Documentation: README, SECURITY, FEATURE_MATRIX, PROJECT_BRAIN and BUILD_NOTES.
+
+Validation performed without Gradle:
+
+- XML/TOML/YAML parsing, workflow shell syntax, string-reference and Bangla
+  placeholder coverage, preserved action pins/main manifest, Kotlin lexical and
+  delimiter sanity, and `git diff --check` passed. These do not prove compilation.
+- Executed the checksum packaging script against debug-only and two-APK fixtures;
+  both checksum manifests verified. Absent signing secrets skip signing, while
+  incomplete configured signing fails before invoking Gradle. The manifest gate
+  accepted allowed permissions and rejected an added CAMERA permission/missing
+  manifest in disposable fixtures. Redaction pattern fixtures retained UUIDs.
+- Custom dark text/send-accent pairs measured at least 4.88:1 contrast. Added
+  **18 JVM test cases and four instrumentation cases**, all unrun locally.
+  Gitleaks scanned the working tree with redacted output and found no leaks.
+
+Remaining / human pin:
+
+- `.github/workflows/emulator.yml` uses `reactivecircus/android-emulator-runner`
+  pinned to the full commit SHA of tag v2.34.0
+  (`1dcd0090116d15e7c562f8db72807de5e036a4ed`, verified against the upstream tag).
+- Run CI core/app JVM tests, lintDebug, assembleDebug and unsigned assembleRelease;
+  resolve any compiler/R8 findings before release. Exercise the minified build's
+  PDFBox/OCR/SVG, encrypted settings, serialization and scheduled-worker paths.
+- Configure the four repository signing secrets to publish a signed release APK;
+  validate signature/install/update behavior. The workflow also supports no-key
+  debug-only publication. Version metadata is deliberately still 0.3.0.
+- Run emulator smoke after pinning, inspect TalkBack and light/dark layouts at
+  large font sizes, and device-test SAF cancellation, bad files, merge/retry,
+  app recreation, credential exclusion and local diagnostics Copy/Clear.
+- Real screenshots of every major screen remain pending. Only real emulator
+  captures should be added; no fake images, local browser or emulator were used.
+
+### Pass G CI fix: network callback removed
+
+The chat screen no longer registers a default-network callback: that API needs ACCESS_NETWORK_STATE, which stays removed from the install permissions, so the call always failed silently. A message waiting for the network is retried from the Retry action.

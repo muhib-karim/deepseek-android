@@ -4,7 +4,8 @@ An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
 Current release: **v0.3.0**, a debug testing build (debug-key signed, not audited).
-The debug APK and SHA256SUMS are attached to each GitHub release. Builds, unit
+The debug APK is attached to each GitHub release. Pass G adds SHA256SUMS.txt
+and an optional signed release APK. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
 ## v0.3.0 Pass F features (in v0.3.0)
@@ -296,20 +297,59 @@ Android compile/target SDK 35.
 1. Push to `main` or open a pull request targeting `main`.
 2. In **Actions → CI**, inspect tests and lint, then download
    **deepseek-android-debug-apk**. Failure reports are attached when available.
-3. Version tags matching `v*` trigger the debug release workflow. Download
+3. Version tags matching `v*` trigger the APK release workflow. Download
    `deepseek-android-<tag>-debug.apk` from **Releases**.
 
 CI runs:
 
 ```sh
-gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
 ```
 
 The separate secret scan runs Gitleaks 8.21.2 in Docker; it does not use the
-license-gated Gitleaks action. APKs use Android's automatically generated debug
-key and are intended for testing, not Play distribution. Different CI runs can
-use different debug keys; an update may require uninstalling the previous build,
-which clears private app data. Export important artifacts first.
+license-gated Gitleaks action. Debug APKs use Android's automatically generated debug
+key: **debug-key signed, not audited**. Signed release APKs are optional and do not
+imply a security audit. CI also checks the merged release manifest for unexpected
+permissions. Emulator tests run separately and require the action pin listed in
+BUILD_NOTES before their first run.
+
+## Install and verify
+
+1. Open the repository **Releases** page and download the APK assets and
+   `SHA256SUMS.txt` from the same release into one directory.
+2. Verify them before installation:
+
+   ```sh
+   sha256sum -c SHA256SUMS.txt
+   ```
+
+   Every downloaded APK must report `OK`. The checksum file lists all APKs on that
+   release; download both variants if both are listed, or expect a missing-file
+   warning for the variant you did not download. Checksums detect damaged or changed
+   files; obtain the checksum file from the trusted release page too.
+3. Open your chosen APK on Android 8.0 or newer and approve installation in the
+   system installer. The app itself requests no package-install permission.
+
+`deepseek-android-<tag>-debug.apk` is the testing build: **debug-key signed, not
+audited**. `deepseek-android-<tag>-release.apk`, when present, is R8-minified,
+resource-shrunk and signed with the maintainer key supplied through CI secrets.
+Without signing secrets the release publishes debug plus its checksum; PR CI
+still compiles the unsigned, minified release variant.
+
+Different debug runs may use different signing keys. Switching between debug and
+release keys can require uninstalling first, which clears app data. Use
+**Settings → Backup → Export backup** before uninstalling, and save generated
+files separately. Restore merges records after confirmation; existing IDs win,
+preferences are restored and imported schedules stay paused. Credentials and
+provider/connector configuration must be entered separately. Keep the unencrypted
+backup private. The current version metadata remains 0.3.0 until release preparation.
+
+## Screenshots
+
+Screenshots will come from the real API 34 emulator smoke run, uploaded as the
+`emulator-smoke` workflow artifact. The tests capture chat, settings at 200% font
+scale, and an opened artifact. Screenshots for each major screen are still pending;
+no generated or mock screenshots are included.
 
 ## Tests and remaining validation
 
@@ -333,9 +373,10 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 ## Roadmap
 
 - v0.3.0 delivered every row in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
-- v0.4.0 (planned, hardening): signed and minified release APK, SHA-256 checksums on
-  releases, emulator smoke tests in CI, accessibility pass, local backup and restore,
-  local diagnostics screen, README screenshots. See the v0.4.0 section of the matrix.
+- v0.4.0 Pass G implementation: optional signed/minified release APK, checksums,
+  emulator smoke tests, accessibility changes, local backup/restore and local
+  diagnostics. CI/device validation and real screenshots remain pending. See the
+  v0.4.0 section of the matrix.
 - Full LaTeX rendering and OCR for scanned PDF pages.
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.

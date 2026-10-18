@@ -171,6 +171,21 @@ existing ones easier to trust and install. Install permissions stay INTERNET onl
 | 63 | Local diagnostics screen: recent errors and tool-call failures, copyable, never sent anywhere | v0.4.0 |
 | 64 | README refresh: screenshots of each major screen, install steps, checksum check | v0.4.0 |
 
+## Pass G delivery status
+
+Rows **58–63**: implemented in this working tree for v0.4.0; CI and device validation
+are pending, so this is not a release claim. Optional environment-signed R8 builds,
+checksums, unsigned release CI assembly, fake-backend emulator smoke tests,
+accessibility updates, confirmed SAF backup merging and redacted local diagnostics
+are delivered. The emulator workflow action is pinned to a verified full commit SHA.
+Backup restores task definitions
+paused/unbound and excludes credentials and workspace binaries. Large-font smoke
+and contrast checks are authored; full TalkBack/light/dark device checks remain.
+
+Row **64** is **partial**: install and checksum verification documentation is done;
+real screenshots of each major screen remain pending the emulator run. Version
+metadata remains unchanged. See BUILD_NOTES for validation and packaging follow-up.
+
 ## Not planned
 
 - Image and video generation: DeepSeek has no image model. Drawings come out as SVG/HTML artifacts instead (row 13).

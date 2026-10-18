@@ -1,17 +1,17 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-v0.3.0 is released (Passes D, E and F, versionCode 3). Next: plan v0.4.0 from FEATURE_MATRIX open rows and QC feedback.
+Complete Pass G, the v0.4.0 hardening and packaging pass, without changing version metadata or adding assistant features.
 
 ## Status
-- v0.3.0 released: Passes D, E and F merged; CI green (core tests, app unit tests, lint, assembleDebug); version 0.3.0 (versionCode 3); debug APK + SHA256SUMS on the v0.3.0 GitHub release.
-- Pass F implementation and English/Bangla resources are saved: foreground voice/TTS, sentence reading controls, reviewed camera/screen attachments, confirmed phone intents, quick launch and RemoteViews widget. Existing chat, registry, importer, artifacts and export paths are retained.
-- Added 40 JVM cases in eight files. Lightweight XML/TOML, resource/localization, Kotlin lexical/import, SDK/source-permission, machine-path and diff checks passed; redacted secret scanning passed. Compilation, tests and lint are unrun and remain CI gates.
-- Alarms are omitted because SET_ALARM requires an install permission. API 26–28 projection uses fresh consent while visible; API 29+ capture only this app window via PixelCopy. Dynamic shortcuts respect launcher capacity. No new dependencies or install permissions.
-- README, SECURITY and feature rows 34–39/57 are updated. No Gradle, browsers, sub-agents, review skills, commits, pushes, tags or version changes.
+- Pass G implementation saved: optional signed R8 release, APK checksums, unsigned release CI and merged-permission gate; emulator workflow and fake-backend smoke tests need the human action pin and CI execution.
+- Accessibility changes, English/Bangla strings, confirmed SAF backup merging and a bounded redacted local diagnostics screen are saved. Restore preserves existing IDs, pauses imported tasks and strips unfinished execution state; credentials and workspace binaries are excluded.
+- Added 18 JVM cases and four instrumentation cases. Lightweight XML/TOML/YAML/shell, localization, Kotlin lexical, checksum/manifest/redaction fixtures and contrast checks passed; Gitleaks found no leaks. No compilation, lint, JVM or emulator test success is claimed.
+- SDK levels, version, main manifest/removal rules and existing action SHAs retained. No Gradle, browser, sub-agent, commit, push or tag was run.
+- README, SECURITY and matrix delivery notes updated. Pass G BUILD_NOTES is the final edit; real screenshots and CI/device validation remain pending.
 
 ## Next step
-Final edit adds the Pass F BUILD_NOTES handoff. Then run GitHub Actions tests/lint/assembly and device-check microphone/voice availability, interruption, capture lifecycle/review, phone handlers, launcher/tile/assist and widget privacy before release.
+Pin the emulator action to a verified full SHA. Run CI tests/lint/debug and R8 release assembly, then emulator smoke and device checks (SAF round-trip, TalkBack/200% fonts, release library paths). Configure CI signing secrets for a signed asset; collect real screenshots. No version bump or release is authorized by this pass.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -35,3 +35,5 @@ Final edit adds the Pass F BUILD_NOTES handoff. Then run GitHub Actions tests/li
 - 2026-10-18 02:02Z Codex: completed resumed Pass E implementation, 39 JVM cases and documentation; final edit writes BUILD_NOTES, then CI and device validation remain.
 
 - 2026-10-18 02:32Z Codex: saved Pass F implementation, 40 JVM cases and documentation; lightweight checks pass, CI/device validation remains. Final edit is the Pass F BUILD_NOTES section; no commit or push.
+
+- 2026-10-18 03:19Z Codex: saved Pass G code, tests and docs; lightweight checks pass, CI/device validation pending. Final edit writes Pass G BUILD_NOTES; no commit or push.

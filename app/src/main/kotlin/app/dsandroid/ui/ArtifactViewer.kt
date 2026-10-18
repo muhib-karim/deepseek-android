@@ -107,7 +107,7 @@ fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Uni
                 is Preview.Pdf -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(loaded.pages) { page -> PdfPage(workspace, artifact.path, page) }
                 }
-                is Preview.Picture -> Image(loaded.bitmap.asImageBitmap(), artifact.fileName, Modifier.fillMaxSize().padding(16.dp), contentScale = ContentScale.Fit)
+                is Preview.Picture -> Image(loaded.bitmap.asImageBitmap(), stringResource(R.string.a11y_image_preview, artifact.fileName), Modifier.fillMaxSize().padding(16.dp), contentScale = ContentScale.Fit)
                 is Preview.Workbook -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(loaded.sheets.size) { index ->
                         val sheet = loaded.sheets[index]

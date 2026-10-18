@@ -496,4 +496,27 @@
     <string name="phone_calendar">ক্যালেন্ডারে অনুষ্ঠান যোগ করুন</string>
     <string name="phone_map">মানচিত্র খুলুন</string>
     <string name="phone_calendar_times">শুরু: %1$s\nশেষ: %2$s\nসময় অঞ্চল: %3$s</string>
+    <string name="a11y_selected">নির্বাচিত</string>
+    <string name="a11y_image_preview">ছবির প্রিভিউ: %1$s</string>
+    <string name="backup">ব্যাকআপ</string>
+    <string name="backup_notice">API কী, অ্যাকাউন্ট টোকেন, কুকি ও কানেক্টরের টোকেন ব্যাকআপে রাখা হয় না। ফাইলটি এনক্রিপ্ট করা নয় এবং এতে ব্যক্তিগত চ্যাটের তথ্য থাকে। নিরাপদ জায়গায় রাখুন।</string>
+    <string name="backup_contents">সংরক্ষিত চ্যাট, প্রকল্পের লেখা, মেমরি, সহকারী, কাজের সংজ্ঞা এবং প্রদর্শন ও ব্যক্তিগতকরণের সেটিংস থাকে। অস্থায়ী চ্যাট, তৈরি করা ফাইল, প্রোভাইডার ও কানেক্টরের কনফিগারেশন এবং চলমান কাজের চেকপয়েন্ট থাকে না। লেখায় শনাক্তযোগ্য গোপন তথ্য ও ইমেইল ঠিকানা মুছে দেওয়া হয়। ফাইলের সর্বোচ্চ আকার ১৬ এমবি।</string>
+    <string name="backup_export">ব্যাকআপ রপ্তানি করুন…</string>
+    <string name="backup_restore">ফাইল থেকে ফিরিয়ে আনুন…</string>
+    <string name="backup_confirm_title">এই ব্যাকআপ ফিরিয়ে আনবেন?</string>
+    <string name="backup_confirm_notice">এই ডিভাইসে তথ্য যোগ করবেন? একই আইডির বর্তমান তথ্য অপরিবর্তিত থাকবে; প্রদর্শন ও ব্যক্তিগতকরণের সেটিংস বদলে যাবে। অ্যাকাউন্ট বদলাবে না। আমদানি করা কাজ বন্ধ থাকবে; সময়সূচি চালু করতে কাজটি আবার তৈরি করুন। তৈরি করা ফাইল আলাদাভাবে সংরক্ষণ করতে হবে।</string>
+    <string name="backup_counts">চ্যাট: %1$d · প্রকল্প: %2$d · তথ্য: %3$d · সহকারী: %4$d · কাজ: %5$d</string>
+    <string name="backup_merge">তথ্য যোগ করার অনুমতি দিন</string>
+    <string name="backup_exported">ব্যাকআপ সংরক্ষিত হয়েছে।</string>
+    <string name="backup_restored">ব্যাকআপের তথ্য যোগ হয়েছে। আমদানি করা কাজ বন্ধ আছে।</string>
+    <string name="backup_failed">ব্যাকআপ সংরক্ষণ করা যায়নি। খালি জায়গা ও নির্বাচিত ফাইল পরিষেবা পরীক্ষা করুন।</string>
+    <string name="backup_invalid">এই ব্যাকআপ নষ্ট, অসমর্থিত বা অতিরিক্ত বড়। কোনো তথ্য ফিরিয়ে আনা হয়নি।</string>
+    <string name="backup_restore_failed">তথ্য ফিরিয়ে আনা শেষ হয়নি। খালি জায়গা দেখে আবার চেষ্টা করুন; ইতিমধ্যে যোগ হওয়া তথ্য থাকবে এবং নকল হবে না।</string>
+    <string name="diagnostics">সমস্যার বিবরণ</string>
+    <string name="diagnostics_notice">সাম্প্রতিক ত্রুটি ও টুলের ব্যর্থতার সর্বোচ্চ ২০০টি বিবরণ এই ডিভাইসেই থাকে। সংরক্ষণের আগে কী, টোকেন, বেয়ারার হেডার ও ইমেইল ঠিকানা মুছে দেওয়া হয়। কিছুই স্বয়ংক্রিয়ভাবে পাঠানো হয় না। কপি বা শেয়ার করার আগে দেখে নিন।</string>
+    <string name="diagnostics_empty">কোনো ত্রুটি সংরক্ষিত নেই।</string>
+    <string name="diagnostics_copy">সমস্যার বিবরণ কপি করুন</string>
+    <string name="diagnostics_clear">সমস্যার বিবরণ মুছুন</string>
+    <string name="diagnostics_clear_title">ডিভাইসে রাখা সমস্যার বিবরণ মুছবেন?</string>
+    <string name="diagnostics_failed">ডিভাইসে সমস্যার বিবরণ পড়া বা সংরক্ষণ করা যায়নি।</string>
 </resources>

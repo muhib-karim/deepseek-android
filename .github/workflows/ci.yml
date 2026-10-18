@@ -24,7 +24,9 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Test, lint and assemble
-        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
+      - name: Check merged release permissions
+        run: python3 scripts/check_release_manifest.py
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

@@ -32,6 +32,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     var clearConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty() }.getOrDefault("") }
+    var page by remember { mutableStateOf("") }
     var displayedSettings by remember { mutableStateOf(settings) }
     LaunchedEffect(settings) {
         val accountChanged = displayedSettings.runIdentity != settings.runIdentity ||
@@ -40,9 +41,9 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
             accountToken = settings.accountToken, accountOrigin = settings.accountOrigin, accountBinding = settings.accountBinding)
         if (accountChanged) draft = draft.copy(provider = settings.provider, baseUrl = settings.baseUrl,
             apiKey = settings.apiKey, customKey = settings.customKey, model = settings.model)
+        if (page == "backup") draft = settings
         displayedSettings = settings
     }
-    var page by remember { mutableStateOf("") }
     var dialog by remember { mutableStateOf("") }
     var pendingLanguage by remember { mutableStateOf("") }
     var pendingAppearance by remember { mutableStateOf(draft.appearance) }
@@ -52,9 +53,11 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     if(page.isNotEmpty()) {
         Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).verticalScroll(rememberScrollState()).imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             TextButton(onClick = { page = "" }) { Text(stringResource(R.string.back)) }
-            Text(stringResource(when(page) { "account" -> R.string.account; "data" -> R.string.data_management; "memory" -> R.string.memory; "tools" -> R.string.tools; "connectors" -> R.string.connectors; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(when(page) { "diagnostics" -> R.string.diagnostics; "backup" -> R.string.backup; "account" -> R.string.account; "data" -> R.string.data_management; "memory" -> R.string.memory; "tools" -> R.string.tools; "connectors" -> R.string.connectors; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
             SettingsGroup {
                 when(page) {
+                    "backup" -> BackupSettingsPanel(state, vm)
+                    "diagnostics" -> DiagnosticsPanel(state.diagnostics, vm)
                     "account" -> {
                 AccountPicker(settings, saving || state.running || state.signingIn, vm)
                 Text(stringResource(R.string.provider_notice), style = MaterialTheme.typography.bodySmall)
@@ -104,7 +107,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                     }
                 }
             }
-            Button(onClick = { save(draft) }, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if(saving) R.string.saving else R.string.save_settings)) }
+            if (page !in setOf("backup", "diagnostics")) Button(onClick = { save(draft) }, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if(saving) R.string.saving else R.string.save_settings)) }
         }
     } else Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)
         .verticalScroll(rememberScrollState()).imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -113,6 +116,8 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
             SettingsRow(stringResource(R.string.account), stringResource(if(settings.accountToken.isNotEmpty()) R.string.account_saved else R.string.local_profile)) { page = "account" }
             HorizontalDivider()
             SettingsRow(stringResource(R.string.data_management), "") { page = "data" }
+            SettingsRow(stringResource(R.string.backup), "") { page = "backup" }
+            SettingsRow(stringResource(R.string.diagnostics), "") { page = "diagnostics" }
         }
         Text(stringResource(R.string.app_section), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SettingsGroup {
@@ -159,7 +164,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     if(dialog.isNotEmpty()) AlertDialog(onDismissRequest = { dialog = "" },
         title = { Text(stringResource(when(dialog) { "language" -> R.string.app_language; "appearance" -> R.string.appearance; "audio" -> R.string.audio_language; "font" -> R.string.font_size; "updates" -> R.string.check_updates; "service" -> R.string.service; else -> R.string.help })) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 when(dialog) {
                     "language", "audio" -> {
                         ChoiceRow(stringResource(if(dialog == "audio") R.string.use_app_language else R.string.follow_system), pendingLanguage.isEmpty()) { pendingLanguage = "" }
@@ -195,7 +200,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     }
 }
 @Composable private fun SettingsRow(label: String, value: String, click: () -> Unit) {
-    Surface(onClick = click, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+    Surface(onClick = click, color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(label, Modifier.weight(1f))
             if(value.isNotEmpty()) Text(value, Modifier.widthIn(max = 140.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -206,7 +211,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun VoiceChooser(dismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = dismiss) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.voice), style = MaterialTheme.typography.titleLarge)
             OutlinedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -47,7 +47,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                 is TurnStep.Reasoning -> {
                     var expanded by rememberSaveable(item.id, index, step.complete, collapseThinking) { mutableStateOf(!collapseThinking) }
                     TimelineRow {
-                        Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(10.dp)) {
+                        Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { expanded = !expanded }.padding(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(if (step.complete) stringResource(R.string.thought_seconds, maxOf(1L, (step.durationMs + 999) / 1000)) else stringResource(R.string.thinking),
                                     Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
@@ -119,8 +119,10 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         Text(artifact.fileName, style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.tap_preview), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton(onClick = { openArtifact(artifact) }) { Text(stringResource(R.string.library_open)) }
-                    TextButton(onClick = { shareArtifact(artifact) }) { Text(stringResource(R.string.viewer_share)) }
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                    TextButton(onClick = { openArtifact(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.library_open)) }
+                    TextButton(onClick = { shareArtifact(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
                 }
             }
         }

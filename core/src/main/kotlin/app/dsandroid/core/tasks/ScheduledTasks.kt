@@ -58,6 +58,17 @@ class TaskStore(directory: File) {
         val retained = data.tasks.filter { it.active && it.id != task.id } + data.tasks.filterNot { it.active || it.id == task.id }.takeLast(100)
         write(data.copy(tasks = retained + task))
     }
+    fun mergeDefinitions(incoming: List<ScheduledTask>) = synchronized(lock) {
+        require(incoming.all { !it.active && it.providerKey == "restored-unbound" })
+        incoming.forEach { require(it.runAt > 0); it.validate(it.runAt - 1) }
+        val data = journal()
+        val merged = (data.tasks + incoming).distinctBy { it.id }
+        require(merged.size <= 150)
+        // No pruning during restore: a storage failure must be visible, never drop tasks.
+        val encoded = LlmJson.encodeToString(data.copy(tasks = merged))
+        files.write("tasks", encoded)
+        revision.update { it + 1 }
+    }
     fun cancel(id: String) = synchronized(lock) {
         val data = journal(); write(data.copy(tasks = data.tasks.map { if (it.id == id) it.copy(active = false) else it }))
     }

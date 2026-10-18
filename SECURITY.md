@@ -365,3 +365,42 @@ change between runs. Never commit API keys, account grants, signing keys,
   private preferences. The launcher can read that displayed title; message bodies,
   credentials and temporary-chat titles are excluded. Renaming/deleting chats
   refreshes/clears the title. No new install permissions or dependencies are added.
+
+
+## Pass G packaging and local data
+
+- Release signing keys live only in repository CI secrets. Signing uses
+  `DSA_KEYSTORE_BASE64`, decoded to a restricted temporary runner file and removed
+  on exit, plus `DSA_KEYSTORE_PASSWORD`, `DSA_KEY_ALIAS` and `DSA_KEY_PASSWORD`.
+  Gradle reads only `DSA_KEYSTORE_PATH` and the three signing environment variables;
+  missing values leave release unsigned. Keystores are ignored and never committed.
+  R8/resource shrinking affects release only. Debug remains debug-key signed, not
+  audited; neither build variant has received a security audit. SHA256SUMS.txt
+  covers every published APK and is checked again before publication.
+- OS backup remains disabled. Explicit SAF backup uses a versioned, unencrypted
+  JSON file with saved chats, project text, memory, assistants, task definitions
+  and allowlisted non-secret settings. It never serializes encrypted preferences,
+  accounts, API keys, cookies, connector tokens, provider/connector configuration,
+  checkpoints, diagnostics or temporary chats. Workspace binaries are separate
+  exports. Known stored credentials and recognizable secrets/emails in free text
+  are redacted before export; arbitrary sensitive prose is still private data.
+  Keep backups private and review their destination. No storage permission is used.
+- Restore reads at most 16 MiB, bounds nesting and validates version, types,
+  identifiers, paths, counts and store limits before changing live records. A
+  confirmation shows the merge policy: existing IDs win, display/personalization
+  settings are restored, accounts remain unchanged. Imported schedules are paused
+  and unbound, with no enqueue or provider call; recreate a task to schedule it.
+  Each record is saved atomically. Whole-archive writes are not one filesystem
+  transaction: storage failure or process death may leave a partial merge, which
+  can safely be retried without duplicate IDs. Invalid input fails before writes.
+- Diagnostics persist only the last 200 errors/tool failures locally, each capped
+  at 2,000 characters. Keys, token assignments, bearer/cookie headers, email
+  addresses, private-key blocks and long token-like strings are redacted before
+  storage. Call sites omit prompts, tool arguments/results, URLs and stack traces.
+  Copy is explicit and Clear asks for confirmation. No diagnostics upload,
+  analytics, new network call or crash-reporting SDK is added. Pattern redaction
+  is conservative, not a classifier for arbitrary private prose; review copied text.
+- Instrumentation dependencies and the smoke host are excluded from release.
+  CI verifies the merged release manifest allows only INTERNET and runtime
+  RECORD_AUDIO; existing manifest-removal rules remain intact. Tests use an
+  in-process fake LlmClient and never configure a real provider credential.

@@ -201,7 +201,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                                     }
                                     IconButton(onClick = { navigation.navigate("voice") }, enabled = !state.running && !state.importing) { AppIcon(Glyph.MIC, stringResource(R.string.voice_mode)) }
                                     IconButton(onClick = vm::newConversation, enabled = !state.running && !state.importing,
-                                        modifier = Modifier.padding(end = 8.dp).size(40.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
+                                        modifier = Modifier.padding(end = 8.dp).size(48.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
                                         AppIcon(Glyph.PLUS, stringResource(R.string.new_chat))
                                     }
                                 })
@@ -328,7 +328,7 @@ private fun ModelTitle(state: ChatUiState, settings: AppSettings, select: (Strin
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 480.dp).widthIn(max = 320.dp)) {
             DropdownMenuItem(text = { Text(if (newest == null) stringResource(R.string.automatic_fallback) else stringResource(R.string.automatic_newest)) }, onClick = { select(""); expanded = false },
-                trailingIcon = { if (settings.model.isEmpty()) AppIcon(Glyph.CHECK) })
+                trailingIcon = { if (settings.model.isEmpty()) AppIcon(Glyph.CHECK, stringResource(R.string.a11y_selected)) })
             val entries = (ModelSelector.ranked(models) +
                 if (models.isEmpty()) listOf(ModelInfo(ModelSelector.OFFLINE_FALLBACK)) else emptyList())
                 .let { if (settings.model.isNotBlank() && it.none { model -> model.id == settings.model }) listOf(ModelInfo(settings.model)) + it else it }
@@ -339,7 +339,7 @@ private fun ModelTitle(state: ChatUiState, settings: AppSettings, select: (Strin
                         if (model.id == newest) Text(stringResource(R.string.newest), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                         else if (models.isEmpty() && model.id == ModelSelector.OFFLINE_FALLBACK) Text(stringResource(R.string.offline_fallback), style = MaterialTheme.typography.labelSmall)
                     }
-                }, onClick = { select(model.id); expanded = false }, trailingIcon = { if (settings.model == model.id) AppIcon(Glyph.CHECK) })
+                }, onClick = { select(model.id); expanded = false }, trailingIcon = { if (settings.model == model.id) AppIcon(Glyph.CHECK, stringResource(R.string.a11y_selected)) })
             }
             HorizontalDivider()
             state.modelsNotice?.let { Text(it, Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
