@@ -36,3 +36,8 @@
 # pdfbox-android: JPEG2000 support (com.gemalto.jp2 / jp2-android) is an optional
 # dependency that this app does not ship; JPX images in PDFs are skipped.
 -dontwarn com.gemalto.jp2.**
+
+# Chaquopy: the Python runtime calls its Java API (and the service entry point) through JNI and
+# reflection. Keep the library's own classes; app code is not exposed to Python.
+-keep class com.chaquo.python.** { *; }
+-dontwarn com.chaquo.python.**

@@ -20,6 +20,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          # Chaquopy compiles and installs Python packages with the app's Python version (3.13).
+          python-version: '3.13'
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.2
         with:
           gradle-version: '8.10.2'

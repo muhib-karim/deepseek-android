@@ -68,6 +68,8 @@
             android:icon="@drawable/ic_shortcut_voice" android:label="@string/voice_mode">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
+        <!-- On-device Python (Chaquopy) runs in its own process so a timed-out script can be killed. Not exported. -->
+        <service android:name=".python.PythonService" android:process=":python" android:exported="false" />
         <!-- Tasks use JobScheduler on API 26+, never foreground work or exact alarms. -->
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" tools:node="remove" />
     </application>
