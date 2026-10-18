@@ -332,8 +332,10 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- Remaining v0.3.0 passes: voice, device actions and the other undelivered
-  rows in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
+- v0.3.0 delivered every row in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
+- v0.4.0 (planned, hardening): signed and minified release APK, SHA-256 checksums on
+  releases, emulator smoke tests in CI, accessibility pass, local backup and restore,
+  local diagnostics screen, README screenshots. See the v0.4.0 section of the matrix.
 - Full LaTeX rendering and OCR for scanned PDF pages.
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.

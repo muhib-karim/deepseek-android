@@ -4,8 +4,8 @@ What the big assistant apps (ChatGPT, Claude, Kimi) do on Android, and when Deep
 The goal: the official DeepSeek app only chats; this app lets DeepSeek *do* things — call tools mid-conversation and show the results inside the chat.
 
 Legend: ✓ = the app has it · — = it doesn't · **Release** = the version of this app that ships it.
-v0.1.0 and v0.2.0 are released. Pass D, E and F delivery notes describe the implementation in
-this working tree; CI and device validation are still required before a v0.3.0 tag.
+v0.1.0, v0.2.0 and v0.3.0 are released: every row below has shipped. The v0.4.0 section
+near the end plans the next release, which hardens and packages what is already here.
 
 ## Core: the agent loop
 
@@ -122,16 +122,13 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 ## Pass D delivery status
 
 Rows **17, 18, 21, 22, 23, 30, 50, 51, 52, 53 and 54** — Status note:
-**shipped in v0.3.0 pass D**. This denotes delivered implementation, not a new tagged release.
-JVM coverage is included; compilation, tests, lint and device checks remain CI/release gates.
+**shipped in v0.3.0 pass D**. Released in v0.3.0 with CI green (core tests, app unit tests, lint, debug build, secret scan); on-device checks are part of the v0.4.0 emulator smoke tests (row 60).
 Other v0.3.0 rows are tracked below.
 
 ## Pass E delivery status
 
 Rows **29, 33, 45, 48, 49, 55 and 56** — Status note:
-**shipped in v0.3.0 pass E**. This denotes delivered working-tree implementation,
-not a new tagged release or a successful build. JVM cases accompany the core logic;
-compilation, test execution, lint and device checks remain CI/release gates.
+**shipped in v0.3.0 pass E**. Released in v0.3.0 with CI green (core tests, app unit tests, lint, debug build, secret scan); on-device checks are part of the v0.4.0 emulator smoke tests (row 60).
 
 The browser supports static public pages and simple confirmed forms, with site
 scripts and login disabled. The generic connector supports configurable public-client
@@ -142,9 +139,7 @@ the original account must remain manually selected.
 ## Pass F delivery status
 
 Rows **34, 35, 36, 37, 38, 39 and 57** — Status note:
-**shipped in v0.3.0 pass F**. This denotes delivered implementation, not a new
-release or a successful build. JVM cases are included; CI compilation, tests,
-lint and device verification remain required.
+**shipped in v0.3.0 pass F**. Released in v0.3.0 with CI green (core tests, app unit tests, lint, debug build, secret scan); on-device checks are part of the v0.4.0 emulator smoke tests (row 60).
 
 Voice uses foreground system speech recognition and installed offline English/Bangla
 TTS, with sentence playback controls and chat transcripts. Camera and screen images
@@ -161,6 +156,21 @@ to launcher capacity), the voice tile and ACTION_ASSIST; no floating overlay or
 full VoiceInteractionService is installed. The RemoteViews widget exposes the
 latest active saved title to the launcher, excluding temporary chats.
 
+## v0.4.0 plan: hardening and packaging
+
+Every feature above has shipped, so v0.4.0 adds no new assistant features. It makes the
+existing ones easier to trust and install. Install permissions stay INTERNET only.
+
+| # | Item | Release |
+|---|---|---|
+| 58 | Signed, minified release APK (R8) next to the debug APK, built in CI from a secret keystore | v0.4.0 |
+| 59 | SHA-256 checksums file attached to every GitHub release | v0.4.0 |
+| 60 | Emulator smoke tests in CI: launch, send a message to a fake backend, open an artifact, open settings | v0.4.0 |
+| 61 | Accessibility pass: content descriptions, touch targets, font scaling up to 200%, contrast in dark mode | v0.4.0 |
+| 62 | Full backup and restore of chats, projects, memory and settings to one file the user picks (no cloud) | v0.4.0 |
+| 63 | Local diagnostics screen: recent errors and tool-call failures, copyable, never sent anywhere | v0.4.0 |
+| 64 | README refresh: screenshots of each major screen, install steps, checksum check | v0.4.0 |
+
 ## Not planned
 
 - Image and video generation: DeepSeek has no image model. Drawings come out as SVG/HTML artifacts instead (row 13).
@@ -172,6 +182,7 @@ latest active saved title to the launcher, excluding temporary chats.
 | Release | Features |
 |---|---|
 | v0.1.0 (released) | 6 |
-| v0.2.0 | 26 |
-| v0.3.0 | 25 |
-| **All** | **57** |
+| v0.2.0 (released) | 26 |
+| v0.3.0 (released) | 25 |
+| v0.4.0 (planned, hardening) | 7 |
+| **All** | **57 features shipped + 7 hardening items planned** |
