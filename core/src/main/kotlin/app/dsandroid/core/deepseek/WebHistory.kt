@@ -1,5 +1,7 @@
 package app.dsandroid.core.deepseek
 
+import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.tools.Artifact
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -8,12 +10,21 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
+/**
+ * [agent] marks a user turn sent in agent mode. Assistant turns from agent mode keep their timeline in
+ * [steps] (reasoning, tool calls, answers) and generated files in [artifacts]; [codeRuns] holds Run-button
+ * executions of code blocks. All default to empty, so older history files still load.
+ */
 @Serializable
 data class WebMessage(
     val id: String, val user: Boolean, val text: String, val thinking: String = "",
     val serverId: Long? = null, val parentId: Long? = null, val prompt: String? = null,
     val thinkingEnabled: Boolean = false, val searchEnabled: Boolean = false,
     val refFileIds: List<String> = emptyList(),
+    val agent: Boolean = false,
+    val steps: List<TurnStep> = emptyList(),
+    val artifacts: List<Artifact> = emptyList(),
+    val codeRuns: List<TurnStep.ToolCall> = emptyList(),
 )
 @Serializable
 data class WebChat(val id: String, val title: String, val sessionId: String? = null, val parentId: Long? = null,

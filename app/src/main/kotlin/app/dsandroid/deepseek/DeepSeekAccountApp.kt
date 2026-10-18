@@ -3,6 +3,7 @@ package app.dsandroid.deepseek
 import android.app.Activity
 import android.app.Application
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -17,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,10 +35,15 @@ import app.dsandroid.attachments.SharedInput
 import app.dsandroid.core.launch.QuickAction
 import app.dsandroid.data.Appearance
 import app.dsandroid.launch.LaunchRequest
+import app.dsandroid.ui.ArtifactViewer
 import app.dsandroid.ui.DsAndroidApp
+import app.dsandroid.core.tools.Artifact
 import java.io.File
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -71,6 +79,62 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         val name = cameraName; cameraName = null
         if (name != null) {
             if (success) vm.importAttachment(cameraUri(name)) else cameraFile(name).delete()
+        }
+    }
+    var viewing by remember { mutableStateOf<Artifact?>(null) }
+    var pendingSave by remember { mutableStateOf<Artifact?>(null) }
+    val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { target ->
+        val artifact = pendingSave
+        pendingSave = null
+        val file = artifact?.let(vm::artifactFile)
+        if (target != null && artifact != null && file != null) scope.launch {
+            try {
+                withContext(Dispatchers.IO) { ArtifactActions.copyTo(context, file, target) }
+                Toast.makeText(context, "Saved ${artifact.fileName}", Toast.LENGTH_SHORT).show()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { vm.notice("The file could not be saved.") }
+        }
+    }
+    val skillFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::installSkillFromUri) }
+    val agentActions = remember(vm, context) {
+        object : AgentActions {
+            override fun setAgent(enabled: Boolean) = vm.setAgent(enabled)
+            override fun runCode(messageId: String, code: String) = vm.runCode(messageId, code)
+            override fun exportPdf(messageId: String) = vm.exportPdf(messageId)
+            override fun artifactFile(artifact: Artifact) = vm.artifactFile(artifact)
+            override fun openArtifact(artifact: Artifact) {
+                if (vm.artifactFile(artifact) != null) viewing = artifact else vm.notice("This file is no longer available.")
+            }
+            override fun saveArtifact(artifact: Artifact) {
+                val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")
+                scope.launch {
+                    try {
+                        if (withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }) {
+                            Toast.makeText(context, "Saved to Downloads/DeepSeek", Toast.LENGTH_SHORT).show()
+                        } else {
+                            pendingSave = artifact
+                            saveDocument.launch(artifact.fileName)
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { vm.notice("The file could not be saved.") }
+                }
+            }
+            override fun shareArtifact(artifact: Artifact) {
+                val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")
+                try { ArtifactActions.share(context, artifact, file) } catch (_: Exception) { vm.notice("No app is available to share this file.") }
+            }
+            override fun answerTool(allow: Boolean) = vm.answerTool(allow)
+            override fun installSkillFromUrl(url: String) = vm.installSkillFromUrl(url)
+            override fun installSkillFromFile() {
+                try { skillFile.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
+                catch (_: Exception) { vm.notice("No file picker is available.") }
+            }
+            override fun answerSkillInstall(allow: Boolean) = vm.answerSkillInstall(allow)
+            override fun setSkillEnabled(name: String, enabled: Boolean) = vm.setSkillEnabled(name, enabled)
+            override fun removeSkill(name: String) = vm.removeSkill(name)
+            override fun installPackages(specs: String) = vm.installPackages(specs)
+            override fun answerPackageInstall(allow: Boolean) = vm.answerPackageInstall(allow)
+            override fun removePackage(name: String) = vm.removePackage(name)
         }
     }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(vm::importAttachment) }
@@ -181,7 +245,19 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                 else vm.send(think, search, browser::solve)
             },
             loginContent = { AndroidView(factory = { browser.view }, modifier = Modifier.fillMaxSize().testTag("login-webview")) },
+            actions = agentActions,
         )
+        viewing?.let { artifact ->
+            Dialog(onDismissRequest = { viewing = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+                Surface(Modifier.fillMaxSize()) {
+                    ArtifactViewer(artifact, vm.agentWorkspace, back = { viewing = null }, share = agentActions::shareArtifact, save = agentActions::saveArtifact,
+                        openExternal = { item ->
+                            val file = vm.artifactFile(item)
+                            if (file != null) try { ArtifactActions.openExternal(context, item, file) } catch (_: Exception) { vm.notice("No app can open this file.") }
+                        })
+                }
+            }
+        }
         pendingResend?.let { resend ->
             AlertDialog(onDismissRequest = { pendingResend = null }, title = { Text("Resend to DeepSeek?") },
                 text = { Text("This message reuses its Search setting and any previously uploaded files. Its reply and later turns will be replaced.") },

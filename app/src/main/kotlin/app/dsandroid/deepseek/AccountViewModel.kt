@@ -7,7 +7,30 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.dsandroid.attachments.AttachmentImporter
 import app.dsandroid.attachments.Upload
+import app.dsandroid.core.agent.AgentEvent
+import app.dsandroid.core.agent.AgentLoop
+import app.dsandroid.core.agent.Confirmer
+import app.dsandroid.core.agent.ToolCallProtocol
+import app.dsandroid.core.agent.ToolStatus
+import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.agent.WebChatTransport
+import app.dsandroid.core.agent.WebPromptKind
+import app.dsandroid.core.agent.WebToolProtocolClient
 import app.dsandroid.core.deepseek.*
+import app.dsandroid.core.guard.GuardPolicy
+import app.dsandroid.core.guard.GuardSettings
+import app.dsandroid.core.guard.WorkspacePath
+import app.dsandroid.core.llm.ChatMessage
+import app.dsandroid.core.python.RunPythonTool
+import app.dsandroid.core.skills.SkillDownloader
+import app.dsandroid.core.skills.SkillPack
+import app.dsandroid.core.skills.SkillPackReader
+import app.dsandroid.core.skills.SkillPrompt
+import app.dsandroid.core.tools.Artifact
+import app.dsandroid.core.tools.ToolContext
+import app.dsandroid.core.tools.ToolRegistry
+import app.dsandroid.python.AgentToolkit
+import app.dsandroid.tools.CreatePdfTool
 import app.dsandroid.data.Appearance
 import app.dsandroid.data.Provider
 import app.dsandroid.data.SettingsStore
@@ -17,6 +40,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class AccountViewModel @JvmOverloads constructor(
@@ -40,6 +69,10 @@ class AccountViewModel @JvmOverloads constructor(
     private var sending: Job? = null
     private var importing: Job? = null
     private var sessionChanging = false
+    /** Agent files live under workspace/account/<chat id>; the FileProvider exposes workspace/ for sharing. */
+    val agentWorkspace = WorkspacePath(File(application.filesDir, "workspace"))
+    private var toolReply: CompletableDeferred<Boolean>? = null
+    private var pendingPack: SkillPack? = null
 
     init {
         viewModelScope.launch {
@@ -54,7 +87,8 @@ class AccountViewModel @JvmOverloads constructor(
                 val expired = session?.isExpired(System.currentTimeMillis()) == true
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
                 val hasApiKey = withContext(Dispatchers.IO) { settingsStore!!.load().apiKey.isNotBlank() }
-                mutable.update { it.copy(appearance = appearance, hasApiKey = hasApiKey) }
+                val agent = appearancePrefs.getBoolean("agent_mode", false)
+                mutable.update { it.copy(appearance = appearance, hasApiKey = hasApiKey, agent = agent) }
                 if (expired) expireSession()
                 else {
                     if (session == null) {
@@ -72,7 +106,13 @@ class AccountViewModel @JvmOverloads constructor(
 
     private fun available() = state.value.ready && !state.value.busy && !state.value.importing && !sessionChanging
     fun navigate(page: AccountPage) {
-        if (available()) mutable.update { it.copy(page = page, error = null) }
+        if (!available()) return
+        mutable.update { it.copy(page = page, error = null) }
+        if (page == AccountPage.SKILLS) refreshToolsets()
+    }
+    fun setAgent(enabled: Boolean) {
+        appearancePrefs.edit().putBoolean("agent_mode", enabled).apply()
+        mutable.update { it.copy(agent = enabled) }
     }
     fun draft(value: String) { mutable.update { it.copy(draft = value.take(20_000)) } }
     fun notice(message: String) { mutable.update { it.copy(error = message) } }
@@ -150,7 +190,10 @@ class AccountViewModel @JvmOverloads constructor(
     private suspend fun clearSessionData() {
         session = null
         chats = emptyList(); current = emptyChat(); clearUploads()
-        withContext(Dispatchers.IO) { store?.clear(); persistence.withLock { history.clear() } }
+        withContext(Dispatchers.IO) {
+            store?.clear(); persistence.withLock { history.clear() }
+            File(agentWorkspace.root, "account").deleteRecursively()
+        }
         DeepSeekCookies.clear()
     }
     private suspend fun expireSession() {
@@ -192,7 +235,10 @@ class AccountViewModel @JvmOverloads constructor(
                 }
                 // Server failures leave both memory and disk untouched.
                 val next = if (delete) chats.filterNot { it.id == id } else chats.map { if (it.id == id) it.copy(title = title) else it }
-                withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
+                withContext(Dispatchers.IO) {
+                    persistence.withLock { history.save(next) }
+                    if (delete) File(agentWorkspace.root, chatDir(id)).deleteRecursively()
+                }
                 chats = next
                 val wasCurrent = current.id == id
                 if (wasCurrent) {
@@ -239,8 +285,8 @@ class AccountViewModel @JvmOverloads constructor(
         val files = uploads.toList()
         val display = listOf(prompt, files.joinToString("\n") { "Attached: ${it.name}" }).filter(String::isNotBlank).joinToString("\n\n")
         val user = WebMessage(UUID.randomUUID().toString(), true, display, parentId = current.parentId,
-            prompt = prompt, thinkingEnabled = think, searchEnabled = search)
-        runTurn(current.messages, user, files, solve)
+            prompt = prompt, thinkingEnabled = think, searchEnabled = search, agent = state.value.agent)
+        if (user.agent) runAgentTurn(current.messages, user, files, solve) else runTurn(current.messages, user, files, solve)
     }
     /** Reuse the selected prompt's predecessor, never the reply that is being replaced. */
     fun regenerate(solve: suspend (PowChallenge) -> Long) {
@@ -251,7 +297,8 @@ class AccountViewModel @JvmOverloads constructor(
         if (userIndex < 0) return
         val user = current.messages[userIndex]
         if (user.prompt == null) { notice("This older message cannot be regenerated. Send its text again."); return }
-        runTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList(), solve)
+        if (user.agent) runAgentTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList(), solve)
+        else runTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList(), solve)
     }
     fun edit(id: String, text: String, solve: suspend (PowChallenge) -> Long) {
         if (!available()) return
@@ -259,8 +306,9 @@ class AccountViewModel @JvmOverloads constructor(
         if (index < 0 || text.isBlank()) return
         val user = current.messages[index]
         if (user.prompt == null) { notice("This older message cannot be edited. Send its text again."); return }
-        runTurn(current.messages.take(index), user.copy(id = UUID.randomUUID().toString(), text = text.trim().take(20_000),
-            prompt = text.trim().take(20_000), serverId = null), emptyList(), solve)
+        val edited = user.copy(id = UUID.randomUUID().toString(), text = text.trim().take(20_000), prompt = text.trim().take(20_000), serverId = null)
+        if (edited.agent) runAgentTurn(current.messages.take(index), edited, emptyList(), solve)
+        else runTurn(current.messages.take(index), edited, emptyList(), solve)
     }
     fun messageNeedsConfirmation(id: String? = null): Boolean {
         val user = if (id == null) current.messages.lastOrNull { it.user } else current.messages.firstOrNull { it.id == id && it.user }
@@ -337,8 +385,302 @@ class AccountViewModel @JvmOverloads constructor(
         chats = next
     }
     private fun summaries() = chats.map { AccountHistory(it.id, it.title) }
-    private fun displayMessages() = current.messages.map { AccountMessage(it.id, it.user, it.text, it.thinking, it.prompt) }
+    private fun displayMessages() = current.messages.map { AccountMessage(it.id, it.user, it.text, it.thinking, it.prompt, it.steps, it.artifacts, it.codeRuns) }
     private fun clearUploads() { uploads.forEach { it.file.delete() }; uploads.clear() }
     private fun emptyChat() = WebChat(UUID.randomUUID().toString(), "New Chat")
+    private fun chatDir(id: String) = "account/$id"
+
+    /** Workspace file behind an artifact card, or null when it no longer exists. */
+    fun artifactFile(artifact: Artifact): File? = runCatching { agentWorkspace.resolve(artifact.path) }.getOrNull()?.takeIf { it.isFile }
+
+    /**
+     * Agent turn on account-mode web chat: the same AgentLoop as the API client, with tool calls carried as
+     * fenced JSON in the chat (WebToolProtocolClient). Every round trip is a message in this chat's
+     * parent chain; tool results go back as the next message. The partial timeline survives Stop and errors.
+     */
+    private fun runAgentTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>, solve: suspend (PowChallenge) -> Long) {
+        if (session == null) { mutable.update { it.copy(page = AccountPage.LOGIN, signedIn = false) }; return }
+        val replyId = UUID.randomUUID().toString()
+        val before = current
+        val displayedTitle = if (before.messages.isEmpty()) user.text.replace('\n', ' ').take(60) else current.title
+        current = current.copy(title = displayedTitle, messages = prefix + user + WebMessage(replyId, false, ""), parentId = user.parentId, blocked = true)
+        uploads.clear()
+        mutable.update { it.copy(busy = true, draft = "", attachments = emptyList(), title = current.title, conversationId = current.id, messages = displayMessages(), error = null) }
+        sending = viewModelScope.launch {
+            var parent = user.parentId
+            var lastSeen: Long? = null
+            var answered = false
+            var transportFailure: Exception? = null
+            var agentError: String? = null
+            var sent = user
+            var steps = emptyList<TurnStep>()
+            val artifacts = mutableListOf<Artifact>()
+            fun publish() {
+                val answer = steps.filterIsInstance<TurnStep.Answer>().joinToString("") { it.text }.trim()
+                val thinking = steps.filterIsInstance<TurnStep.Reasoning>().joinToString("\n\n") { it.text }
+                current = current.copy(messages = prefix + sent + WebMessage(replyId, false, answer, thinking, serverId = lastSeen,
+                    parentId = sent.serverId, steps = steps, artifacts = artifacts.toList()))
+                mutable.update { it.copy(messages = displayMessages()) }
+            }
+            try {
+                persist()
+                val credentials = credentials()
+                val remoteId = current.sessionId ?: client.createSession(credentials).also { current = current.copy(sessionId = it) }
+                val refs = user.refFileIds + files.map { file ->
+                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+                    client.uploadFile(credentials, file.file, file.name, mime)
+                }
+                sent = user.copy(refFileIds = refs)
+                publish()
+                val transport = WebChatTransport { prompt, kind ->
+                    flow {
+                        val first = kind == WebPromptKind.USER
+                        var final: WebReply? = null
+                        try {
+                            client.complete(credentials(), CompletionInput(remoteId, parent, prompt, user.thinkingEnabled, user.searchEnabled && first,
+                                if (first) refs else emptyList()), powSolver ?: solve).collect { reply ->
+                                final = reply
+                                lastSeen = reply.responseMessageId ?: lastSeen
+                                if (first && sent.serverId == null && reply.requestMessageId != null) sent = sent.copy(serverId = reply.requestMessageId)
+                                emit(reply)
+                            }
+                        } catch (error: Exception) {
+                            if (error !is CancellationException) transportFailure = error
+                            throw error
+                        }
+                        val done = final?.takeIf { it.finished && it.responseMessageId != null }
+                        if (done == null) {
+                            val error = EndpointChanged()
+                            transportFailure = error
+                            throw error
+                        }
+                        parent = done.responseMessageId
+                        answered = true
+                        current = current.copy(parentId = parent)
+                    }
+                }
+                val toolkit = AgentToolkit.get(getApplication())
+                val (tools, skills) = withContext(Dispatchers.IO) { toolkit.tools() to toolkit.enabledSkills() }
+                val registry = ToolRegistry(tools)
+                val llm = WebToolProtocolClient(transport) { specs -> ToolCallProtocol.systemPrompt(specs, SkillPrompt.summaries(skills)) }
+                val loop = AgentLoop(llm, registry, GuardPolicy(registry, agentWorkspace), ToolContext(agentWorkspace, chatDir = chatDir(current.id)),
+                    Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = 8)
+                loop.run(mutableListOf(ChatMessage("user", user.prompt.orEmpty()))).collect { event ->
+                    if (event is AgentEvent.StepsUpdated) { steps = event.steps; publish() }
+                    if (event is AgentEvent.ArtifactCreated && artifacts.none { it.path == event.artifact.path }) { artifacts += event.artifact; publish() }
+                    if (event is AgentEvent.Error) agentError = event.message
+                }
+                transportFailure?.let { throw it }
+                current = current.copy(parentId = parent, blocked = false)
+                agentError?.let { notice(it) }
+            } catch (cancelled: CancellationException) {
+                current = current.copy(parentId = lastSeen ?: parent, blocked = false)
+                throw cancelled
+            } catch (error: Exception) {
+                if (!answered && lastSeen == null && error !is SessionExpired) {
+                    current = before.copy(sessionId = current.sessionId)
+                    mutable.update { it.copy(draft = if (prefix == before.messages) user.prompt.orEmpty() else it.draft) }
+                } else current = current.copy(parentId = lastSeen ?: parent, blocked = false)
+                reportFailure(error)
+            } finally {
+                files.forEach { it.file.delete() }
+                withContext(NonCancellable) {
+                    if (session != null) {
+                        try { persist() } catch (_: Exception) { notice("Local history could not be saved. This conversation may be lost when the app closes.") }
+                    }
+                    mutable.update { it.copy(busy = false, requiresNewChat = current.blocked, title = current.title,
+                        messages = displayMessages(), history = summaries()) }
+                }
+            }
+        }
+    }
+
+    /** Per-action approval for network tools and downloads; Stop cancels the wait. */
+    private suspend fun confirmTool(name: String, arguments: JsonObject): Boolean = withContext(Dispatchers.Main.immediate) {
+        val reply = CompletableDeferred<Boolean>()
+        toolReply = reply
+        mutable.update { it.copy(confirmation = AgentConfirmation(name, describeTool(name, arguments))) }
+        try { reply.await() } finally {
+            toolReply = null
+            mutable.update { it.copy(confirmation = null) }
+        }
+    }
+
+    fun answerTool(allow: Boolean) { toolReply?.complete(allow) }
+
+    private fun describeTool(name: String, arguments: JsonObject): String {
+        fun text(key: String) = (arguments[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        return when (name) {
+            "pip_install" -> "Download these Python packages from PyPI and install them in this app:\n" +
+                (arguments["packages"] as? JsonArray).orEmpty().joinToString("\n") { "- " + ((it as? JsonPrimitive)?.contentOrNull ?: it.toString()) }
+            "web_fetch" -> "Fetch this web page; its text is then sent to DeepSeek:\n${text("url")}"
+            else -> "$name\n${arguments.toString().take(800)}"
+        }
+    }
+
+    /** "Export as PDF" on an assistant message: the answer is laid out as Markdown and attached as a card. */
+    fun exportPdf(id: String) {
+        if (!available()) return
+        val chatId = current.id
+        val message = current.messages.firstOrNull { it.id == id && !it.user && it.text.isNotBlank() } ?: return
+        val title = current.title.ifBlank { "DeepSeek answer" }
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                val artifact = withContext(Dispatchers.IO) {
+                    CreatePdfTool().run(buildJsonObject {
+                        put("title", title)
+                        put("markdown", message.text)
+                        put("file_path", "exports/" + title.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50).ifEmpty { "answer" } + ".pdf")
+                    }, ToolContext(agentWorkspace, chatDir = chatDir(chatId))).artifacts.single()
+                }
+                if (current.id == chatId) {
+                    current = current.copy(messages = current.messages.map { if (it.id == id) it.copy(artifacts = (it.artifacts + artifact).distinctBy { a -> a.path }) else it })
+                    persist()
+                    mutable.update { it.copy(messages = displayMessages()) }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The PDF could not be created.") }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    /** Run button on a Python code block: executes on the device in this chat's folder; output and files attach to the message. */
+    fun runCode(id: String, code: String) {
+        if (!available() || code.isBlank()) return
+        val chatId = current.id
+        val callId = UUID.randomUUID().toString()
+        val argsJson = buildJsonObject { put("code", code) }.toString()
+        fun update(step: TurnStep.ToolCall, files: List<Artifact> = emptyList()) {
+            if (current.id != chatId) return
+            current = current.copy(messages = current.messages.map { message ->
+                if (message.id != id) message
+                else message.copy(codeRuns = message.codeRuns.filterNot { it.id == callId } + step, artifacts = (message.artifacts + files).distinctBy { it.path })
+            })
+            mutable.update { it.copy(messages = displayMessages()) }
+        }
+        update(TurnStep.ToolCall(callId, "run_python", argsJson, ToolStatus.RUNNING))
+        mutable.update { it.copy(busy = true) }
+        sending = viewModelScope.launch {
+            val started = System.nanoTime()
+            fun elapsed() = (System.nanoTime() - started) / 1_000_000
+            try {
+                val result = RunPythonTool(AgentToolkit.get(getApplication()).python).run(buildJsonObject { put("code", code); put("timeout_s", 60) },
+                    ToolContext(agentWorkspace, chatDir = chatDir(chatId)))
+                update(TurnStep.ToolCall(callId, "run_python", argsJson, if (result.isError) ToolStatus.ERROR else ToolStatus.DONE,
+                    result.content.take(8000), elapsed()), result.artifacts)
+            } catch (cancelled: CancellationException) {
+                update(TurnStep.ToolCall(callId, "run_python", argsJson, ToolStatus.STOPPED, "Stopped", elapsed()))
+                throw cancelled
+            } catch (error: Exception) {
+                update(TurnStep.ToolCall(callId, "run_python", argsJson, ToolStatus.ERROR, "Python could not run: ${error.message.orEmpty().take(300)}", elapsed()))
+            } finally {
+                withContext(NonCancellable) {
+                    if (session != null) runCatching { persist() }
+                    mutable.update { it.copy(busy = false) }
+                }
+            }
+        }
+    }
+
+    fun refreshToolsets() {
+        viewModelScope.launch {
+            try {
+                val toolkit = AgentToolkit.get(getApplication())
+                val (skills, packages) = withContext(Dispatchers.IO) { toolkit.ensureBuiltIns(); toolkit.skills.list() to toolkit.installer.installed() }
+                mutable.update { state -> state.copy(
+                    skills = skills.map { SkillRow(it.manifest.name, it.manifest.description, it.manifest.version, it.builtIn, it.enabled, it.manifest.tools.size) },
+                    packages = packages.map { PackageRow(it.name, it.version, it.bytes) },
+                    bundledPackages = "Built in: Python 3.13 with numpy ${AgentToolkit.BUNDLED["numpy"]} and matplotlib ${AgentToolkit.BUNDLED["matplotlib"]} " +
+                        "(plus Pillow, fontTools, contourpy, kiwisolver, cycler, pyparsing, python-dateutil, packaging, six).",
+                ) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("Skills and Python packages could not be read.") }
+        }
+    }
+
+    fun installSkillFromUrl(url: String) = preparePack { SkillPackReader.fromZip(SkillDownloader().download(url.trim())) }
+
+    fun installSkillFromUri(uri: Uri) = preparePack {
+        withContext(Dispatchers.IO) {
+            val input = getApplication<Application>().contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("The file could not be opened")
+            val bytes = input.use { stream ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = stream.read(buffer)
+                    if (count < 0) break
+                    require(output.size() + count <= SkillPackReader.MAX_ARCHIVE_BYTES) { "Skill archive exceeds 5 MB" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            }
+            SkillPackReader.fromZip(bytes)
+        }
+    }
+
+    private fun preparePack(load: suspend () -> SkillPack) {
+        if (state.value.toolsetBusy) return
+        mutable.update { it.copy(toolsetBusy = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val pack = load()
+                pendingPack = pack
+                mutable.update { it.copy(pendingSkill = SkillPreview(pack.manifest.name, pack.manifest.version, pack.manifest.description,
+                    pack.manifest.tools.map { tool -> tool.name }, pack.manifest.pip)) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { notice("This skill could not be installed: ${error.message?.take(200) ?: "invalid skill package"}") }
+            finally { mutable.update { it.copy(toolsetBusy = false) } }
+        }
+    }
+
+    fun answerSkillInstall(allow: Boolean) {
+        val pack = pendingPack
+        pendingPack = null
+        mutable.update { it.copy(pendingSkill = null) }
+        if (!allow || pack == null) return
+        toolsetTask("The skill could not be installed") { toolkit ->
+            withContext(Dispatchers.IO) { toolkit.ensureBuiltIns(); toolkit.skills.install(pack) }
+            if (pack.manifest.pip.isNotEmpty()) toolkit.installer.install(pack.manifest.pip)
+        }
+    }
+
+    fun setSkillEnabled(name: String, enabled: Boolean) = toolsetTask("The skill could not be changed") { toolkit ->
+        withContext(Dispatchers.IO) { toolkit.skills.setEnabled(name, enabled) }
+    }
+
+    fun removeSkill(name: String) = toolsetTask("The skill could not be removed") { toolkit ->
+        withContext(Dispatchers.IO) { toolkit.skills.remove(name) }
+    }
+
+    fun installPackages(specs: String) {
+        val requirements = specs.split(',', ' ', '\n').map { it.trim() }.filter { it.isNotEmpty() }.take(10)
+        if (requirements.isNotEmpty()) mutable.update { it.copy(pendingPackages = requirements) }
+    }
+
+    fun answerPackageInstall(allow: Boolean) {
+        val requirements = state.value.pendingPackages
+        mutable.update { it.copy(pendingPackages = emptyList()) }
+        if (!allow || requirements.isEmpty()) return
+        toolsetTask("The packages could not be installed") { toolkit -> notice(toolkit.installer.install(requirements).summary()) }
+    }
+
+    fun removePackage(name: String) = toolsetTask("The package could not be removed") { toolkit ->
+        withContext(Dispatchers.IO) { toolkit.installer.remove(name) }
+    }
+
+    private fun toolsetTask(failure: String, block: suspend (AgentToolkit) -> Unit) {
+        if (state.value.toolsetBusy) return
+        mutable.update { it.copy(toolsetBusy = true, error = null) }
+        viewModelScope.launch {
+            try { block(AgentToolkit.get(getApplication())) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { notice("$failure: ${error.message?.take(200) ?: "unknown error"}") }
+            finally {
+                mutable.update { it.copy(toolsetBusy = false) }
+                refreshToolsets()
+            }
+        }
+    }
     override fun onCleared() { clearUploads(); super.onCleared() }
 }

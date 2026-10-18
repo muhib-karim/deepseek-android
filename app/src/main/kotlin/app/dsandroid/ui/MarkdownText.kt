@@ -30,8 +30,10 @@ import app.dsandroid.core.tools.WebSource
 private data class CitationLinks(val numbers: Set<Int> = emptySet(), val open: (Int) -> Unit = {})
 private val LocalCitations = compositionLocalOf { CitationLinks() }
 
+/** [onRunCode], when set, adds a Run action to Python code blocks. */
 @Composable
-fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebSource> = emptyList(), onCitation: (Int) -> Unit = {}) {
+fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebSource> = emptyList(), onCitation: (Int) -> Unit = {},
+    onRunCode: ((String) -> Unit)? = null) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     CompositionLocalProvider(LocalCitations provides CitationLinks(sources.map { it.number }.toSet(), onCitation)) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -43,7 +45,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebS
                     else -> MaterialTheme.typography.titleMedium
                 }.copy(fontWeight = FontWeight.Bold))
                 is MarkdownBlock.Paragraph -> InlineText(block.text)
-                is MarkdownBlock.Code -> CodeBlock(block)
+                is MarkdownBlock.Code -> CodeBlock(block, onRunCode?.takeIf { block.language.lowercase() in setOf("python", "py", "python3") })
                 is MarkdownBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     block.items.forEachIndexed { index, item ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -111,14 +113,17 @@ private fun InlineText(text: String, modifier: Modifier = Modifier, style: andro
 
 @Suppress("DEPRECATION")
 @Composable
-private fun CodeBlock(block: MarkdownBlock.Code) {
+private fun CodeBlock(block: MarkdownBlock.Code, onRun: ((String) -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     var copied by remember(block.text) { mutableStateOf(false) }
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(block.language.ifBlank { stringResource(R.string.code) }, style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy)) }
+                Row {
+                    if (onRun != null) TextButton(onClick = { onRun(block.text) }) { Text(stringResource(R.string.run_code)) }
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy)) }
+                }
             }
             SelectionContainer {
                 Text(block.text, Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
