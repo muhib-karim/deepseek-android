@@ -7,10 +7,10 @@ v0.4.0 is released (Pass G, versionCode 4). Next: plan v0.5.0 from FEATURE_MATRI
 - v0.5.0 account-client work started on the requested feature branch from refreshed origin/main; main unchanged.
 - Read the supplied UI spec, current Compose architecture, tests, manifests, workflows and dependency catalog.
 - Design: default DeepSeek web-session shell with native streaming; existing API client remains an explicit Settings fallback. Tokens stay out of UI state and diagnostics.
-- Added tests first for session parsing/expiry/origin/routing, PoW headers, incremental patch streams, native transport and ten light/dark screenshot fixtures. Builds, test execution and screenshots are CI-only; no push, tag or release in this session.
+- Implemented core token/origin checks, bounded SSE patch reduction and cancellable Bearer+cookie native streaming. Added tests first for session parsing/expiry/origin/routing, PoW headers, incremental patch streams, native transport and ten light/dark screenshot fixtures. Builds, test execution and screenshots are CI-only; no push, tag or release in this session.
 
 ## Next step
-Implement the new core protocol types and Android account shell referenced by the test-first commit. Verify public worker protocol where reachable; document any unverified integration.
+Implement Android encrypted storage, restricted login/worker WebView and the tested account shell. Verify public worker protocol where reachable; document any unverified integration.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -38,3 +38,5 @@ Implement the new core protocol types and Android account shell referenced by th
 - 2026-10-18 03:19Z Codex: saved Pass G code, tests and docs; lightweight checks pass, CI/device validation pending. Final edit writes Pass G BUILD_NOTES; no commit or push.
 
 - 2026-10-18 Codex: authored v0.5.0 protocol and screenshot tests before production changes; CI execution pending. Public worker contract inspected; public chat page returned HTTP 403.
+
+- 2026-10-18 Codex: core session transport and patch reducer implemented against first-written tests; static diff check passed, compilation and execution remain CI-only. Next: Android login and shell.
