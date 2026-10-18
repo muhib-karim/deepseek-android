@@ -1,9 +1,10 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-Deliver v0.3.0 Pass F in numbered order: voice, read aloud, voice images, phone intents, screen capture, quick launch and widget. Preserve existing registry, attachments and export.
+v0.3.0 is released (Passes D, E and F, versionCode 3). Next: plan v0.4.0 from FEATURE_MATRIX open rows and QC feedback.
 
 ## Status
+- v0.3.0 released: Passes D, E and F merged; CI green (core tests, app unit tests, lint, assembleDebug); version 0.3.0 (versionCode 3); debug APK + SHA256SUMS on the v0.3.0 GitHub release.
 - Pass F implementation and English/Bangla resources are saved: foreground voice/TTS, sentence reading controls, reviewed camera/screen attachments, confirmed phone intents, quick launch and RemoteViews widget. Existing chat, registry, importer, artifacts and export paths are retained.
 - Added 40 JVM cases in eight files. Lightweight XML/TOML, resource/localization, Kotlin lexical/import, SDK/source-permission, machine-path and diff checks passed; redacted secret scanning passed. Compilation, tests and lint are unrun and remain CI gates.
 - Alarms are omitted because SET_ALARM requires an install permission. API 26–28 projection uses fresh consent while visible; API 29+ capture only this app window via PixelCopy. Dynamic shortcuts respect launcher capacity. No new dependencies or install permissions.

@@ -598,3 +598,7 @@ Remaining verification and supported limits:
   the permission rules. Full default-assistant service integration and floating
   overlays are not implemented. Runtime device behavior, production signing and
   a v0.3.0 release remain unverified; no commit, push or tag was created.
+
+## Release v0.3.0
+
+Version 0.3.0 (versionCode 3) bundles Passes D, E and F. CI compiles, runs the core and app unit tests, runs lint and assembles the debug APK; the tag workflow attaches the debug APK and SHA256SUMS to the GitHub release. Install permissions remain INTERNET only (RECORD_AUDIO is a runtime request). Alarms stay omitted (SET_ALARM would be an install permission). Device validation is still manual.
