@@ -317,3 +317,145 @@ Remaining verification and supported limits:
   block; malformed/missing suggestions produce no fabricated questions.
 - Other v0.3.0 feature rows and the older shared-project-files UI gap are outside
   this pass. No requested Pass D implementation item was intentionally deferred.
+
+## Pass E (v0.3.0)
+
+Completed the resumed working tree for feature-matrix rows 29, 33, 45, 48, 49,
+55 and 56, building on Pass D and the released registry, guard, tool cards,
+artifact/export, attachment and secure-storage paths. This is an implementation
+handoff, not a tagged release or a claim that compilation/tests have passed.
+
+- **Saved assistants:** bounded local CRUD for name, built-in icon, instructions,
+  default tools and response style; start a new chat from the Assistants screen.
+  Chats persist an assistant snapshot so editing/deleting the saved persona does
+  not rewrite previous conversations. Tool choices include configured connectors
+  and remote tools, always intersected with global disables and the existing guard.
+  JSON export uses the existing workspace writer and explicit SAF Save flow.
+- **Manual accounts:** up to 20 DeepSeek API-key/account profiles in the existing
+  Keystore-backed encrypted settings. Settings and the chat header provide a manual
+  picker. Adding a profile does not select it, and deleting the selected profile
+  clears credentials without selecting another. Quota/rate errors never switch
+  accounts; app runs surface HTTP 429 without automatic retry. Pending runs remain
+  bound to their original identity. Settings drafts retain edits across model-list
+  refreshes and follow explicit account changes.
+- **Browser agent:** registered open_url/read_page/click/type/submit/scroll/back,
+  backed by a visible restricted WebView and a bounded public-HTTPS loader. Reads
+  use the existing fetch host/query/length rules. Click/type/submit/back require
+  previews with page revision, target, text, destination and fields; execution
+  revalidates the preview. Stale approvals, invalid targets and oversized entries
+  are rejected. Fixed internal scripts supply DOM inspection, field entry and
+  scrolling; there is no arbitrary model JavaScript. Take over stops the run and
+  offers native controls; clearing/switching chats disposes the browser.
+- **Connectors:** a working configurable OAuth2 public-client PKCE adapter with
+  read-only GET search and item-read operations. Users enter their provider's
+  endpoints/client ID/read-only scopes and sign in in the system browser through
+  the existing loopback/state flow. No client secret is required or bundled.
+  Search/read origins are bound, item IDs encoded, responses and DNS constrained,
+  and redirects refused. First use shows the initial request and an explicitly
+  labelled Allow for this chat grant; disconnect deletes the encrypted token and
+  revokes grants. Added setup and compatibility documentation in CONNECTORS.md.
+- **Parallel agents:** a validated plan launches one to four independent guarded
+  read-only loops using structured coroutines. Parent and children share 24
+  inference attempts and 40 tool executions; children leave one request for final
+  synthesis. Each child has separate history/source numbering and a six-step cap.
+  The card shows task status/progress; successful evidence and individual failures
+  return to the parent for a merged answer with source URLs. Stop cancels the group
+  and confirmation waits. No recursive delegation or child browser/write actions.
+- **Memory upkeep:** opt-in, tool-free suggestions after answers from bounded
+  recent messages in up to three saved chats and saved facts. Context is valid JSON
+  even at its size limit. Up to eight proposals per response and 50 pending proposals
+  are stored separately from memory. Settings → Memory approves/rejects each
+  addition/edit/deletion; stale edits/deletions cannot overwrite a changed fact.
+  Temporary chats are excluded, and deleting a chat clears its pending suggestions.
+- **Scheduled prompts:** one-off/repeating WorkManager tasks, created explicitly
+  in Tasks or through the CONFIRM schedule_prompt tool. The preview includes exact
+  prompt, time, interval and model. Tasks bind to the original account and never
+  select it automatically; a changed account produces an inbox error. Each occurrence
+  makes one tool-free inference request with a 120-second/32,000-character cap,
+  rejecting unsolicited tool calls. Durable claims prevent replay after interruption;
+  app-launch reconciliation repairs an interrupted enqueue. Results/errors have
+  persistent unread state and a chat-header badge. The journal prunes old results
+  and completed schedules by UTF-8 bytes so Bangla output stays within its 8 MiB cap.
+- **Bangla and integration:** every new control/notice, including the browser sign-in
+  callback, has English and natural Bangla resources. Existing minSdk 26/targetSdk 35,
+  MIT harness attribution and version values remain unchanged. WorkManager 2.9.1 is
+  the only new dependency and is credited in NOTICE. Its transitive boot/wake-lock/
+  foreground/notification permissions and foreground service are removed; source
+  manifest requests remain INTERNET plus runtime RECORD_AUDIO, with
+  ACCESS_NETWORK_STATE still removed.
+
+Files touched, grouped (52 files including this section):
+
+- Core: new accounts/AccountProfiles.kt, assistants/SavedAssistant.kt,
+  browser/BrowserTools.kt and BrowserScripts.kt, connectors/Connectors.kt,
+  network/PublicHttps.kt, agents/ParallelAgents.kt, memory/MemoryUpkeep.kt,
+  tasks/ScheduledTasks.kt and ScheduledPromptRunner.kt; extended AgentLoop.kt,
+  GuardPolicy.kt and ConversationStore.kt.
+- Android: new browser/BrowserController.kt, tasks/TaskScheduler.kt and
+  ScheduledPromptWorker.kt; new AccountPicker.kt, AssistantsScreen.kt,
+  BrowserScreen.kt, ConnectorsScreen.kt, SubAgentsCard.kt, MemoryUpkeepSettings.kt
+  and TasksScreen.kt. Extended SettingsStore.kt, AccountSignIn.kt, ChatViewModel.kt,
+  ChatScreen.kt, DsAndroidApp.kt, SettingsScreen.kt, ResponseStylePicker.kt and
+  ToolConfirmationSheet.kt.
+- Resources/build: app/build.gradle.kts, AndroidManifest.xml,
+  gradle/libs.versions.toml, values/strings.xml and values-bn/strings.xml.
+- JVM coverage: nine new files, 39 cases — AccountProfilesTest, AssistantStoreTest,
+  BrowserPolicyTest, ConnectorTest, ParallelAgentsTest, MemoryUpkeepTest,
+  TaskStoreTest, ScheduledPromptRunnerTest and PassEAgentTest.
+- Documentation: README.md, NOTICE, SECURITY.md, FEATURE_MATRIX.md,
+  CONNECTORS.md, PROJECT_BRAIN.md and this file. Delivered feature rows carry
+  the requested “shipped in v0.3.0 pass E” implementation status note.
+
+Validation performed locally:
+
+- XML/TOML parsing; duplicate/missing resource checks; English/Bangla placeholder
+  parity; source-manifest permission and SDK checks.
+- Kotlin string/comment/delimiter checks across 199 source/test files, explicit
+  project-import resolution and constructor/call-site inspection against the
+  existing dependency catalog. These are static checks, not Kotlin compilation.
+- Fixed browser-script syntax checked with Node's parser only; no browser or
+  WebView was launched. Machine-path and diff-hygiene checks passed, as did a
+  redacted Gitleaks working-tree scan before this final documentation edit.
+- JVM cases cover assistant persistence/export/input validation; manual selection
+  and removal without fallback; browser policy, invalid targets and stale previews;
+  connector ID/origin constraints, token removal and chat-scoped grants; shared
+  budget reservation, overlapping children, partial failures and cancellation;
+  memory approval/staleness/context bounds/deletion; schedule confirmation,
+  timing/claims/storage limits/unread state, account binding and tool-free inference;
+  and rate-limit surfacing plus exact preview/denial in the existing agent loop.
+- **No Gradle, Kotlin compiler, JVM suite, Android lint or APK assembly was run.**
+  No Chromium, Playwright, sub-agents, review skills, commit, push, version bump or
+  tag was used. This section was written as the final edit.
+
+Remaining verification and supported limits:
+
+- GitHub Actions must compile both modules, run existing/new JVM suites, lint and
+  assemble. Verify the merged manifest after adding WorkManager, especially the
+  removed transitive permissions and foreground service, before release.
+- Device-check encrypted profile migration/selection/removal, account-bound resume,
+  persona snapshots/export, process death, large fonts, navigation and Bangla UI.
+- Device-check browser preview expiry, takeover/Stop during loading, fixed DOM
+  scripts, simple forms, blocked credentials/navigation/resources and renderer
+  failure. Site scripts, authenticated browsing, password entry, remote assets and
+  downloads are deliberately unavailable; this is not a general-purpose browser.
+  Sensitive-field detection is heuristic and WebView has no hard heap quota.
+- Exercise a compatible provider's public-client PKCE flow, loopback redirect,
+  search/read payloads, denied grants, expiry, reconnect and disconnect. The generic
+  transport is implemented, but no live provider integration was exercised locally.
+  Providers requiring client secrets, POST-based search, custom headers, binary
+  downloads or token refresh need another adapter; expired tokens require sign-in.
+- Device-check parallel progress/cancellation and merged answers, memory proposal
+  review and temporary-chat exclusion, and WorkManager one-off/repeat/cancel/inbox
+  behavior across process loss, reboot, force-stop and account changes. Scheduled
+  runs are approximate and tool-free, with a 15-minute minimum repeat interval;
+  reopen after reboot/force-stop because boot access is absent. No notifications
+  or exact alarms are implemented. In-flight provider requests cannot be withdrawn.
+- Per-agent progress and connector grants are session-only. Completed parent tool
+  results persist through the existing checkpoint path; explicitly resuming an
+  interrupted read-only delegation may repeat reads and begins a fresh shared budget.
+  Memory upkeep uses an extra provider call. The inbox retains up to 100 results
+  and may prune earlier results to meet its byte cap.
+- No requested Pass E implementation item was intentionally deferred within these
+  documented boundaries. Other v0.3.0 rows, the older project shared-files UI gap,
+  supported DeepSeek-specific account contracts and production signing remain
+  outside this pass. CI and device validation are still required before release.

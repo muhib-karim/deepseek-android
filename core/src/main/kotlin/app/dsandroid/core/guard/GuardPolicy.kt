@@ -13,6 +13,7 @@ data class GuardSettings(val shellEnabled: Boolean = false, val installEnabled: 
 class GuardPolicy(private val registry: ToolRegistry, private val workspace: WorkspacePath) {
     fun decide(name: String, args: JsonObject, settings: GuardSettings, searchHosts: Set<String> = emptySet()): Decision {
         val tool = registry[name] ?: return Decision.DENY
+        if (tool is app.dsandroid.core.browser.BrowserTool) return tool.decision(args, searchHosts)
         when (tool.kind) {
             ToolKind.SHELL -> return if (settings.shellEnabled) Decision.CONFIRM else Decision.DENY
             ToolKind.INSTALL -> return if (settings.installEnabled) Decision.CONFIRM else Decision.DENY

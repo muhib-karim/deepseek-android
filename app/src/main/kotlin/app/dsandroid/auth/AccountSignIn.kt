@@ -28,12 +28,12 @@ import okhttp3.Request
 import okhttp3.Response
 
 /** Configurable standard PKCE adapter. No undocumented provider endpoints are assumed. */
-class AccountSignIn(private val identity: ClientIdentity) {
+class AccountSignIn(private val identity: ClientIdentity, private val callbackSuccess: String, private val callbackFailure: String) {
     private val http = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
         .connectTimeout(20, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS).build()
 
-    suspend fun signIn(settings: AppSettings, openBrowser: (String) -> Unit): String {
+    suspend fun signIn(settings: AppSettings, openBrowser: (String) -> Unit, scope: String? = null): String {
         require(settings.accountConfigured) { "Account sign-in endpoint not configured; use an API key" }
         val authorize = endpoint(settings.authorizeUrl)
         val exchangeEndpoint = endpoint(settings.exchangeUrl)
@@ -50,14 +50,15 @@ class AccountSignIn(private val identity: ClientIdentity) {
                 .setQueryParameter("response_type", "code").setQueryParameter("client_id", settings.clientId)
                 .setQueryParameter("redirect_uri", redirect).setQueryParameter("state", state)
                 .setQueryParameter("code_challenge", Pkce.challenge(verifier)).setQueryParameter("code_challenge_method", "S256")
-                .setQueryParameter("login_source", "web").build()
+                .apply { if (scope == null) setQueryParameter("login_source", "web") else setQueryParameter("scope", scope) }.build()
             withContext(Dispatchers.Main) { openBrowser(url.toString()) }
             val code = callback(server, state)
             val form = FormBody.Builder().add("grant_type", "authorization_code").add("code", code)
                 .add("client_id", settings.clientId).add("redirect_uri", redirect).add("code_verifier", verifier).build()
             val request = Request.Builder().url(exchangeEndpoint).post(form)
             identity.headers().forEach { (name, value) -> request.header(name, value) }
-            return exchange(http.newCall(request.build()))
+            return if (scope == null) exchange(http.newCall(request.build())) else
+                AccountTokenParser.parse(app.dsandroid.core.network.PublicHttps.text(request.build(), 64 * 1024))
         } finally { server.close() }
     }
 
@@ -85,7 +86,7 @@ class AccountSignIn(private val identity: ClientIdentity) {
                                 if (char != '\r'.code) line.append(char.toChar())
                             }
                             val result = runCatching { LoopbackCallbackParser.parse(line.toString(), expectedState) }
-                            val message = if (result.isSuccess) "Sign-in received. Return to DeepSeek Android." else "Invalid callback. Return to DeepSeek Android and try again."
+                            val message = if (result.isSuccess) callbackSuccess else callbackFailure
                             val status = if (result.isSuccess) "200 OK" else "400 Bad Request"
                             val body = message.toByteArray(Charsets.UTF_8)
                             val output = it.getOutputStream()

@@ -41,6 +41,7 @@ data class ConversationRecord(
     val temporary: Boolean = false,
     val responseStyle: app.dsandroid.core.personalization.ResponseStyle = app.dsandroid.core.personalization.ResponseStyle.DEFAULT,
     val studyMode: Boolean = false,
+    val assistant: app.dsandroid.core.assistants.SavedAssistant? = null,
 )
 
 /** Private JSON files, replaced atomically so a process exit cannot leave a partial record. */

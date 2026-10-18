@@ -22,7 +22,7 @@ fun ResponseStylePicker(style: ResponseStyle, study: Boolean, enabled: Boolean, 
     FilterChip(selected = study, enabled = enabled, onClick = { select(style, !study) }, label = { Text(stringResource(R.string.study_mode)) })
 }
 
-private fun styleLabel(style: ResponseStyle): Int = when (style) {
+internal fun styleLabel(style: ResponseStyle): Int = when (style) {
     ResponseStyle.DEFAULT -> R.string.style_default
     ResponseStyle.CONCISE -> R.string.style_concise
     ResponseStyle.EXPLANATORY -> R.string.style_explanatory

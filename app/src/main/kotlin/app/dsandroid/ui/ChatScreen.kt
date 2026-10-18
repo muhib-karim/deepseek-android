@@ -145,6 +145,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                 item(key = "conversation-tail") { Spacer(Modifier.height(1.dp)) }
             }
         }
+        SubAgentsCard(state)
         Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { agentEnabled = it }, state, settings.supportsVision(think),
             { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled, research && agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
             settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError,
