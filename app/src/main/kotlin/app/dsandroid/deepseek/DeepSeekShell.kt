@@ -47,6 +47,7 @@ data class AccountHistory(val id: String, val title: String)
 data class AccountUiState(
     val ready: Boolean = false,
     val signedIn: Boolean = false,
+    val logoutPending: Boolean = false,
     val page: AccountPage = AccountPage.CHAT,
     val appearance: Appearance = Appearance.SYSTEM,
     val title: String = "New Chat",
@@ -137,7 +138,7 @@ fun DeepSeekShell(
                     }
                 }
                 state.error?.let { error ->
-                    Text(error, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer).padding(12.dp).testTag("account-error"),
+                    Text(error, Modifier.fillMaxWidth().heightIn(max = 96.dp).background(MaterialTheme.colorScheme.errorContainer).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account-error"),
                         color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
                 }
                 when (state.page) {
@@ -177,9 +178,9 @@ fun DeepSeekShell(
                     }
                     AccountPage.SETTINGS -> Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         Text("Account", style = MaterialTheme.typography.titleMedium)
-                        if (state.signedIn) {
-                            Text("DeepSeek account connected")
-                            OutlinedButton(onClick = { logoutDialog = true }, enabled = !state.busy) { Text("Log out") }
+                        if (state.signedIn || state.logoutPending) {
+                            Text(if (state.logoutPending) "Session cleanup needs attention" else "DeepSeek account connected")
+                            OutlinedButton(onClick = { logoutDialog = true }, enabled = !state.busy) { Text(if (state.logoutPending) "Retry logout" else "Log out") }
                         } else Button(onClick = onLogin) { Text("Log in with DeepSeek") }
                         HorizontalDivider()
                         Text("Theme", style = MaterialTheme.typography.titleMedium)
@@ -198,7 +199,7 @@ fun DeepSeekShell(
                         Text("Light layout follows the measured reference. Dark colors and the abstract mark are original interpretations. Web login and chat use an unofficial protocol that may change.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     AccountPage.LOGIN -> {
-                        Text(DeepSeekWebView.SSO_NOTICE, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(DeepSeekWebView.SSO_NOTICE, Modifier.heightIn(max = 104.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = onLogin) { Text("Reload login") }
                             TextButton(onClick = onFinishLogin) { Text("Finish login") }
@@ -263,6 +264,11 @@ private fun Message(message: AccountMessage, working: Boolean) {
 private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
+    val pillColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    )
     Surface(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), shape = RoundedCornerShape(22.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
@@ -273,9 +279,9 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.Center) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(selected = think, onClick = { think = !think }, label = { Text("Think", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp))
+                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors)
                     FilterChip(selected = search, onClick = { search = !search }, label = { Text("Search", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp))
+                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = attach, enabled = !state.busy && !state.importing) { AppIcon(Glyph.PLUS, "Add attachment") }

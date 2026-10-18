@@ -90,13 +90,16 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
 
     fun openLogin() {
         if (destroyed) { notice("Reopen the app to restart the login browser."); return }
+        loaded = false; navigationFailed = false
         view.loadUrl(DeepSeekOrigin.URL)
     }
 
     suspend fun captureSession(): SessionToken? = withContext(Dispatchers.Main.immediate) {
         if (!loaded || destroyed || !DeepSeekOrigin.isTrusted(view.url)) return@withContext null
         val epoch = generation
-        val result = evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return null; return localStorage.getItem("userToken"); })()""")
+        val result = withTimeoutOrNull(2000) {
+            evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return null; return localStorage.getItem("userToken"); })()""")
+        }
         if (epoch != generation || !DeepSeekOrigin.isTrusted(view.url)) return@withContext null
         val token = SessionToken.fromJavascript(result) ?: return@withContext null
         if (token.isExpired(System.currentTimeMillis())) return@withContext null
@@ -110,6 +113,7 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
                 withTimeout(30_000) {
                     if (destroyed) throw UpdateRequired()
                     if (!loaded || !DeepSeekOrigin.isTrusted(view.url)) {
+                        loaded = false; navigationFailed = false
                         view.loadUrl(DeepSeekOrigin.URL)
                         while (!loaded) { if (destroyed || rendererGone || navigationFailed) throw UpdateRequired(); delay(100) }
                     }
@@ -161,7 +165,9 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
                     } finally {
                         withContext(NonCancellable) {
                             if (!destroyed && generation == epoch && DeepSeekOrigin.isTrusted(view.url)) {
-                                evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return; const s = window[$slot]; if(s) { if(s.worker) s.worker.terminate(); if(s.url) URL.revokeObjectURL(s.url); delete window[$slot]; } })()""")
+                                withTimeoutOrNull(1000) {
+                                    evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return; const s = window[$slot]; if(s) { if(s.worker) s.worker.terminate(); if(s.url) URL.revokeObjectURL(s.url); delete window[$slot]; } })()""")
+                                }
                             }
                         }
                     }

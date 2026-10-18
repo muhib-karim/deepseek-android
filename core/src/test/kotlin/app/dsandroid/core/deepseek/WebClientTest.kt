@@ -3,6 +3,7 @@ package app.dsandroid.core.deepseek
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -46,6 +47,24 @@ class WebClientTest {
             assertEquals(JsonNull, next["action"])
             assertEquals(false, next["preempt"]!!.jsonPrimitive.boolean)
             assertEquals(true, next["search_enabled"]!!.jsonPrimitive.boolean)
+        } finally { server.shutdown() }
+    }
+    @Test fun terminalEventFinishesWithoutWaitingForConnectionClose() = runBlocking {
+        val server = MockWebServer(); server.start()
+        try {
+            server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999,"signature":"sig"}}}}"""))
+            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("""data: {"v":{"response_message_id":2,"response":{"fragments":[{"type":"RESPONSE","content":"Done"}]}}}
+
+data: [DONE]
+
+""").setHeader("Content-Length", 1000000))
+            val reply = withTimeout(3000) {
+                DeepSeekWebClient(OkHttpClient(), server.url("/"))
+                    .complete(credentials, CompletionInput("chat", null, "Hello", false, false)) { 1 }.toList().last()
+            }
+            assertEquals("Done", reply.response)
+            assertTrue(reply.finished)
         } finally { server.shutdown() }
     }
     @Test fun http401AndBusiness401ExpireSessionWithoutLeakingBody() = runBlocking {

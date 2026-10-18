@@ -29,7 +29,7 @@ class SmokeTest {
     private lateinit var vm: ChatViewModel
     private fun label(id: Int) = compose.activity.getString(id)
 
-    private fun launch(fontScale: Float = 1f) {
+    private fun launch(fontScale: Float = 1f, initialDestination: String = "chat") {
         compose.runOnUiThread {
             // Only this test activity uses this backend; the release app has no fake transport.
             listOf("conversations", "runs", "workspace", "tasks").forEach {
@@ -51,7 +51,7 @@ class SmokeTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                DsAndroidApp(vm)
+                DsAndroidApp(vm, startDestination = initialDestination)
             }
         }
         compose.waitUntil(15_000) { vm.state.value.settingsReady && !vm.state.value.modelsLoading }
@@ -89,6 +89,13 @@ class SmokeTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("artifact-panel").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("artifact-panel").assertIsDisplayed()
         screenshot("artifact")
+    }
+
+    @Test fun explicitApiFallbackSettingsCanReturnToChat() {
+        launch(initialDestination = "settings")
+        compose.onNodeWithText(label(R.string.settings), useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText(label(R.string.back)).performClick()
+        compose.onNodeWithContentDescription(label(R.string.message_placeholder)).assertIsDisplayed()
     }
 
     private fun screenshot(name: String) {

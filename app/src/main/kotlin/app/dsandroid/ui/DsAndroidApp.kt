@@ -57,6 +57,10 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
+    // Keep chat underneath an explicitly requested settings entry, so Save/Back can return to it.
+    LaunchedEffect(navigation, startDestination) {
+        if (startDestination != "chat") navigation.navigate(startDestination) { launchSingleTop = true }
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -164,7 +168,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
     ChatTheme(settings.appearance, settings.fontScale) {
         Surface(Modifier.fillMaxSize()) {
             Column {
-                NavHost(navController = navigation, startDestination = startDestination, modifier = Modifier.weight(1f)) {
+                NavHost(navController = navigation, startDestination = "chat", modifier = Modifier.weight(1f)) {
                     composable("chat") {
                         val drawer = rememberDrawerState(DrawerValue.Closed)
                         BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }

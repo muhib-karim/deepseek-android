@@ -61,7 +61,7 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun navigate(page: AccountPage) {
-        if (!state.value.busy && !sessionChanging) mutable.update { it.copy(page = page, error = null) }
+        if (state.value.ready && !state.value.busy && !sessionChanging) mutable.update { it.copy(page = page, error = null) }
     }
     fun draft(value: String) { mutable.update { it.copy(draft = value.take(20_000)) } }
     fun notice(message: String) { mutable.update { it.copy(error = message) } }
@@ -70,7 +70,7 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
         mutable.update { it.copy(appearance = value) }
     }
     suspend fun acceptSession(token: SessionToken): Boolean {
-        if (sessionChanging || token.bearer() == rejectedToken) return false
+        if (state.value.busy || sessionChanging || token.bearer() == rejectedToken) return false
         sessionChanging = true
         return try {
             withContext(Dispatchers.IO) {
@@ -80,7 +80,7 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
             }
             if (session?.bearer() != token.bearer()) { chats = emptyList(); current = WebChat(UUID.randomUUID().toString(), "New Chat") }
             session = token
-            mutable.update { it.copy(signedIn = true, page = AccountPage.CHAT, error = null, messages = displayMessages(), history = summaries(), title = current.title, requiresNewChat = current.blocked) }
+            mutable.update { it.copy(signedIn = true, logoutPending = false, page = AccountPage.CHAT, error = null, messages = displayMessages(), history = summaries(), title = current.title, requiresNewChat = current.blocked) }
             true
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The session could not be stored securely. Login was not completed."); false }
@@ -89,6 +89,7 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
     fun logout() {
         if (sessionChanging) return
         sessionChanging = true
+        mutable.update { it.copy(busy = true) }
         viewModelScope.launch {
             try {
                 sending?.cancelAndJoin(); importing?.cancelAndJoin()
@@ -97,8 +98,8 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
                 session = null; rejectedToken = null; chats = emptyList(); clearUploads()
                 current = WebChat(UUID.randomUUID().toString(), "New Chat")
                 mutable.update { AccountUiState(ready = true, appearance = it.appearance, page = AccountPage.SETTINGS) }
-            } catch (_: Exception) { session = null; mutable.update { it.copy(signedIn = false, error = "Logout could not fully clear local data. Close and reopen the app, then retry logout.") } }
-            finally { sessionChanging = false }
+            } catch (_: Exception) { session = null; mutable.update { it.copy(signedIn = false, logoutPending = true, error = "Logout could not fully clear local data. Close and reopen the app, then retry logout.") } }
+            finally { sessionChanging = false; mutable.update { it.copy(busy = false) } }
         }
     }
     fun newChat() {
@@ -177,9 +178,12 @@ class AccountViewModel(application: Application) : AndroidViewModel(application)
                 notice("Response stopped. Start a new chat before sending again."); throw cancelled
             } catch (_: SessionExpired) {
                 rejectedToken = session?.bearer(); session = null
-                withContext(Dispatchers.IO) { store?.clear() }
-                DeepSeekCookies.clear()
-                mutable.update { it.copy(signedIn = false, page = AccountPage.LOGIN, error = SessionExpired().message) }
+                val cleared = runCatching {
+                    withContext(Dispatchers.IO) { store?.clear() }
+                    DeepSeekCookies.clear()
+                }.isSuccess
+                mutable.update { it.copy(signedIn = false, page = AccountPage.LOGIN,
+                    error = if (cleared) SessionExpired().message else "The session expired and local session cleanup failed. Retry logout in Settings before logging in.", logoutPending = !cleared) }
             } catch (error: UpdateRequired) { notice(error.message!!) }
             catch (error: WebRateLimited) { notice(error.message!!) }
             catch (error: WebConnectionFailed) { notice(error.message!!) }

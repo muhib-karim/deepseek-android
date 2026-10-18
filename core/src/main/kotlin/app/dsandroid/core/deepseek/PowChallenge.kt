@@ -9,7 +9,7 @@ data class PowChallenge(
 ) {
     fun requireUsable(nowMillis: Long) {
         if (algorithm != "DeepSeekHashV1" || challenge.isBlank() || salt.isBlank() || signature.isBlank() ||
-            difficulty !in 1..9_007_199_254_740_991L || nowMillis / 1000 >= expireAt) throw UpdateRequired()
+            difficulty !in 1..9_007_199_254_740_991L || nowMillis >= expireAt) throw UpdateRequired()
     }
     fun workerMessage(): JsonObject = buildJsonObject {
         put("type", "pow-challenge")

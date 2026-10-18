@@ -7,6 +7,22 @@ Current release: **v0.4.0** (not audited). Each GitHub release carries a debug A
 a signed minified release APK and SHA256SUMS.txt. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
+## v0.5.0 development branch (not yet validated)
+
+The default screen now targets a DeepSeek account workflow: **Log in with DeepSeek**,
+then native streamed chat with Think/Search controls. Settings retains the existing
+API-key client as an explicit fallback. The new light UI follows the measured reference;
+dark colors and its abstract mark are original interpretations. It is an unofficial client.
+
+Implementation and test fixtures are present, but CI compilation, emulator screenshots,
+authenticated login and real PoW completion have **not been verified** in this change.
+Google login is untested and may be blocked by embedded-browser restrictions. Protocol
+failures surface an error and never silently use a paid API or a fabricated answer.
+See [the implementation and validation boundary](docs/ACCOUNT_CLIENT_050.md) for exact
+scope, attachment limitations and CI handoff. The historical feature lists below describe
+the existing API client, which remains available through Settings; they do not establish
+account-mode feature parity.
+
 ## v0.3.0 Pass F features (in v0.3.0)
 
 - **Voice conversation:** open Voice from the chat header, grant microphone access

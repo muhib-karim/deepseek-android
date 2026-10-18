@@ -1,9 +1,9 @@
-name: Emulator smoke
+name: Emulator smoke and account screenshots
 
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['app/**', 'core/**']
+    paths: ['app/**', 'core/**', 'gradle/**', 'scripts/**', '.github/workflows/emulator.yml']
 
 permissions:
   contents: read
@@ -28,16 +28,25 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run smoke tests
+      - name: Run smoke and deterministic account screenshot tests
         uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
         with:
           api-level: 34
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: |
-            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-            adb pull /sdcard/Android/data/app.dsandroid/files/smoke-screenshots smoke-screenshots || echo "no smoke screenshots found on the emulator"
+          script: bash scripts/ci_emulator_screenshots.sh
+      - name: Validate capture completeness and credential safety
+        id: screenshot_safety
+        if: always()
+        run: python3 scripts/check_screenshot_artifacts.py official-ui-screenshots
+      - name: Upload light and dark account screenshots
+        if: always() && steps.screenshot_safety.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: official-ui-screenshots
+          path: official-ui-screenshots/
+          if-no-files-found: error
       - name: Upload smoke reports and real screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

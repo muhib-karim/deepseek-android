@@ -22,6 +22,13 @@ class PowTest {
         assertThrows(UpdateRequired::class.java) { challenge.copy(algorithm = "Unknown").header(1) }
         assertThrows(UpdateRequired::class.java) { challenge.header(-1) }
         assertThrows(UpdateRequired::class.java) { challenge.header(64) }
-        assertThrows(UpdateRequired::class.java) { challenge.requireUsable(2_000_000) }
+        challenge.requireUsable(1999)
+        assertThrows(UpdateRequired::class.java) { challenge.requireUsable(2000) }
+    }
+
+    @Test fun realWorldMillisecondsExpiryIsEnforced() {
+        val live = challenge.copy(expireAt = 1_792_308_235_105L)
+        live.requireUsable(1_792_308_235_104L)
+        assertThrows(UpdateRequired::class.java) { live.requireUsable(1_792_308_235_105L) }
     }
 }

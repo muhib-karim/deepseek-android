@@ -51,11 +51,12 @@ class DeepSeekWebClient internal constructor(client: OkHttpClient, private val o
             val stream = DeepSeekStream()
             body.charStream().use { reader ->
                 val buffer = CharArray(4096)
-                while (true) {
+                var terminal = false
+                while (!terminal) {
                     currentCoroutineContext().ensureActive()
                     val count = reader.read(buffer)
                     if (count < 0) break
-                    stream.feed(String(buffer, 0, count)).forEach { emit(it) }
+                    stream.feed(String(buffer, 0, count)).forEach { reply -> emit(reply); terminal = reply.finished }
                 }
             }
             val final = stream.finish()
