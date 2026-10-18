@@ -88,6 +88,8 @@ data class ChatUiState(
     val facts: List<SavedFact> = emptyList(),
     val projects: List<ProjectRecord> = emptyList(),
     val personalizing: Boolean = false,
+    val backupBusy: Boolean = false,
+    val diagnostics: List<app.dsandroid.core.diagnostics.DiagnosticEntry> = emptyList(),
     val exporting: Boolean = false,
     val sharedDraft: String? = null,
     val library: List<LibraryEntry> = emptyList(),
@@ -103,7 +105,7 @@ data class ChatUiState(
     val subAgents: List<SubAgentProgress> = emptyList(),
 )
 
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel @JvmOverloads constructor(application: Application, private val backend: LlmClient? = null) : AndroidViewModel(application) {
     private val mutableState = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = mutableState.asStateFlow()
     private val mutableSettings = MutableStateFlow(AppSettings())
@@ -123,6 +125,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val memoryStore = MemoryStore(File(application.filesDir, "memory"))
     private val upkeepStore = MemoryUpkeepStore(File(application.filesDir, "memory-upkeep"), memoryStore)
     private val projectStore = ProjectStore(File(application.filesDir, "projects"))
+    private val diagnosticStore = app.dsandroid.core.diagnostics.DiagnosticStore(File(application.filesDir, "diagnostics"))
     private val historyStore = ConversationStore(File(application.filesDir, "conversations"))
     private val diskWrites = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private val session = SessionAuthMachine()
@@ -240,6 +243,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun identity() = ClientIdentity(BuildConfig.VERSION_NAME, Locale.getDefault().toLanguageTag(), TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000)
     private fun client(config: AppSettings, model: String = config.selectedModel, thinking: Boolean = false): LlmClient {
+        backend?.let { return it }
         require(config.baseUrl.toHttpUrl().isHttps) { "Provider endpoints require HTTPS" }
         val auth = when (config.provider) {
             Provider.API_KEY -> ApiKeyAuth(config.apiKey)
@@ -449,6 +453,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 runConfig = RunConfig(conversationId = conversation.id, model = run.model, providerKey = run.providerKey)).run(childHistory).collect { event ->
                 if (event is AgentEvent.Error || event is AgentEvent.AuthenticationRequired || event is AgentEvent.RecoverableWaiting) failed = true
                 if (event is AgentEvent.StepsUpdated) reportProgress(event.steps.size)
+                if (event is AgentEvent.ToolFinished && event.result.isError) recordDiagnostic(app.dsandroid.core.diagnostics.DiagnosticKind.TOOL_FAILURE, "Sub-agent tool failed: ${event.name}")
                 if (event is AgentEvent.Error) showError(localizeError(event.message))
                 if (event is AgentEvent.AuthenticationRequired) showError(text(R.string.error_signin))
             }
@@ -479,12 +484,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     updateAssistant(run.runId) { it.copy(artifacts = (it.artifacts + event.artifact).distinctBy { artifact -> artifact.path }) }
                     recordGenerated(event.artifact, conversation)
                 }
-                is AgentEvent.ToolFinished -> syncConversation()
+                is AgentEvent.ToolFinished -> {
+                    if (event.result.isError) recordDiagnostic(app.dsandroid.core.diagnostics.DiagnosticKind.TOOL_FAILURE, "Tool failed: ${event.name}")
+                    syncConversation()
+                }
                 is AgentEvent.RetryWaiting -> mutableState.update { it.copy(retrySeconds = ((event.remainingMs + 999) / 1000).toInt(),
                     waitingForNetwork = true, runDetails = event.details, error = null) }
                 is AgentEvent.RecoverableWaiting -> mutableState.update { it.copy(retrySeconds = null, waitingForNetwork = true,
                     resumable = true, runDetails = event.details, error = null) }
                 is AgentEvent.AuthenticationRequired -> {
+                    recordDiagnostic(app.dsandroid.core.diagnostics.DiagnosticKind.ERROR, "Provider authentication rejected: ${event.status}")
                     session.rejected(event.status)
                     mutableState.update { it.copy(needsSignIn = true, resumable = true, waitingForNetwork = false,
                         retrySeconds = null, error = null) }
@@ -977,7 +986,90 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         confirmationReply?.cancel(); agentJob?.cancel()
         mutableState.update { it.copy(waitingForNetwork = false, retrySeconds = null) }
     }
-    fun showError(message: String) { mutableState.update { it.copy(error = message) } }
+    fun exportBackup(language: String, ready: (String) -> Unit) {
+        if (!canBackup()) return
+        mutableState.update { it.copy(backupBusy = true, saving = true) }
+        viewModelScope.launch {
+            try {
+                val barrier = CompletableDeferred<Unit>()
+                diskWrites.send { barrier.complete(Unit) }
+                barrier.await()
+                val encoded = withContext(Dispatchers.IO) {
+                    val config = settings.value
+                    val credentials = setOf(config.apiKey, config.customKey, config.accountToken) +
+                        config.accounts.map { it.credential } + config.connectors.mapNotNull { store?.connectorToken(it.id) }
+                    val archive = app.dsandroid.core.backup.BackupRepository(getApplication<Application>().filesDir)
+                        .snapshot(config.backupSettings(language))
+                    app.dsandroid.core.backup.BackupCodec.encode(archive, credentials)
+                }
+                ready(encoded)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.backup_failed)) }
+            finally { mutableState.update { it.copy(backupBusy = false, saving = false) } }
+        }
+    }
+
+    fun restoreBackup(archive: app.dsandroid.core.backup.BackupArchive, done: () -> Unit) {
+        if (!canBackup()) return
+        mutableState.update { it.copy(backupBusy = true, saving = true) }
+        viewModelScope.launch {
+            try {
+                val barrier = CompletableDeferred<Unit>()
+                diskWrites.send { barrier.complete(Unit) }
+                barrier.await()
+                withContext(Dispatchers.IO + NonCancellable) {
+                    app.dsandroid.core.backup.BackupRepository(getApplication<Application>().filesDir).merge(archive)
+                }
+                persist { it.withBackupSettings(archive.settings) }
+                val restored = withContext(Dispatchers.IO) {
+                    Triple(historyStore.loadAll(), memoryStore.all(), projectStore.all())
+                }
+                val assistants = withContext(Dispatchers.IO) { assistantStore.all() }
+                // Existing conversations win the merge; keep the current view and pending runs intact.
+                val existing = conversations.map { it.id }.toSet()
+                conversations.addAll(restored.first.filterNot { it.id in existing }.map { it.toConversation() })
+                mutableState.update { it.copy(facts = restored.second, projects = restored.third, assistants = assistants) }
+                syncConversation()
+                refreshTasks()
+                done()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.backup_restore_failed)) }
+            finally { mutableState.update { it.copy(backupBusy = false, saving = false) } }
+        }
+    }
+
+    private fun canBackup() = state.value.let {
+        it.settingsReady && !it.backupBusy && !it.running && !it.importing && !it.saving && !it.signingIn && !it.personalizing && !it.exporting
+    }
+
+    private fun recordDiagnostic(kind: app.dsandroid.core.diagnostics.DiagnosticKind, message: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Deliberately omit prompts, arguments, results, URLs and exception stack traces.
+            runCatching {
+                val config = settings.value
+                val credentials = setOf(config.apiKey, config.customKey, config.accountToken) + config.accounts.map { it.credential } +
+                    config.connectors.mapNotNull { store?.connectorToken(it.id) }
+                diagnosticStore.append(kind, message, credentials)
+                mutableState.update { it.copy(diagnostics = diagnosticStore.entries()) }
+            }
+        }
+    }
+    fun refreshDiagnostics() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { val entries = diagnosticStore.entries(); mutableState.update { it.copy(diagnostics = entries) } }
+            catch (_: Exception) { mutableState.update { it.copy(error = text(R.string.diagnostics_failed)) } }
+        }
+    }
+    fun clearDiagnostics() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try { diagnosticStore.clear(); mutableState.update { it.copy(diagnostics = emptyList()) } }
+            catch (_: Exception) { mutableState.update { it.copy(error = text(R.string.diagnostics_failed)) } }
+        }
+    }
+    fun showError(message: String) {
+        mutableState.update { it.copy(error = message) }
+        recordDiagnostic(app.dsandroid.core.diagnostics.DiagnosticKind.ERROR, message)
+    }
     fun dismissError() { mutableState.update { it.copy(error = null) } }
     private fun localizeError(message: String): String {
         val resource = when (message) {

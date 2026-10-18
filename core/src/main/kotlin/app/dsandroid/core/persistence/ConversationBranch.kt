@@ -22,7 +22,7 @@ object ConversationBranch {
             }) }, attachmentCount = items.sumOf { it.attachments.size }, pendingRunId = null,
             supersededRunIds = emptySet(), pinned = false)
     }
-    private fun completeExchanges(messages: List<ChatMessage>): List<ChatMessage> {
+    internal fun completeExchanges(messages: List<ChatMessage>): List<ChatMessage> {
         val result = mutableListOf<ChatMessage>()
         var index = 0
         while (index < messages.size) {

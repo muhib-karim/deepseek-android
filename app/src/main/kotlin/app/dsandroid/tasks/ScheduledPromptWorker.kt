@@ -50,6 +50,10 @@ class ScheduledPromptWorker(context: Context, parameters: WorkerParameters) : Co
             withContext(NonCancellable) { store.complete(TaskResult(run, task.id, task.title, applicationContext.getString(R.string.task_interrupted), System.currentTimeMillis(), error = true)) }
             if (cancelled is TimeoutCancellationException) Result.success() else throw cancelled
         } catch (_: Exception) {
+            runCatching {
+                app.dsandroid.core.diagnostics.DiagnosticStore(File(applicationContext.filesDir, "diagnostics"))
+                    .append(app.dsandroid.core.diagnostics.DiagnosticKind.ERROR, "Scheduled prompt failed")
+            }
             store.complete(TaskResult(run, task.id, task.title, applicationContext.getString(R.string.task_run_failed), System.currentTimeMillis(), error = true))
             Result.success() // No hidden retries, account fallback or duplicate billable inference.
         }

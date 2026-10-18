@@ -1,6 +1,8 @@
 package app.dsandroid.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -44,7 +46,7 @@ fun ReadAloudControls(id: String, answer: String, player: SpeechPlayer, report: 
     val context = LocalContext.current
     val active = player.owner == id
     Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = {
                 when {
                     active && player.speaking -> player.pause()

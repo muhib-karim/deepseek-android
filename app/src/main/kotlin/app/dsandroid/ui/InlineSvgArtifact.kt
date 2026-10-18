@@ -60,6 +60,6 @@ fun InlineSvgArtifact(artifact: Artifact, workspace: WorkspacePath, open: () -> 
                 })
             }
         }
-        Box(Modifier.matchParentSize().clickable(onClick = open))
+        Box(Modifier.matchParentSize().clickable(onClickLabel = description, onClick = open).semantics { contentDescription = description })
     }
 }

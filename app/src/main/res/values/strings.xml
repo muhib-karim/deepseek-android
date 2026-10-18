@@ -400,4 +400,27 @@
     <string name="phone_calendar">Add calendar event</string>
     <string name="phone_map">Open map</string>
     <string name="phone_calendar_times">Starts: %1$s\nEnds: %2$s\nTime zone: %3$s</string>
+    <string name="a11y_selected">Selected</string>
+    <string name="a11y_image_preview">Image preview: %1$s</string>
+    <string name="backup">Backup</string>
+    <string name="backup_notice">API keys, account tokens, cookies and connector tokens are never included. The file is unencrypted and contains private chat data. Choose a safe destination.</string>
+    <string name="backup_contents">Includes saved chats, project text, memory, assistants, task definitions and display/personalization settings. Excludes temporary chats, generated files, provider/connector configuration and run checkpoints. Recognizable credentials and email addresses in text are redacted. Maximum file size: 16 MB.</string>
+    <string name="backup_export">Export backup…</string>
+    <string name="backup_restore">Restore from file…</string>
+    <string name="backup_confirm_title">Restore this backup?</string>
+    <string name="backup_confirm_notice">Merge records into this device? Existing records with the same ID stay unchanged; display and personalization settings will be replaced. Accounts stay unchanged. Imported task definitions stay paused; recreate a task to schedule it. Generated files must be saved separately.</string>
+    <string name="backup_counts">Chats: %1$d · Projects: %2$d · Facts: %3$d · Assistants: %4$d · Tasks: %5$d</string>
+    <string name="backup_merge">Confirm merge</string>
+    <string name="backup_exported">Backup saved.</string>
+    <string name="backup_restored">Backup merged. Imported tasks are paused.</string>
+    <string name="backup_failed">Could not save the backup. Check available space and the selected document provider.</string>
+    <string name="backup_invalid">This backup is damaged, unsupported or too large. Nothing was restored.</string>
+    <string name="backup_restore_failed">Restore could not finish. Check free space and retry; records already merged are kept and will not be duplicated.</string>
+    <string name="diagnostics">Diagnostics</string>
+    <string name="diagnostics_notice">Recent errors and tool failures stay on this device, up to 200 entries. Keys, tokens, bearer headers and email addresses are redacted before storage. Nothing is sent automatically. Review before copying or sharing.</string>
+    <string name="diagnostics_empty">No recorded errors.</string>
+    <string name="diagnostics_copy">Copy diagnostics</string>
+    <string name="diagnostics_clear">Clear diagnostics</string>
+    <string name="diagnostics_clear_title">Clear local diagnostics?</string>
+    <string name="diagnostics_failed">Local diagnostics could not be read or saved.</string>
 </resources>

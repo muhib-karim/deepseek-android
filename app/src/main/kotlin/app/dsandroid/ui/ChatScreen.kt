@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -104,7 +105,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
     }
     Column(modifier.fillMaxSize().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (state.items.isEmpty()) {
-            Column(Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 24.dp),
+            Column(Modifier.weight(1f).widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(90.dp))
                 Text(stringResource(R.string.greeting), style = MaterialTheme.typography.headlineSmall)
@@ -211,7 +212,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
 
 @Composable
 private fun AttachmentTile(label: String, glyph: Glyph, modifier: Modifier, click: () -> Unit) {
-    Surface(modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = click), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)) {
+    Surface(modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clip(RoundedCornerShape(20.dp)).clickable(onClick = click), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AppIcon(glyph, modifier = Modifier.size(28.dp))
             Text(label, style = MaterialTheme.typography.labelLarge)
@@ -245,12 +246,12 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                             } else stringResource(R.string.attachment_chars, upload.text.length) + if (upload.text.isBlank()) " · " + stringResource(R.string.no_text) else "", style = MaterialTheme.typography.labelSmall)
                         }
                     }, trailingIcon = {
-                        IconButton(onClick = { remove(upload.id) }, enabled = !state.running, modifier = Modifier.size(36.dp)) { AppIcon(Glyph.CLOSE, stringResource(R.string.remove_attachment, upload.name), Modifier.size(16.dp)) }
+                        IconButton(onClick = { remove(upload.id) }, enabled = !state.running, modifier = Modifier.size(48.dp)) { AppIcon(Glyph.CLOSE, stringResource(R.string.remove_attachment, upload.name), Modifier.size(16.dp)) }
                     })
                 }
             }
             if (state.importing) Text(stringResource(R.string.reading_attachments), Modifier.padding(8.dp), style = MaterialTheme.typography.labelSmall)
-            BasicTextField(draft, edit, Modifier.fillMaxWidth().heightIn(min = 52.dp, max = 144.dp).padding(horizontal = 8.dp, vertical = 12.dp)
+            BasicTextField(draft, edit, Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 8.dp, vertical = 12.dp)
                 .semantics { contentDescription = placeholder },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6,
@@ -275,10 +276,10 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                 VoiceDictation(enabled, audioLanguage, dictate, report)
-                IconButton(onClick = attach, enabled = enabled, modifier = Modifier.size(44.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
+                IconButton(onClick = attach, enabled = enabled, modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
                     AppIcon(Glyph.PLUS, stringResource(R.string.attach_files))
                 }
-                FilledIconButton(onClick = if (state.running) stop else send, modifier = Modifier.size(44.dp),
+                FilledIconButton(onClick = if (state.running) stop else send, modifier = Modifier.size(48.dp),
                     enabled = state.running || (enabled && (draft.isNotBlank() || state.attachments.isNotEmpty())),
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = AccentBlue, contentColor = Color.White)) {
                     AppIcon(if (state.running) Glyph.STOP else Glyph.SEND, if (state.running) stringResource(R.string.stop_generating) else stringResource(R.string.send_message))
@@ -293,7 +294,7 @@ private fun ComposerChip(label: String, glyph: Glyph, selected: Boolean, enabled
     Surface(onClick = click, enabled = enabled, shape = CircleShape,
         color = if(selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         contentColor = if(selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) {
-        Row(Modifier.padding(horizontal = 6.dp).heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.padding(horizontal = 6.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             AppIcon(glyph, modifier = Modifier.size(14.dp))
             Text(label, style = MaterialTheme.typography.labelSmall)
         }

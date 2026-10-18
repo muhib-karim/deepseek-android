@@ -1,4 +1,4 @@
-name: Debug release
+name: APK release
 
 on:
   push:
@@ -24,8 +24,27 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Test, lint and assemble
-        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-      - name: Name release APK
+        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
+      - name: Check merged release permissions
+        run: python3 scripts/check_release_manifest.py
+      - name: Build signed release when configured
+        env:
+          DSA_KEYSTORE_BASE64: ${{ secrets.DSA_KEYSTORE_BASE64 }}
+          DSA_KEYSTORE_PASSWORD: ${{ secrets.DSA_KEYSTORE_PASSWORD }}
+          DSA_KEY_ALIAS: ${{ secrets.DSA_KEY_ALIAS }}
+          DSA_KEY_PASSWORD: ${{ secrets.DSA_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "$DSA_KEYSTORE_BASE64" ]]; then exit 0; fi
+          [[ -n "$DSA_KEYSTORE_PASSWORD" && -n "$DSA_KEY_ALIAS" && -n "$DSA_KEY_PASSWORD" ]] || exit 1
+          umask 077
+          export DSA_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/dsa-signing.XXXXXX")"
+          trap 'rm -f "$DSA_KEYSTORE_PATH"' EXIT
+          printf '%s' "$DSA_KEYSTORE_BASE64" | base64 --decode > "$DSA_KEYSTORE_PATH"
+          gradle --no-daemon --no-configuration-cache :app:assembleRelease
+          mkdir -p signed
+          cp app/build/outputs/apk/release/app-release.apk signed/app-release.apk
+      - name: Name release APKs and generate checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
@@ -33,13 +52,16 @@ jobs:
           [[ "$RELEASE_TAG" =~ ^v[0-9A-Za-z._-]+$ ]] || exit 1
           mkdir -p release
           cp app/build/outputs/apk/debug/app-debug.apk "release/deepseek-android-${RELEASE_TAG}-debug.apk"
+          if [[ -f signed/app-release.apk ]]; then
+            cp signed/app-release.apk "release/deepseek-android-${RELEASE_TAG}-release.apk"
+          fi
           cd release
-          sha256sum "deepseek-android-${RELEASE_TAG}-debug.apk" > SHA256SUMS
+          sha256sum ./*.apk > SHA256SUMS.txt
       - name: Upload validated APK
         id: upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: validated-debug-apk
+          name: validated-apks
           path: release/
           if-no-files-found: error
       - name: Upload reports on failure
@@ -68,14 +90,18 @@ jobs:
           merge-multiple: true
       - name: Verify APK checksum
         working-directory: release
-        run: sha256sum --check SHA256SUMS
-      - name: Publish debug APK
+        run: sha256sum --check SHA256SUMS.txt
+      - name: Publish APKs and checksums
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
-          files: release/deepseek-android-*-debug.apk
+          files: |
+            release/deepseek-android-*.apk
+            release/SHA256SUMS.txt
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
-            DeepSeek Android testing build, signed with the automatically generated debug key.
+            DeepSeek Android (Unofficial). Debug builds are debug-key signed, not audited.
+            A signed, minified release APK is included only when CI signing secrets are configured.
+            Verify downloads with sha256sum -c SHA256SUMS.txt.
             Not intended for Play distribution. CI debug keys can differ between runs;
             replacing an existing installation may require uninstalling it first.

@@ -35,6 +35,12 @@ class MemoryStore(directory: File) {
         files.write("facts", LlmJson.encodeToString(facts.map { if (it.id == id) it.copy(text = clean) else it }))
     }
     @Synchronized fun delete(id: String) = files.write("facts", LlmJson.encodeToString(all().filterNot { it.id == id }))
+    @Synchronized fun merge(incoming: List<SavedFact>) {
+        val merged = (all() + incoming).distinctBy { it.id }
+        require(merged.size <= 100)
+        merged.forEach { require(it.id.matches(Regex("[A-Za-z0-9_-]{1,100}"))); validate(it.text) }
+        files.write("facts", LlmJson.encodeToString(merged))
+    }
     private fun validate(text: String) = text.trim().also { require(it.isNotEmpty() && it.length <= 2000) }
 }
 

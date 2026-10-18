@@ -77,7 +77,7 @@ fun VoiceDictation(enabled: Boolean, language: String, append: (String) -> Unit,
     DisposableEffect(Unit) { onDispose { session.cancel(); recognizer?.cancel(); recognizer?.destroy() } }
     LaunchedEffect(enabled) { if(!enabled) { session.cancel(); recognizer?.cancel(); listening = false } }
     Surface(color = if(listening) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        modifier = Modifier.size(44.dp).semantics { contentDescription = label; role = Role.Button; onClick { if(enabled) { if(listening) { session.release(activeGeneration); recognizer?.stopListening(); listening = false } else if(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) start() else permission.launch(Manifest.permission.RECORD_AUDIO) }; true } }
+        modifier = Modifier.size(48.dp).semantics { contentDescription = label; role = Role.Button; onClick { if(enabled) { if(listening) { session.release(activeGeneration); recognizer?.stopListening(); listening = false } else if(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) start() else permission.launch(Manifest.permission.RECORD_AUDIO) }; true } }
             .pointerInput(enabled, language) {
                 detectTapGestures(onPress = {
                     if(enabled) {

@@ -17,7 +17,7 @@ import app.dsandroid.R
 fun ToolConfirmationSheet(confirmation: Confirmation, reply: (Boolean) -> Unit) {
     val connector = confirmation.name.startsWith("connector_") && confirmation.destination != null
     ModalBottomSheet(onDismissRequest = { reply(false) }) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.allow_tool), style = MaterialTheme.typography.titleLarge)
             confirmation.destination?.let { destination ->
                 Text(stringResource(R.string.tools_destination, destination))
