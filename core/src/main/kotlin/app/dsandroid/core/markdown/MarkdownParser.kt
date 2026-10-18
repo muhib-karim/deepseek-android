@@ -80,7 +80,7 @@ object MarkdownParser {
                     while (index < lines.size) {
                         val match = expression.matchEntire(lines[index]) ?: break
                         items.add(match.groupValues[if (ordered) 2 else 1])
-                        indents.add(lines[index].takeWhile { it == ' ' || it == '\t' }.sumOf { if (it == '\t') 4 else 1 }); index++
+                        indents.add(lines[index].takeWhile { it == ' ' || it == '\t' }.fold(0) { acc, c -> acc + if (c == '\t') 4 else 1 }); index++
                     }
                     blocks.add(MarkdownBlock.ListBlock(ordered, items, start, if (indents.all { it == 0 }) emptyList() else indents))
                 }
