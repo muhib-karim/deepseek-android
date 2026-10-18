@@ -271,7 +271,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithContentDescription("Add attachment").performClick()
         compose.onNodeWithText("Document").assertIsDisplayed()
         // The system picker is outside this app; inject its URI into the real import path.
-        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        // The tray is a ModalBottomSheet in its own window: a key-level back dismisses it (the activity dispatcher would finish the activity).
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Add to your message").fetchSemanticsNodes().isEmpty() }
         compose.runOnIdle { vm.importAttachment(uri) }
         compose.waitUntil(15_000) { vm.state.value.attachments.isNotEmpty() }
         compose.onNodeWithText("fixture.txt", substring = true).assertIsDisplayed()
