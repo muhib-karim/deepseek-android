@@ -134,7 +134,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
                         Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { TextButton(onClick = { navigation.popBackStack() }) { Text(stringResource(R.string.back)) } }) }) { padding ->
                             if (state.settingsReady) SettingsScreen(settings, state.saving, Modifier.padding(padding),
                                 { value -> vm.saveSettings(value) { navigation.popBackStack() } },
-                                { value -> vm.saveSettings(value) { navigation.navigate("sign-in") } }, vm::signOut, vm::clearConversations)
+                                { value -> vm.saveSettings(value) { navigation.navigate("sign-in") } }, vm::signOut, vm::clearConversations, state, vm)
                             else Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text(stringResource(R.string.settings_loading)) }
                         }
                     }
