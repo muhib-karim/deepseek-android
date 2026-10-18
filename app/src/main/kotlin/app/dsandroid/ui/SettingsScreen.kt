@@ -104,7 +104,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
         }
         Text(stringResource(R.string.app_section), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SettingsGroup {
-            SettingsRow(stringResource(R.string.app_language), stringResource(if(locale.startsWith("en")) R.string.english else R.string.follow_system)) { pendingLanguage = locale; dialog = "language" }
+            SettingsRow(stringResource(R.string.app_language), stringResource(if(locale.startsWith("en")) R.string.english else if(locale.startsWith("bn")) R.string.bangla else R.string.follow_system)) { pendingLanguage = locale; dialog = "language" }
             HorizontalDivider()
             SettingsRow(stringResource(R.string.appearance), stringResource(when(draft.appearance) { Appearance.SYSTEM -> R.string.follow_system; Appearance.LIGHT -> R.string.light; Appearance.DARK -> R.string.dark })) { pendingAppearance = draft.appearance; dialog = "appearance" }
             HorizontalDivider()
@@ -118,7 +118,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
         }
         Text(stringResource(R.string.audio), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SettingsGroup {
-            SettingsRow(stringResource(R.string.audio_language), stringResource(if(draft.audioLanguage.isEmpty()) R.string.use_app_language else R.string.english)) { pendingLanguage = draft.audioLanguage; dialog = "audio" }
+            SettingsRow(stringResource(R.string.audio_language), stringResource(if(draft.audioLanguage.isEmpty()) R.string.use_app_language else if(draft.audioLanguage.startsWith("bn")) R.string.bangla else R.string.english)) { pendingLanguage = draft.audioLanguage; dialog = "audio" }
             HorizontalDivider()
             SettingsRow(stringResource(R.string.voice), stringResource(R.string.device_speech_service)) { voice = true }
         }
@@ -150,7 +150,8 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                 when(dialog) {
                     "language", "audio" -> {
                         ChoiceRow(stringResource(if(dialog == "audio") R.string.use_app_language else R.string.follow_system), pendingLanguage.isEmpty()) { pendingLanguage = "" }
-                        ChoiceRow(stringResource(R.string.english), pendingLanguage.isNotEmpty()) { pendingLanguage = if(dialog == "audio") "en-US" else "en" }
+                        ChoiceRow(stringResource(R.string.english), pendingLanguage.startsWith("en")) { pendingLanguage = if(dialog == "audio") "en-US" else "en" }
+                        ChoiceRow(stringResource(R.string.bangla), pendingLanguage.startsWith("bn")) { pendingLanguage = if(dialog == "audio") "bn-BD" else "bn" }
                     }
                     "appearance" -> Appearance.entries.forEach { appearance -> ChoiceRow(stringResource(when(appearance) { Appearance.SYSTEM -> R.string.follow_system; Appearance.LIGHT -> R.string.light; Appearance.DARK -> R.string.dark }), pendingAppearance == appearance) { pendingAppearance = appearance } }
                     "font" -> { Slider(value = pendingFont, onValueChange = { pendingFont = it }, valueRange = 0.85f..1.3f, steps = 8); Text(stringResource(R.string.font_sample), style = MaterialTheme.typography.bodyMedium.copy(fontSize = MaterialTheme.typography.bodyMedium.fontSize * pendingFont)) }
