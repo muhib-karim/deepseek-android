@@ -5,10 +5,11 @@ v0.6.0 "Agent": one AgentLoop + ToolRegistry with two backends (native tool_call
 
 ## Status
 - v0.6.0 work in progress on branch feature/agent-060 (no local Gradle; CI is the build).
-- Plan: core protocol/loop -> PDF engine -> writers/tools -> skills -> Python -> app wiring -> emulator tests -> docs.
+- Done in :core (committed, tests written, not yet executed): ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PDF layout engine, DocumentModel, DOCX/CSV writers, write/read/present/write_file tools, run_python/pip_install contracts + WheelInstaller, skills (manifest/pack/store/skill tool/function tools).
+- Next in :app: Chaquopy build + Python worker process, Android PDF renderer, account-mode agent UI, skills/toolsets screens, API-mode wiring, emulator tests, CI setup-python, docs/version.
 
 ## Next step
-Implement core ToolCallProtocol + WebToolProtocolClient + AgentLoop per-tool timeout with JVM tests, then continue the plan above.
+Wire Chaquopy (17.1.0, Python 3.13, abiFilters arm64-v8a/x86_64) and the :python worker service, then the account-mode agent path in AccountViewModel/DeepSeekShell.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
