@@ -172,3 +172,28 @@ Remaining validation and supported limits:
   Bundled OCR is Latin-script recognition; additional scripts are not included.
   Full Mermaid grammar, extra OCR scripts and package-enabled Python are not
   implemented. Feature-matrix release status remains unchanged until a tag ships.
+
+## Pass C (v0.2.0)
+
+Feature-matrix rows for personalization, research and organisation, delivered in
+four pull requests (#2 to #5), each merged only after CI passed (compile, JVM tests,
+lint, assemble).
+
+- Part 1 (core): deep research policy with plan, search, read and report phases;
+  memory facts and global or per-chat custom instructions composed into the system
+  prompt; HTTPS tool servers (MCP style) whose tools always ask before running;
+  conversation export to Markdown, HTML and PDF; session checkpoints so a stopped
+  task can resume with the provider it started on.
+- Part 2 (settings): Memory, Tools and Custom instructions screens wired to the
+  encrypted settings store; export format dialog; tool confirmation sheet shows the
+  destination server and the arguments that will be sent.
+- Part 3 (chat and drawer): deep research chip in the composer; chat instructions and
+  export in the top-bar menu; drawer support for temporary chats (not saved to
+  history), pinned chats, projects with their own instructions, new chat in project,
+  move to project and project deletion (chats stay in history without a project).
+- Part 4 (Bangla): values-bn covers every string in values/strings.xml and
+  values/root_strings.xml (333 strings, placeholders checked). The app language and
+  voice dictation language settings offer Bangla, and locales_config lists en and bn
+  for the system per-app language picker on Android 13 and later.
+- Display controls (appearance and text size) were already present from earlier passes.
+- Not included: a project shared-files panel (the data model has the field; no UI yet).
