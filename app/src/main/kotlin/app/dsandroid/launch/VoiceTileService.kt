@@ -1,5 +1,6 @@
 package app.dsandroid.launch
 
+import android.annotation.SuppressLint
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -12,6 +13,7 @@ class VoiceTileService : TileService() {
         qsTile?.apply { state = Tile.STATE_INACTIVE; label = getString(R.string.voice_mode); updateTile() }
     }
     @Suppress("DEPRECATION")
+    @SuppressLint("StartActivityAndCollapseDeprecated") // pre-34 branch only; API 34+ uses the PendingIntent overload
     override fun onClick() {
         super.onClick()
         unlockAndRun {
