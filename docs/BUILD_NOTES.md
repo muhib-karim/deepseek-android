@@ -731,3 +731,7 @@ Version is 0.5.0 (5), with unchanged SDK levels and permissions. No local Gradle
 push, tag or release was run. Public chat research returned HTTP 403; worker contract inspection
 succeeded. Real account/worker access, compilation, test execution, lint and screenshots remain
 CI/device gates. No official assets or third-party implementation code were copied.
+
+## Release v0.5.0
+
+Version 0.5.0 (versionCode 5) adds DeepSeek account mode. CI compiles, runs the core and app unit tests, runs lint and assembles the debug and minified release builds; the emulator workflow runs 54 instrumented tests on Android 14 in light and dark themes, including fourteen account-mode feature tests against a mocked DeepSeek server. The tag workflow attaches the debug APK, the signed release APK and SHA256SUMS.txt. A live completion from the app on a device remains unverified.
