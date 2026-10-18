@@ -716,3 +716,7 @@ Remaining / human pin:
 ### Pass G CI fix: network callback removed
 
 The chat screen no longer registers a default-network callback: that API needs ACCESS_NETWORK_STATE, which stays removed from the install permissions, so the call always failed silently. A message waiting for the network is retried from the Retry action.
+
+## Release v0.4.0
+
+Version 0.4.0 (versionCode 4) is the Pass G hardening release. CI compiles, runs the core and app unit tests, runs lint and assembles the debug and minified release builds; the tag workflow attaches the debug APK, the release APK signed with the project release key, and SHA256SUMS.txt to the GitHub release. Install permissions remain INTERNET only (RECORD_AUDIO is a runtime request). Device validation is still manual.
