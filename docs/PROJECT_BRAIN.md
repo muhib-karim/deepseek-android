@@ -4,15 +4,13 @@
 v0.4.0 is released (Pass G, versionCode 4). Next: plan v0.5.0 from FEATURE_MATRIX open rows and QC feedback.
 
 ## Status
-- v0.4.0 released: Pass G merged; CI green (core tests, app unit tests, lint, assembleDebug, assembleRelease); version 0.4.0 (versionCode 4); debug APK, signed release APK and SHA256SUMS.txt on the v0.4.0 GitHub release.
-- Pass G implementation saved: optional signed R8 release, APK checksums, unsigned release CI and merged-permission gate; emulator workflow and fake-backend smoke tests need the human action pin and CI execution.
-- Accessibility changes, English/Bangla strings, confirmed SAF backup merging and a bounded redacted local diagnostics screen are saved. Restore preserves existing IDs, pauses imported tasks and strips unfinished execution state; credentials and workspace binaries are excluded.
-- Added 18 JVM cases and four instrumentation cases. Lightweight XML/TOML/YAML/shell, localization, Kotlin lexical, checksum/manifest/redaction fixtures and contrast checks passed; Gitleaks found no leaks. No compilation, lint, JVM or emulator test success is claimed.
-- SDK levels, version, main manifest/removal rules and existing action SHAs retained. No Gradle, browser, sub-agent, commit, push or tag was run.
-- README, SECURITY and matrix delivery notes updated. Pass G BUILD_NOTES is the final edit; real screenshots and CI/device validation remain pending.
+- v0.5.0 account-client work started on the requested feature branch from refreshed origin/main; main unchanged.
+- Read the supplied UI spec, current Compose architecture, tests, manifests, workflows and dependency catalog.
+- Design: default DeepSeek web-session shell with native streaming; existing API client remains an explicit Settings fallback. Tokens stay out of UI state and diagnostics.
+- Added tests first for session parsing/expiry/origin/routing, PoW headers, incremental patch streams, native transport and ten light/dark screenshot fixtures. Builds, test execution and screenshots are CI-only; no push, tag or release in this session.
 
 ## Next step
-Pin the emulator action to a verified full SHA. Run CI tests/lint/debug and R8 release assembly, then emulator smoke and device checks (SAF round-trip, TalkBack/200% fonts, release library paths). Configure CI signing secrets for a signed asset; collect real screenshots. No version bump or release is authorized by this pass.
+Implement the new core protocol types and Android account shell referenced by the test-first commit. Verify public worker protocol where reachable; document any unverified integration.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -38,3 +36,5 @@ Pin the emulator action to a verified full SHA. Run CI tests/lint/debug and R8 r
 - 2026-10-18 02:32Z Codex: saved Pass F implementation, 40 JVM cases and documentation; lightweight checks pass, CI/device validation remains. Final edit is the Pass F BUILD_NOTES section; no commit or push.
 
 - 2026-10-18 03:19Z Codex: saved Pass G code, tests and docs; lightweight checks pass, CI/device validation pending. Final edit writes Pass G BUILD_NOTES; no commit or push.
+
+- 2026-10-18 Codex: authored v0.5.0 protocol and screenshot tests before production changes; CI execution pending. Public worker contract inspected; public chat page returned HTTP 403.
