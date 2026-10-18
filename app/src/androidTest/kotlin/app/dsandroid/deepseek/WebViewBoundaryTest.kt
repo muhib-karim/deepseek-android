@@ -23,7 +23,7 @@ class WebViewBoundaryTest {
         </script></body></html>""", "text/html", "UTF-8", origin)
         browser
     }
-    @Test fun exactOriginCaptureAndBlockedWorkerFailWithoutNetwork() = runBlocking {
+    @Test fun exactOriginCaptureAndBlockedWorkerFailWithoutNetwork() = runBlocking<Unit> {
         val browser = page(DeepSeekOrigin.URL)
         try {
             val captured = withTimeout(10_000) {
@@ -41,7 +41,7 @@ class WebViewBoundaryTest {
             DeepSeekCookies.clear()
         }
     }
-    @Test fun differentOriginCannotYieldASession() = runBlocking {
+    @Test fun differentOriginCannotYieldASession() = runBlocking<Unit> {
         val browser = page("https://example.org")
         try {
             delay(500)

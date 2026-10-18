@@ -120,6 +120,8 @@
     <string name="code">কোড</string>
     <string name="copied">কপি হয়েছে</string>
     <string name="copy">কপি</string>
+    <string name="run_code">চালান</string>
+    <string name="export_answer_pdf">পিডিএফ রপ্তানি</string>
     <string name="voice_unavailable">এই ডিভাইসে স্পিচ রিকগনিশন নেই।</string>
     <string name="voice_permission">ডিক্টেশনের জন্য মাইক্রোফোনের অনুমতি দরকার। Android সেটিংসে এটি চালু করতে পারেন।</string>
     <string name="voice_failed">ডিক্টেশন শেষ করা যায়নি। আপনার স্পিচ সার্ভিস দেখে আবার চেষ্টা করুন।</string>

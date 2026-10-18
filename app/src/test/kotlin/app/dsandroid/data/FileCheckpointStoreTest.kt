@@ -10,7 +10,7 @@ import org.junit.rules.TemporaryFolder
 
 class FileCheckpointStoreTest {
     @get:Rule val temporary = TemporaryFolder()
-    @Test fun unfinishedRunSurvivesNewStoreInstanceAndCompletionHidesResume() = runBlocking {
+    @Test fun unfinishedRunSurvivesNewStoreInstanceAndCompletionHidesResume() = runBlocking<Unit> {
         val directory = temporary.newFolder()
         val checkpoint = RunCheckpoint("turn-1", "chat-1", "model", messages = listOf(ChatMessage("user", "Continue")))
         FileCheckpointStore(directory).save(checkpoint)

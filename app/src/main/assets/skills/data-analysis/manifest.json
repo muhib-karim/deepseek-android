@@ -1,0 +1,39 @@
+{
+  "name": "data-analysis",
+  "description": "Analyse a CSV file in this chat: column statistics and bar, line, scatter or histogram charts saved as PNG.",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "describe_csv",
+      "description": "Row count and per-column statistics (numbers: count, missing, mean, median, std, min, max, sum; text: unique values and the most frequent ones) for a CSV file in this chat's folder.",
+      "function": "describe_csv",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "CSV file in this chat's folder, e.g. data.csv"},
+          "max_columns": {"type": "integer", "description": "Columns to describe, default 30"}
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "chart_csv",
+      "description": "Draw a chart from CSV columns and save it as a PNG file card. Bar charts total (or average) y per x category.",
+      "function": "chart_csv",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "CSV file in this chat's folder"},
+          "x": {"type": "string", "description": "Column for categories or the x axis (the value column for hist)"},
+          "y": {"type": "string", "description": "Numeric column for bar, line and scatter charts"},
+          "kind": {"type": "string", "enum": ["bar", "line", "scatter", "hist"], "description": "Chart type, default bar"},
+          "title": {"type": "string", "description": "Chart title"},
+          "output": {"type": "string", "description": "PNG file name, default chart.png"},
+          "aggregate": {"type": "string", "enum": ["sum", "mean"], "description": "How bar charts combine rows, default sum"}
+        },
+        "required": ["path", "x"]
+      }
+    }
+  ],
+  "pip": []
+}

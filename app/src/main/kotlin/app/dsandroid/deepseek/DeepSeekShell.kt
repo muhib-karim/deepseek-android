@@ -38,14 +38,46 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.tools.Artifact
 import app.dsandroid.data.Appearance
 import app.dsandroid.ui.AppIcon
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.MarkdownText
+import java.io.File
 import kotlinx.coroutines.launch
 
-enum class AccountPage { CHAT, SETTINGS, LOGIN }
-data class AccountMessage(val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null)
+enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS }
+data class AccountMessage(
+    val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null,
+    val steps: List<TurnStep> = emptyList(), val artifacts: List<Artifact> = emptyList(), val codeRuns: List<TurnStep.ToolCall> = emptyList(),
+)
+/** A tool call waiting for the user's per-action approval (network, downloads). */
+data class AgentConfirmation(val tool: String, val summary: String)
+data class SkillRow(val name: String, val description: String, val version: String, val builtIn: Boolean, val enabled: Boolean, val tools: Int)
+data class PackageRow(val name: String, val version: String, val bytes: Long)
+data class SkillPreview(val name: String, val version: String, val description: String, val tools: List<String>, val pip: List<String>)
+
+/** Agent-mode callbacks; the defaults keep fixtures and previews inert. */
+interface AgentActions {
+    fun setAgent(enabled: Boolean) {}
+    fun runCode(messageId: String, code: String) {}
+    fun exportPdf(messageId: String) {}
+    fun openArtifact(artifact: Artifact) {}
+    fun saveArtifact(artifact: Artifact) {}
+    fun shareArtifact(artifact: Artifact) {}
+    fun artifactFile(artifact: Artifact): File? = null
+    fun answerTool(allow: Boolean) {}
+    fun installSkillFromUrl(url: String) {}
+    fun installSkillFromFile() {}
+    fun answerSkillInstall(allow: Boolean) {}
+    fun setSkillEnabled(name: String, enabled: Boolean) {}
+    fun removeSkill(name: String) {}
+    fun installPackages(specs: String) {}
+    fun answerPackageInstall(allow: Boolean) {}
+    fun removePackage(name: String) {}
+    object None : AgentActions
+}
 data class AccountHistory(val id: String, val title: String)
 data class AccountUiState(
     val ready: Boolean = false,
@@ -64,6 +96,14 @@ data class AccountUiState(
     val requiresNewChat: Boolean = false,
     val error: String? = null,
     val attachments: List<String> = emptyList(),
+    val agent: Boolean = false,
+    val confirmation: AgentConfirmation? = null,
+    val skills: List<SkillRow> = emptyList(),
+    val packages: List<PackageRow> = emptyList(),
+    val bundledPackages: String = "",
+    val pendingSkill: SkillPreview? = null,
+    val pendingPackages: List<String> = emptyList(),
+    val toolsetBusy: Boolean = false,
 )
 
 /** Light measurements follow ui-spec.md; the dark palette is an original interpretation. */
@@ -101,6 +141,7 @@ fun DeepSeekShell(
     onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
+    actions: AgentActions = AgentActions.None,
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -137,6 +178,8 @@ fun DeepSeekShell(
                     }
                 }
                 HorizontalDivider()
+                NavigationDrawerItem(label = { Text("Skills") }, selected = false, icon = { AppIcon(Glyph.TOOL) },
+                    onClick = { onNavigate(AccountPage.SKILLS); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(label = { Text("Settings") }, selected = false,
                     onClick = { onNavigate(AccountPage.SETTINGS); scope.launch { drawer.close() } }, modifier = Modifier.padding(12.dp))
             }
@@ -152,7 +195,7 @@ fun DeepSeekShell(
                         }
                     } else {
                         TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
-                        Text(if (state.page == AccountPage.SETTINGS) "Settings" else "Log in with DeepSeek", Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
+                        Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
                             textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                     }
                 }
@@ -183,7 +226,7 @@ fun DeepSeekShell(
                                     items(state.messages, key = { it.id }) { message ->
                                         Message(message, state.busy && message.id == state.messages.lastOrNull()?.id,
                                             enabled = !state.busy, regenerate = !message.user && message.id == state.messages.lastOrNull()?.id,
-                                            onRegenerate = onRegenerate, onEdit = { editTarget = message; editText = message.prompt ?: message.text })
+                                            onRegenerate = onRegenerate, onEdit = { editTarget = message; editText = message.prompt ?: message.text }, actions = actions)
                                     }
                                 }
                             }
@@ -196,7 +239,7 @@ fun DeepSeekShell(
                                 }
                             }
                             if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-                            Composer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled)
+                            Composer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
                         }
                     }
                     AccountPage.SETTINGS -> Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -227,9 +270,14 @@ fun DeepSeekShell(
                         Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("About", style = MaterialTheme.typography.titleMedium)
-                        Text("DeepSeek Android · 0.5.1\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
+                        Text("DeepSeek Android \u00B7 0.6.0\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
                         Text("Light layout follows the measured reference. Dark colors and the abstract mark are original interpretations. Web login and chat use an unofficial protocol that may change.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider()
+                        Text("Agent", style = MaterialTheme.typography.titleMedium)
+                        Text("Agent mode lets DeepSeek use tools on this phone: Python, files, PDFs and documents, skills and web pages. Downloads and network access ask first.", style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { onNavigate(AccountPage.SKILLS) }, enabled = !state.busy) { Text("Skills and Python toolsets") }
                     }
+                    AccountPage.SKILLS -> SkillsPage(state, actions, Modifier.weight(1f))
                     AccountPage.LOGIN -> {
                         Text(DeepSeekWebView.SSO_NOTICE, Modifier.heightIn(max = 104.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -279,6 +327,81 @@ fun DeepSeekShell(
         text = { Text("This clears this app's DeepSeek session and local account chat history. Other sites' cookies are kept.") },
         confirmButton = { TextButton(onClick = { logoutDialog = false; onLogout() }) { Text("Log out") } },
         dismissButton = { TextButton(onClick = { logoutDialog = false }) { Text("Cancel") } })
+    state.confirmation?.let { request ->
+        AlertDialog(onDismissRequest = { actions.answerTool(false) }, title = { Text("Allow this action?") },
+            text = { Text(request.summary, Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()).testTag("tool-confirmation")) },
+            confirmButton = { TextButton(onClick = { actions.answerTool(true) }) { Text("Allow once") } },
+            dismissButton = { TextButton(onClick = { actions.answerTool(false) }) { Text("Deny") } })
+    }
+    state.pendingSkill?.let { skill ->
+        AlertDialog(onDismissRequest = { actions.answerSkillInstall(false) }, title = { Text("Install skill ${skill.name} ${skill.version}?") },
+            text = { Text(buildString {
+                append(skill.description)
+                if (skill.tools.isNotEmpty()) append("\n\nTools (run as Python on this phone): ${skill.tools.joinToString()}")
+                if (skill.pip.isNotEmpty()) append("\n\nAlso downloads from PyPI: ${skill.pip.joinToString()}")
+                append("\n\nOnly install skills you trust. You can disable or remove it later.")
+            }, Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { actions.answerSkillInstall(true) }) { Text("Install") } },
+            dismissButton = { TextButton(onClick = { actions.answerSkillInstall(false) }) { Text("Cancel") } })
+    }
+    if (state.pendingPackages.isNotEmpty()) AlertDialog(onDismissRequest = { actions.answerPackageInstall(false) }, title = { Text("Install Python packages?") },
+        text = { Text("Download from PyPI into this app's private Python folder, with their dependencies:\n${state.pendingPackages.joinToString("\n")}") },
+        confirmButton = { TextButton(onClick = { actions.answerPackageInstall(true) }) { Text("Install") } },
+        dismissButton = { TextButton(onClick = { actions.answerPackageInstall(false) }) { Text("Cancel") } })
+}
+
+/** Installed skills (enable, remove, install from URL or file) and the runtime Python packages. */
+@Composable
+private fun SkillsPage(state: AccountUiState, actions: AgentActions, modifier: Modifier) {
+    var url by rememberSaveable { mutableStateOf("") }
+    var specs by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Skills", style = MaterialTheme.typography.titleMedium)
+        Text("Skills add instructions and tools that agent mode can use in any chat. Enabled skills are listed to DeepSeek by name and description; it loads one when a task needs it.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.toolsetBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        state.skills.forEach { skill ->
+            Row(Modifier.fillMaxWidth().testTag("skill-${skill.name}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("${skill.name}  ${skill.version}", fontWeight = FontWeight.Medium)
+                    Text(skill.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val tags = listOfNotNull("Built in".takeIf { skill.builtIn }, "${skill.tools} tool${if (skill.tools == 1) "" else "s"}".takeIf { skill.tools > 0 })
+                    if (tags.isNotEmpty()) Text(tags.joinToString(" \u00B7 "), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (!skill.builtIn) TextButton(onClick = { actions.removeSkill(skill.name) }, enabled = !state.toolsetBusy,
+                    modifier = Modifier.semantics { contentDescription = "Remove skill ${skill.name}" }) { Text("Remove") }
+                Switch(checked = skill.enabled, onCheckedChange = { actions.setSkillEnabled(skill.name, it) }, enabled = !state.toolsetBusy,
+                    modifier = Modifier.semantics { contentDescription = "Use skill ${skill.name}" })
+            }
+        }
+        OutlinedTextField(url, { url = it.trim().take(2000) }, label = { Text("Skill .zip link (https)") }, singleLine = true,
+            enabled = !state.toolsetBusy, modifier = Modifier.fillMaxWidth().testTag("skill-url"))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { actions.installSkillFromUrl(url) }, enabled = url.isNotBlank() && !state.toolsetBusy) { Text("Install from link") }
+            TextButton(onClick = { actions.installSkillFromFile() }, enabled = !state.toolsetBusy) { Text("Install from file") }
+        }
+        Text("A skill is a folder zipped with manifest.json (name, description, version, tools, pip), SKILL.md and an optional main.py whose functions become tools.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HorizontalDivider()
+        Text("Python toolsets", style = MaterialTheme.typography.titleMedium)
+        Text(state.bundledPackages, style = MaterialTheme.typography.bodySmall)
+        if (state.packages.isEmpty()) Text("No extra packages installed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        state.packages.forEach { item ->
+            Row(Modifier.fillMaxWidth().testTag("package-${item.name}"), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${item.name} ${item.version}")
+                    Text("${(item.bytes + 1023) / 1024} KB", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { actions.removePackage(item.name) }, enabled = !state.toolsetBusy,
+                    modifier = Modifier.semantics { contentDescription = "Remove package ${item.name}" }) { Text("Remove") }
+            }
+        }
+        OutlinedTextField(specs, { specs = it.take(500) }, label = { Text("Pure-Python packages, e.g. tabulate") }, singleLine = true,
+            enabled = !state.toolsetBusy, modifier = Modifier.fillMaxWidth().testTag("package-specs"))
+        TextButton(onClick = { actions.installPackages(specs); specs = "" }, enabled = specs.isNotBlank() && !state.toolsetBusy) { Text("Install packages") }
+        Text("Packages download from PyPI after you confirm. Only pure-Python wheels install on the phone; packages with native code cannot.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
@@ -307,7 +430,8 @@ private fun OutlinedCircle(content: @Composable () -> Unit) {
 
 @Suppress("DEPRECATION")
 @Composable
-private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean, regenerate: Boolean, onRegenerate: () -> Unit, onEdit: () -> Unit) {
+private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean, regenerate: Boolean, onRegenerate: () -> Unit, onEdit: () -> Unit,
+    actions: AgentActions = AgentActions.None) {
     val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.user) Alignment.End else Alignment.Start) {
         if (message.user) BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -315,16 +439,26 @@ private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean,
                 Text(message.text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurface)
             }
         } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
-            if (message.thinking.isNotBlank()) {
-                Row(Modifier.testTag("thinking-${message.id}").clickable { expanded = !expanded }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (working && message.text.isEmpty()) "Thinking…" else "Thinking", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    AppIcon(Glyph.CHEVRON, if (expanded) "Collapse thinking" else "Expand thinking", Modifier.rotate(if (expanded) 180f else 0f))
+            val onRun: (String) -> Unit = { code -> actions.runCode(message.id, code) }
+            val runCode = onRun.takeIf { enabled }
+            if (message.steps.isNotEmpty()) AgentTimeline(message.id, message.steps, working, runCode)
+            else {
+                var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
+                if (message.thinking.isNotBlank()) {
+                    Row(Modifier.testTag("thinking-${message.id}").clickable { expanded = !expanded }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (working && message.text.isEmpty()) "Thinking…" else "Thinking", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        AppIcon(Glyph.CHEVRON, if (expanded) "Collapse thinking" else "Expand thinking", Modifier.rotate(if (expanded) 180f else 0f))
+                    }
+                    if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
-                if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                if (message.text.isNotBlank()) MarkdownText(message.text, onRunCode = runCode)
+                else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (message.text.isNotBlank()) MarkdownText(message.text)
-            else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            message.codeRuns.forEach { ToolStepRow(it) }
+            message.artifacts.forEach { artifact ->
+                ArtifactCard(artifact, actions.artifactFile(artifact), onOpen = { actions.openArtifact(artifact) },
+                    onSave = { actions.saveArtifact(artifact) }, onShare = { actions.shareArtifact(artifact) })
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }, enabled = message.text.isNotEmpty()) {
@@ -332,13 +466,16 @@ private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean,
             }
             if (message.user) TextButton(onClick = onEdit, enabled = enabled, modifier = Modifier.testTag("edit-${message.id}").semantics { contentDescription = "Edit message" }) { Text("Edit") }
             if (regenerate) TextButton(onClick = onRegenerate, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Regenerate response" }) { Text("Regenerate") }
+            if (!message.user && message.text.isNotBlank()) TextButton(onClick = { actions.exportPdf(message.id) }, enabled = enabled,
+                modifier = Modifier.testTag("export-${message.id}").semantics { contentDescription = "Export as PDF" }) { Text("Export PDF") }
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit, speechInput: AccountSpeechInput?, voiceTrigger: Int, onVoiceHandled: () -> Unit) {
+private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit, speechInput: AccountSpeechInput?, voiceTrigger: Int, onVoiceHandled: () -> Unit,
+    onAgent: (Boolean) -> Unit = {}) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
     val pillColors = FilterChipDefaults.filterChipColors(
@@ -362,6 +499,10 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
                     FilterChip(selected = search, onClick = { search = !search }, label = { Text("Search", fontSize = 12.sp) },
                         leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
                         border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
+                    FilterChip(selected = state.agent, onClick = { onAgent(!state.agent) }, label = { Text("Agent", fontSize = 12.sp) },
+                        leadingIcon = { AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.testTag("agent-toggle").semantics { contentDescription = if (state.agent) "Agent mode on" else "Agent mode off" })
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = attach, enabled = !state.busy && !state.importing) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }

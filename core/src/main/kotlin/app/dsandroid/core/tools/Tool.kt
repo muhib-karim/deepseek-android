@@ -15,7 +15,8 @@ data class Artifact(val fileName: String, val mimeType: String, val path: String
 @Serializable
 data class ToolResult(val content: String, val isError: Boolean = false, val artifacts: List<Artifact> = emptyList())
 
-data class ToolContext(val workspace: WorkspacePath, val web: TurnWebContext = TurnWebContext())
+/** [chatDir] is the chat's private folder relative to the workspace root; agent file tools stay inside it. */
+data class ToolContext(val workspace: WorkspacePath, val web: TurnWebContext = TurnWebContext(), val chatDir: String = "")
 
 interface Tool {
     val name: String

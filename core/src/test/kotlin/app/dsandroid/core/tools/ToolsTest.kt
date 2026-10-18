@@ -11,7 +11,7 @@ import org.junit.rules.TemporaryFolder
 
 class ToolsTest {
     @get:Rule val temporary = TemporaryFolder()
-    @Test fun createsArtifactsReadsAndListsOnlyWorkspace() = runBlocking {
+    @Test fun createsArtifactsReadsAndListsOnlyWorkspace() = runBlocking<Unit> {
         val root = temporary.newFolder("workspace")
         val context = ToolContext(WorkspacePath(root))
         val markdown = CreateMarkdownTool().run(buildJsonObject { put("fileName", "note.md"); put("content", "# Hello") }, context)

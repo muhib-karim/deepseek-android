@@ -1,16 +1,16 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-Complete the v0.5.0 DeepSeek account feature set and mocked-server coverage; validate Android builds and screenshots in CI.
+v0.6.0 "Agent": one AgentLoop + ToolRegistry with two backends (native tool_calls on the API-key client; fenced ```tool JSON protocol on account-mode web chat), on-device Python (Chaquopy), PDF/DOCX/CSV files with artifact cards, installable skills. CI validates.
 
 ## Status
-- Fourteen account features have implementation and first-written MockWebServer/Compose tests in both themes, plus 21 new core protocol, cancellation and persistence test methods.
-- Static core and Android reviews found no remaining blocking issue after fixes for dictation lifetime, renamed-branch titles and API settings writes on fallback exit.
-- Diff checks, dependency/XML parsing and synthetic artifact-checker checks pass. The artifact gate requires all 38 screenshots and rejects missing feature captures and credential markers.
-- No local Gradle/build, commit or push. Kotlin compilation, test execution and screenshots remain pending CI; real-account login has not been tested.
+- v0.6.0 "Agent" implemented on branch feature/agent-060 (versionCode 7, versionName 0.6.0); not pushed.
+- :core: ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PdfLayoutEngine + DocumentModel (images, tables, lists, page breaks), DocxWriter/CsvWriter, write/read/present/write_file, run_python/pip_install + WheelInstaller, skills. JVM tests written for all.
+- :app: Chaquopy 17.1.0 / Python 3.13 (numpy, matplotlib) in a :python worker process, account-mode agent UI (toggle, tool rows, artifact cards, Export PDF, Run, Skills page, approvals), API-mode agent tools, built-in skills, emulator tests AgentModeTest + PythonRuntimeTest. CI workflows install Python 3.13.
+- Nothing compiled or executed locally; all features PENDING CI (docs/AGENT_MODE.md table).
 
 ## Next step
-Run the existing GitHub Actions JVM/lint/build and emulator workflows after an authorized push. Review all feature test results and 38 screenshot artifacts; use docs/feature-checklist.md for the mocked-only verification scope.
+Push the branch, open a PR to main, run CI (unit tests, lint, debug/release) and the emulator workflow; fix any compile/lint/test failures; record results in docs/AGENT_MODE.md; then a live agent run on chat.deepseek.com before tagging v0.6.0.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -45,3 +45,4 @@ Run the existing GitHub Actions JVM/lint/build and emulator workflows after an a
 
 - 2026-10-18 08:27Z Codex: added fourteen account feature paths, test-first mocked coverage, review fixes and screenshot completeness checks; next: CI compilation/tests/captures. No local build, commit or push.
 - v0.5.0 released: account mode merged; CI and 54 emulator tests green (light and dark); version 0.5.0 (versionCode 5); debug APK, signed release APK and SHA256SUMS.txt on the v0.5.0 GitHub release. Open: live app-originated completion on a device.
+- 2026-10-18 Claude Code (Opus 5.5): v0.6.0 Agent implemented (core protocol/loop/PDF/writers/Python/skills, Chaquopy worker, account-mode agent UI, API wiring, emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.

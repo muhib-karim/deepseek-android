@@ -31,6 +31,33 @@ only after confirmation; there is no native DeepSeek file upload implementation.
 
 The remaining provider/OAuth sections describe the explicit legacy API client.
 
+## Agent mode (v0.6.0)
+
+- **Approvals.** `pip_install` asks before every download. `web_fetch` keeps the existing policy:
+  query strings, URLs over 200 characters and hosts not returned by this turn's search ask first;
+  private networks and redirects are refused. Other agent tools work only inside the app's private
+  storage and run without a prompt. No tool writes outside the app sandbox; Save to Downloads,
+  Share and Open in another app are explicit user actions on a file card (FileProvider grants
+  read access to that one file).
+- **Folders.** Agent tools resolve paths inside the chat's folder (`files/workspace/account/<chat>`
+  or `files/workspace/chats/<chat>`); absolute paths, `..`, encoded tricks and symlinks are refused.
+  Account-mode agent files are deleted with their chat and on logout.
+- **Python.** Code runs in a separate, non-exported `:python` process under the app's UID with the
+  app's file access and no extra permissions. The app kills that process on timeout or Stop.
+  Socket connections and DNS lookups are refused inside it; this is best effort (native code could
+  bypass it), and the app's INTERNET permission is shared by all its processes.
+- **Packages.** `pip_install` and skill `pip` requirements accept only `py3-none-any` wheels from
+  PyPI over HTTPS, verify PyPI's SHA-256, refuse native code and unsafe archive paths, and record
+  installed files for removal. A package's own code runs with the same rights as run_python.
+- **Skills.** A skill's `main.py` runs as Python with the rights above, and its SKILL.md becomes
+  instructions to the model. Install skills only from sources you trust; the install dialog lists
+  a skill's tools and packages first. Archives are limited to 5 MB, 64 files and safe relative paths.
+  Skill links must be public HTTPS (redirects may not leave HTTPS or reach private networks).
+- **Web chat protocol.** In account mode the agent instructions, tool calls and tool results are
+  ordinary messages in your DeepSeek chat and are stored by DeepSeek like any other message.
+  Tool results and fetched pages are untrusted data; the guard checks every call regardless of
+  what a page or result says.
+
 ## Reporting
 
 Use the repository's private vulnerability reporting feature if enabled. Do not

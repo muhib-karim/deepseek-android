@@ -735,3 +735,23 @@ CI/device gates. No official assets or third-party implementation code were copi
 ## Release v0.5.0
 
 Version 0.5.0 (versionCode 5) adds DeepSeek account mode. CI compiles, runs the core and app unit tests, runs lint and assembles the debug and minified release builds; the emulator workflow runs 54 instrumented tests on Android 14 in light and dark themes, including fourteen account-mode feature tests against a mocked DeepSeek server. The tag workflow attaches the debug APK, the signed release APK and SHA256SUMS.txt. A live completion from the app on a device remains unverified.
+
+## v0.6.0 agent branch (feature/agent-060)
+
+Agent mode for account web chat and the API-key client: one `AgentLoop` with a native
+function-calling backend and a fenced-JSON web-chat backend, Chaquopy Python, PDF/DOCX/CSV files,
+skills. See `AGENT_MODE.md` for the design, sources and the PENDING CI feature table.
+
+Build changes:
+- Chaquopy Gradle plugin `com.chaquo.python` 17.1.0 (version catalog `chaquopy`), Python 3.13,
+  `pip install numpy==1.26.2 matplotlib==3.8.4` at build time (wheels from chaquo.com/pypi-13.1
+  and PyPI). `abiFilters` arm64-v8a and x86_64; the emulator job is x86_64.
+- The build machine needs `python3.13` on PATH: ci.yml, emulator.yml and release.yml run
+  actions/setup-python v5.6.0 (pinned SHA) before Gradle, including the signed release step.
+- `PythonService` runs in a `:python` process (not exported); R8 keeps `com.chaquo.python.**`.
+- Built-in skills ship as `app/src/main/assets/skills/<name>/`.
+- versionCode 7, versionName 0.6.0. minSdk 26, targetSdk 35 and install permissions unchanged.
+
+No local Gradle, emulator, push or tag was run (disk space and project rules); `ds_runner.py` and the
+data-analysis skill's statistics were exercised with the host Python 3.11, matplotlib paths were
+not. Compilation, unit tests, lint, APK size and emulator results are CI gates.

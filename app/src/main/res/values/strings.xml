@@ -120,6 +120,8 @@
     <string name="code">Code</string>
     <string name="copied">Copied</string>
     <string name="copy">Copy</string>
+    <string name="run_code">Run</string>
+    <string name="export_answer_pdf">Export PDF</string>
     <string name="voice_unavailable">Speech recognition is unavailable on this device.</string>
     <string name="voice_permission">Microphone permission is required for dictation. You can enable it in Android settings.</string>
     <string name="voice_failed">Dictation could not finish. Check your speech service and try again.</string>

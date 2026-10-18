@@ -12,7 +12,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OpenAiCompatibleClientTest {
-    @Test fun listsModelsWithSameIdentityAndAuthentication() = runBlocking {
+    @Test fun listsModelsWithSameIdentityAndAuthentication() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"data":[{"id":"model-v2","created":123}]}"""))
             val client = OpenAiCompatibleClient(server.url("/v1").toString(), "unused", CustomEndpointAuth("test-value"), ClientIdentity("test", "en", 0))
@@ -24,7 +24,7 @@ class OpenAiCompatibleClientTest {
             assertEquals("DeepSeek-Android-Unofficial", request.getHeader("x-dsh-client-name"))
         }
     }
-    @Test fun reportsQuotaBodyAndSendsThinkingFlag() = runBlocking {
+    @Test fun reportsQuotaBodyAndSendsThinkingFlag() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"insufficient_quota"}"""))
             val client = OpenAiCompatibleClient(server.url("/").toString(), "model", CustomEndpointAuth(""), ClientIdentity("test", "en", 0), thinking = true)
@@ -34,7 +34,7 @@ class OpenAiCompatibleClientTest {
             assertEquals("enabled", body.getValue("thinking").jsonObject.getValue("type").jsonPrimitive.content)
         }
     }
-    @Test fun streamsToolCallAndSendsExpectedWireContract() = runBlocking {
+    @Test fun streamsToolCallAndSendsExpectedWireContract() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(
                 "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"create_markdown\",\"arguments\":\"{\"}}]}}]}\n\n" +
@@ -54,7 +54,7 @@ class OpenAiCompatibleClientTest {
             assertEquals("auto", body["tool_choice"]!!.jsonPrimitive.content)
         }
     }
-    @Test fun cancellationStopsAWaitingStream() = runBlocking {
+    @Test fun cancellationStopsAWaitingStream() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.NO_RESPONSE))
             val client = OpenAiCompatibleClient(server.url("/").toString(), "model", CustomEndpointAuth(""), ClientIdentity("test", "en", 0))
@@ -64,7 +64,7 @@ class OpenAiCompatibleClientTest {
             assertTrue(job.isCancelled)
         }
     }
-    @Test fun refusesRedirectsAndPrematureEof() = runBlocking {
+    @Test fun refusesRedirectsAndPrematureEof() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", server.url("/other")))
             server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"))

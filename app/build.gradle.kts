@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.chaquopy)
 }
 
 android {
@@ -11,9 +12,11 @@ android {
         applicationId = "app.dsandroid"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.5.1"
+        versionCode = 7
+        versionName = "0.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Chaquopy ships native Python per ABI: current phones and x86_64 emulators (CI) only.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     // No project properties, files, or fallback passwords: CI supplies all four values.
     val releaseSigning = listOf(
@@ -50,6 +53,18 @@ android {
         checkReleaseBuilds = false
     }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+// Python 3.13 is the newest version with Chaquopy wheels for numpy and matplotlib, and it supports
+// 16 KB page devices. The build machine needs python3.13 on PATH (CI uses actions/setup-python).
+chaquopy {
+    defaultConfig {
+        version = "3.13"
+        pip {
+            install("numpy==1.26.2")
+            install("matplotlib==3.8.4")
+        }
+    }
 }
 
 dependencies {

@@ -140,6 +140,13 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                                     openArtifact = openArtifact, shareArtifact = shareArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
                                     openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) },
                                     speech = speech, speechError = vm::showError)
+                                if (!state.running && item.steps.any { it is app.dsandroid.core.agent.TurnStep.Answer && it.text.isNotBlank() }) {
+                                    val exportLabels = app.dsandroid.core.export.ExportLabels(stringResource(R.string.export_user_label),
+                                        stringResource(R.string.export_assistant_label), stringResource(R.string.sources_title))
+                                    TextButton(onClick = {
+                                        vm.exportConversation(app.dsandroid.core.export.ExportFormat.PDF, item.id, exportLabels, java.util.Locale.getDefault().language) { openArtifact(it) }
+                                    }, enabled = !state.exporting) { Text(stringResource(R.string.export_answer_pdf)) }
+                                }
                                 if (item.id == last?.id && !state.running && !state.resumable && settings.suggestedFollowUps && !state.temporary) {
                                     val answer = item.steps.filterIsInstance<app.dsandroid.core.agent.TurnStep.Answer>().lastOrNull()?.text.orEmpty()
                                     val questions = remember(answer) { app.dsandroid.core.chat.FollowUps.parse(answer).questions }

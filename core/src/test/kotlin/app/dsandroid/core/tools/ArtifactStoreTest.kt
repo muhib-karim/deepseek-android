@@ -105,7 +105,7 @@ class ArtifactStoreTest {
         }
     }
 
-    @Test fun createToolProducesOrdinaryCompatibleArtifact() = runBlocking {
+    @Test fun createToolProducesOrdinaryCompatibleArtifact() = runBlocking<Unit> {
         val root = temporary.newFolder()
         val result = CreateArtifactTool().run(buildJsonObject {
             put("title", "page"); put("format", "html"); put("content", "<button>Click</button>")

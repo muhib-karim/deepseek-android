@@ -52,3 +52,21 @@ Optional Python runtime (downloaded only after user approval):
   https://docs.python.org/3/license.html
   No runtime source is copied into this repository; its upstream notices apply
   to downloaded runtime files. Mermaid previews and charts use original renderers.
+
+On-device Python (bundled in the APK since v0.6.0):
+  Chaquopy 17.1.0 (com.chaquo.python), MIT License
+  https://github.com/chaquo/chaquopy
+  CPython 3.13 runtime, Python Software Foundation License Version 2
+  https://docs.python.org/3/license.html
+  Python packages built into the APK by Chaquopy's pip step, each under its own license:
+    numpy 1.26.2 (BSD-3-Clause), matplotlib 3.8.4 (Matplotlib License, PSF-based),
+    Pillow (MIT-CMU), contourpy (BSD-3-Clause), kiwisolver (BSD-3-Clause), cycler (BSD-3-Clause),
+    fontTools (MIT), pyparsing (MIT), python-dateutil (Apache-2.0 or BSD-3-Clause),
+    packaging (Apache-2.0 or BSD-2-Clause), six (MIT).
+  Packages a user installs at runtime with pip_install come from PyPI under their own licenses;
+  they are downloaded to the device only after the user approves and are not distributed with the app.
+
+Agent tools:
+  Tool names and argument shapes for write, read, skill, present and web_fetch follow the
+  deepseek-harness tool catalog (MIT, Copyright DeepSeek). The implementation is original.
+  The built-in skills (pdf-report, data-analysis, web-summary) are original.
