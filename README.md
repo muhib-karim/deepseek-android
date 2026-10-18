@@ -3,11 +3,11 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current release: **v0.2.0**, a debug testing build (debug-key signed, not audited).
+Current release: **v0.3.0**, a debug testing build (debug-key signed, not audited).
 The debug APK and SHA256SUMS are attached to each GitHub release. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
-## v0.3.0 Pass F features (working tree, not yet released)
+## v0.3.0 Pass F features (in v0.3.0)
 
 - **Voice conversation:** open Voice from the chat header, grant microphone access
   when requested, then tap Start listening. Speak → send → hear the answer → listen
@@ -46,7 +46,7 @@ JVM tests are supplied; compilation, test execution, lint and device validation
 remain CI/release gates. See [feature status](docs/FEATURE_MATRIX.md) and
 [build notes](docs/BUILD_NOTES.md).
 
-## v0.3.0 Pass E features (working tree, not yet released)
+## v0.3.0 Pass E features (in v0.3.0)
 
 - **Saved assistants:** create, edit and delete named personas with a built-in icon,
   instructions, default tools and response style. Start a chat from Assistants in
@@ -89,7 +89,7 @@ minSdk 26 and targetSdk 35 remain unchanged. JVM coverage is included, but local
 verification was static only. CI compilation/tests/lint and device validation are
 still required; see [build notes](docs/BUILD_NOTES.md).
 
-## v0.3.0 Pass D features (merged on main, not yet released)
+## v0.3.0 Pass D features (in v0.3.0)
 
 - **Files out:** `create_document`, `create_spreadsheet` and `create_presentation`
   produce DOCX/XLSX/PPTX using the existing lightweight OOXML builders. `create_pdf`
