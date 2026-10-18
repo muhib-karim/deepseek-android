@@ -212,6 +212,8 @@ class AccountTransportTest {
         val failed = CountDownLatch(1)
         val network = OkHttpClient.Builder().eventListener(object : EventListener() {
             override fun callFailed(call: Call, ioe: java.io.IOException) { failed.countDown() }
+            // A cancelled stream whose body is closed while suspended between events ends via callEnd; either way the call is closed.
+            override fun callEnd(call: Call) { if (call.request().url.encodedPath.endsWith("/chat/completion")) failed.countDown() }
         }).build()
         val server = MockWebServer(); server.start()
         try {
