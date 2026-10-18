@@ -5,7 +5,8 @@ enum class TableAlignment { LEFT, CENTER, RIGHT }
 sealed interface MarkdownBlock {
     data class Heading(val level: Int, val text: String) : MarkdownBlock
     data class Paragraph(val text: String) : MarkdownBlock
-    data class ListBlock(val ordered: Boolean, val items: List<String>, val start: Int = 1) : MarkdownBlock
+    /** [indents] holds each item's leading width; it is empty when every item is top-level. */
+    data class ListBlock(val ordered: Boolean, val items: List<String>, val start: Int = 1, val indents: List<Int> = emptyList()) : MarkdownBlock
     data class Quote(val text: String) : MarkdownBlock
     data class Code(val text: String, val language: String) : MarkdownBlock
     data class Table(val header: List<String>, val alignments: List<TableAlignment>, val rows: List<List<String>>) : MarkdownBlock
@@ -75,11 +76,13 @@ object MarkdownParser {
                     val expression = if (ordered) numbered else bullet
                     val start = if (ordered) numbered.matchEntire(line)!!.groupValues[1].toIntOrNull() ?: 1 else 1
                     val items = mutableListOf<String>()
+                    val indents = mutableListOf<Int>()
                     while (index < lines.size) {
                         val match = expression.matchEntire(lines[index]) ?: break
-                        items.add(match.groupValues[if (ordered) 2 else 1]); index++
+                        items.add(match.groupValues[if (ordered) 2 else 1])
+                        indents.add(lines[index].takeWhile { it == ' ' || it == '\t' }.sumOf { if (it == '\t') 4 else 1 }); index++
                     }
-                    blocks.add(MarkdownBlock.ListBlock(ordered, items, start))
+                    blocks.add(MarkdownBlock.ListBlock(ordered, items, start, if (indents.all { it == 0 }) emptyList() else indents))
                 }
                 line.trimStart().startsWith('>') -> {
                     val content = mutableListOf<String>()
