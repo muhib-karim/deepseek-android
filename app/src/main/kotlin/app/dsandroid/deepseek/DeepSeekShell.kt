@@ -227,7 +227,7 @@ fun DeepSeekShell(
                         Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("About", style = MaterialTheme.typography.titleMedium)
-                        Text("DeepSeek Android · 0.5.0\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
+                        Text("DeepSeek Android · 0.5.1\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
                         Text("Light layout follows the measured reference. Dark colors and the abstract mark are original interpretations. Web login and chat use an unofficial protocol that may change.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     AccountPage.LOGIN -> {
