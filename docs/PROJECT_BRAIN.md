@@ -7,7 +7,7 @@ Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the 
 - Pass B (code interpreter sandbox, charts, artifacts canvas, file downloads, image OCR input)
   merged to main after CI green (compile, JVM tests, lint, assemble). Two CI fixes:
   explicit OkHttp Dns objects, and the attachment-edit test now covers the OCR block.
-- Pass C in progress: clean baseline inspected; extending existing registry, cards and JSON storage.
+- Pass C Part 1 is committed; clean tree confirmed. Core contracts and ViewModel routing read; missing UI/actions identified. Display controls already exist.
 - Core Pass C contracts/tests and implementations written: facts/projects/prompt composition, temporary checkpoint routing, exports, HTTPS MCP and research phases.
 - Existing registry/guard/timeline retained; disabled tools are removed from specs and execution.
 - Current brief forbids local Gradle, heavy tools, sub-agents, commits and pushes.
@@ -19,9 +19,7 @@ Ship v0.2.0: the agent loop (real DeepSeek function calling, outputs inside the 
 - No local Gradle execution; compilation, JVM tests and Android lint require CI.
 
 ## Next step
-0. Wire core features into the ViewModel and Settings/chat UI, complete Bangla resources, then static checks. CI executes JVM tests/lint later.
-1. Release v0.2.0: identity check, manifest permissions check, secret scan, tag, APK link check, QC request.
-4. Then Phase 3 / v0.3.0 (phone control with a confirm before every action).
+Finish Pass C UI: Memory/Tools/instructions/research/export, then Projects, temporary chat, display and full Bangla parity. Add focused JVM cases and static checks; CI runs compilation/tests/lint. Write BUILD_NOTES last. No commit or push.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.

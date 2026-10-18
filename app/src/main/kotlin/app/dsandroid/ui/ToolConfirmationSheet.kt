@@ -18,13 +18,18 @@ fun ToolConfirmationSheet(confirmation: Confirmation, reply: (Boolean) -> Unit) 
     ModalBottomSheet(onDismissRequest = { reply(false) }) {
         Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.allow_tool), style = MaterialTheme.typography.titleLarge)
+            confirmation.destination?.let { destination ->
+                Text(stringResource(R.string.tools_destination, destination))
+                Text(confirmation.remoteName.orEmpty(), style = MaterialTheme.typography.titleMedium)
+            }
             Text(if (confirmation.name == "python_runtime_download") stringResource(R.string.python_download_title) else confirmation.name,
                 style = MaterialTheme.typography.titleMedium)
             Text(stringResource(when (confirmation.name) {
+                "remember" -> R.string.confirm_memory_explanation
                 "web_search" -> R.string.confirm_search_explanation
                 "web_fetch", "visit_web" -> R.string.confirm_fetch_explanation
                 "python_runtime_download" -> R.string.python_download_explanation
-                else -> R.string.confirm_tool_explanation
+                else -> if (confirmation.destination != null) R.string.confirm_remote_explanation else R.string.confirm_tool_explanation
             }))
             SelectionContainer {
                 Text(confirmation.arguments.toString(), Modifier.heightIn(max = 320.dp)

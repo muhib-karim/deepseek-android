@@ -25,7 +25,7 @@ import app.dsandroid.data.Provider
 @Composable
 fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     save: (AppSettings) -> Unit, signIn: (AppSettings) -> Unit, signOut: () -> Unit,
-    clearHistory: () -> Unit = {}) {
+    clearHistory: () -> Unit = {}, state: ChatUiState, vm: ChatViewModel) {
     // Credentials are deliberately excluded from saved-instance-state bundles.
     var draft by remember { mutableStateOf(settings) }
     var voice by remember { mutableStateOf(false) }
@@ -46,7 +46,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
     if(page.isNotEmpty()) {
         Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).verticalScroll(rememberScrollState()).imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             TextButton(onClick = { page = "" }) { Text(stringResource(R.string.back)) }
-            Text(stringResource(when(page) { "account" -> R.string.account; "data" -> R.string.data_management; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(when(page) { "account" -> R.string.account; "data" -> R.string.data_management; "memory" -> R.string.memory; "tools" -> R.string.tools; else -> R.string.personalization }), style = MaterialTheme.typography.headlineSmall)
             SettingsGroup {
                 when(page) {
                     "account" -> {
@@ -76,11 +76,17 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                 CapabilitySetting(stringResource(R.string.images), flags.vision) { flag -> draft = draft.copy(capabilities = draft.capabilities + (modelId to flags.copy(vision = flag))) }
                 CapabilitySetting(stringResource(R.string.reasoning_model), flags.reasoning) { flag -> draft = draft.copy(capabilities = draft.capabilities + (modelId to flags.copy(reasoning = flag))) }
                     }
+                    "memory" -> MemorySettings(state.facts, draft.memoryEnabled, saving || state.personalizing,
+                        { draft = draft.copy(memoryEnabled = it) }, vm::saveFact, vm::deleteFact)
+                    "tools" -> ToolsSettings(draft, remember { vm.builtInToolNames() }, saving) { draft = it }
                     "data" -> {
                         Text(stringResource(R.string.local_data_notice), style = MaterialTheme.typography.bodyMedium)
                         TextButton(onClick = { clearConfirm = true }, enabled = !saving) { Text(stringResource(R.string.clear_history)) }
                     }
                     else -> {
+                        OutlinedTextField(draft.customInstructions, { draft = draft.copy(customInstructions = it.take(8000)) },
+                            label = { Text(stringResource(R.string.global_instructions)) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 10)
+                        Text(stringResource(R.string.global_instructions_notice), style = MaterialTheme.typography.bodySmall)
                         SettingToggle(stringResource(R.string.collapse_thinking), draft.collapseThinking) { draft = draft.copy(collapseThinking = it) }
                         Text(stringResource(R.string.collapse_thinking_help), style = MaterialTheme.typography.bodyMedium)
                     }
@@ -105,6 +111,10 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
             SettingsRow(stringResource(R.string.font_size), stringResource(R.string.font_percent, (draft.fontScale * 100).toInt())) { pendingFont = draft.fontScale; dialog = "font" }
             HorizontalDivider()
             SettingsRow(stringResource(R.string.personalization), "") { page = "personalization" }
+            HorizontalDivider()
+            SettingsRow(stringResource(R.string.memory), "") { page = "memory" }
+            HorizontalDivider()
+            SettingsRow(stringResource(R.string.tools), "") { page = "tools" }
         }
         Text(stringResource(R.string.audio), color = MaterialTheme.colorScheme.onSurfaceVariant)
         SettingsGroup {
