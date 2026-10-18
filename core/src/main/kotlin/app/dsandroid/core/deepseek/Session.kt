@@ -2,6 +2,8 @@ package app.dsandroid.core.deepseek
 
 import java.net.URI
 import java.util.Base64
+import kotlinx.coroutines.CopyableThrowable
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.serialization.json.*
 
 object DeepSeekOrigin {
@@ -65,10 +67,26 @@ fun sessionRoute(token: SessionToken?, apiFallbackChosen: Boolean, nowMillis: Lo
     else -> ChatRoute.DEEPSEEK
 }
 
-class SessionExpired : Exception("Your DeepSeek session expired. Please sign in again.")
-class EndpointChanged : Exception("DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings.")
+/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class SessionExpired : Exception("Your DeepSeek session expired. Please sign in again."), CopyableThrowable<SessionExpired> {
+    override fun createCopy(): SessionExpired? = null
+}
+/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class EndpointChanged : Exception("DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings."), CopyableThrowable<EndpointChanged> {
+    override fun createCopy(): EndpointChanged? = null
+}
 
 /** Source compatibility for callers of the original protocol error. */
 typealias UpdateRequired = EndpointChanged
-class WebRateLimited : Exception("DeepSeek is busy or has limited requests. Try again later.")
-class WebConnectionFailed : Exception("Could not reach DeepSeek. Check your connection and try again.")
+/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebRateLimited : Exception("DeepSeek is busy or has limited requests. Try again later."), CopyableThrowable<WebRateLimited> {
+    override fun createCopy(): WebRateLimited? = null
+}
+/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebConnectionFailed : Exception("Could not reach DeepSeek. Check your connection and try again."), CopyableThrowable<WebConnectionFailed> {
+    override fun createCopy(): WebConnectionFailed? = null
+}

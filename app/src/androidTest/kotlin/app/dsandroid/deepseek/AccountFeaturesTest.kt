@@ -418,7 +418,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         assertEquals("", SettingsStore(app).load().apiKey)
         screenshot("feature11-settings")
         compose.onNodeWithText("Log out", substring = false).performScrollTo().performClick()
-        compose.onAllNodesWithText("Log out", substring = false).last().performClick()
+        compose.onAllNodesWithText("Log out", substring = false).onLast().performClick()
         compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy }
         assertEquals(AccountPage.LOGIN, vm.state.value.page)
         assertNull(DeepSeekSessionStore(app).load())
