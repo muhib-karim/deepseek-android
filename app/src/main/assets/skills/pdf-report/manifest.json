@@ -1,0 +1,7 @@
+{
+  "name": "pdf-report",
+  "description": "Write a structured PDF report (title, summary, sections, tables, charts) from the conversation, files or research.",
+  "version": "1.0.0",
+  "tools": [],
+  "pip": []
+}

@@ -26,6 +26,8 @@ sealed interface PdfOp {
     data class Text(val x: Float, val baseline: Float, val text: String, val font: PdfFont, val size: Float, val color: Long) : PdfOp
     data class Box(val x: Float, val y: Float, val width: Float, val height: Float, val fill: Long?, val stroke: Long?) : PdfOp
     data class Line(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val color: Long, val width: Float) : PdfOp
+    /** [source] is the image path from the Markdown; the renderer resolves it the same way the layout did. */
+    data class Image(val x: Float, val y: Float, val width: Float, val height: Float, val source: String) : PdfOp
 }
 
 data class PdfPage(val number: Int, val ops: List<PdfOp>)
@@ -44,7 +46,12 @@ data class PdfPageSpec(val width: Float = 595f, val height: Float = 842f, val ma
  * bullet and numbered lists, quotes, code blocks, tables with repeated headers, rules and explicit
  * page breaks. Long words and code lines are broken to fit; rows taller than a page are split.
  */
-class PdfLayoutEngine(private val measurer: TextMeasurer, private val spec: PdfPageSpec = PdfPageSpec()) {
+class PdfLayoutEngine(
+    private val measurer: TextMeasurer,
+    private val spec: PdfPageSpec = PdfPageSpec(),
+    /** Pixel size of an image source, or null when it cannot be used. */
+    private val imageSize: (String) -> Pair<Int, Int>? = { null },
+) {
     companion object {
         const val MAX_PAGES = 300
         const val INK = 0xFF1A1A1AL
@@ -95,6 +102,7 @@ class PdfLayoutEngine(private val measurer: TextMeasurer, private val spec: PdfP
                     is DocBlock.Quote -> quote(block)
                     is DocBlock.Code -> code(block)
                     is DocBlock.Table -> table(block)
+                    is DocBlock.Image -> image(block)
                     DocBlock.Rule -> rule()
                     DocBlock.PageBreak -> if (y > top) newPage()
                 }
@@ -178,6 +186,30 @@ class PdfLayoutEngine(private val measurer: TextMeasurer, private val spec: PdfP
             }
             y += pad
             ops.add(boxIndex, PdfOp.Box(left, segmentTop, width, y - segmentTop, CODE_FILL, null))
+            y += 8f
+        }
+
+        /** Scaled to the content width (at most 60% of the page height), kept on one page, with an optional caption. */
+        private fun image(block: DocBlock.Image) {
+            val size = imageSize(block.source)?.takeIf { (w, h) -> w > 0 && h > 0 }
+            if (size == null) {
+                paragraph(listOf(Run("[Image not available: ${clean(block.source).take(120)}]", PdfFont.ITALIC, BODY, MUTED)), spaceAfter = 7f)
+                return
+            }
+            val maxHeight = (bottom - top) * 0.6f
+            val scale = minOf(width / size.first, maxHeight / size.second, 1.5f)
+            val drawWidth = size.first * scale
+            val drawHeight = size.second * scale
+            ensure(drawHeight + if (block.alt.isBlank()) 0f else BODY * LEADING)
+            ops += PdfOp.Image(left + (width - drawWidth) / 2, y, drawWidth, drawHeight, block.source)
+            y += drawHeight + 4f
+            if (block.alt.isNotBlank()) {
+                wrap(listOf(Run(clean(block.alt), PdfFont.ITALIC, 9.5f, MUTED)), width).forEach { line ->
+                    ensure(line.height)
+                    draw(line, left + (width - line.width) / 2, y)
+                    y += line.height
+                }
+            }
             y += 8f
         }
 

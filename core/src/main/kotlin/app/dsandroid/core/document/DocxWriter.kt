@@ -44,6 +44,8 @@ object DocxWriter {
                 }
                 is DocBlock.Quote -> body.append(paragraph(block.spans, style = "Quote"))
                 is DocBlock.Table -> body.append(table(block))
+                // Images are embedded in PDFs; DOCX keeps a readable placeholder with the caption.
+                is DocBlock.Image -> body.append(paragraph(listOf(InlineSpan("[Image: ${block.alt.ifBlank { block.source }}]", italic = true))))
                 DocBlock.Rule -> body.append("<w:p><w:pPr><w:pBdr><w:bottom w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"BFBFBF\"/></w:pBdr></w:pPr></w:p>")
                 DocBlock.PageBreak -> body.append("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>")
             }

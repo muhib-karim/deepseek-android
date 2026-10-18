@@ -1,0 +1,7 @@
+{
+  "name": "web-summary",
+  "description": "Read one or more web pages with web_fetch and write a faithful, cited summary.",
+  "version": "1.0.0",
+  "tools": [],
+  "pip": []
+}

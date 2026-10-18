@@ -135,6 +135,30 @@ class PdfLayoutEngineTest {
         assertThrows(IllegalArgumentException::class.java) { engine.layout(null, tooMany) }
     }
 
+    @Test fun standaloneImagesAreScaledCaptionedAndMissingOnesExplained() {
+        assertEquals(DocBlock.Image("chart.png", "Revenue by month"), DocumentModel.parse("![Revenue by month](chart.png)").single())
+        val images = PdfLayoutEngine(ApproximateMeasurer, spec) { source -> if (source == "chart.png") 1200 to 800 else null }
+        val layout = images.layout(null, "Intro\n\n![Revenue by month](chart.png)\n\n![Missing](nope.png)")
+        val image = layout.pages.flatMap { it.ops.filterIsInstance<PdfOp.Image>() }.single()
+        assertEquals("chart.png", image.source)
+        assertEquals(spec.contentWidth, image.width, 0.01f)
+        assertEquals(image.width * 800 / 1200, image.height, 0.01f)
+        val texts = bodyTexts(layout)
+        val caption = texts.single { it.text == "Revenue by month" }
+        assertEquals(PdfFont.ITALIC, caption.font)
+        assertTrue(caption.baseline > image.y + image.height)
+        assertTrue(texts.any { it.text.contains("[Image not available: nope.png]") })
+    }
+
+    @Test fun imagesThatDoNotFitMoveToTheNextPage() {
+        val images = PdfLayoutEngine(ApproximateMeasurer, spec) { 1000 to 1000 }
+        val layout = images.layout(null, (1..30).joinToString("\n\n") { "p$it" } + "\n\n![](tall.png)")
+        assertEquals(2, layout.pageCount)
+        val image = layout.pages[1].ops.filterIsInstance<PdfOp.Image>().single()
+        assertEquals(spec.margin, image.y, 0.01f)
+        assertTrue(image.height <= (spec.height - 2 * spec.margin) * 0.6f + 0.01f)
+    }
+
     @Test fun emptyInputStillProducesOnePage() {
         assertEquals(1, engine.layout(null, "").pageCount)
         assertEquals(1, engine.layout("Only a title", "").pageCount)

@@ -1,6 +1,9 @@
 package app.dsandroid.tools
 
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.text.TextPaint
@@ -9,13 +12,36 @@ import app.dsandroid.core.markdown.InlineSpan
 import app.dsandroid.core.pdf.*
 import app.dsandroid.core.tools.*
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.*
 import kotlin.coroutines.coroutineContext
 
-/** Android metrics and drawing for the :core PDF layout engine. */
-class AndroidPdfRenderer : TextMeasurer {
+/** Android metrics and drawing for the :core PDF layout engine; [images] maps Markdown image paths to files. */
+class AndroidPdfRenderer(private val images: (String) -> File? = { null }) : TextMeasurer {
     private val paints = HashMap<Pair<PdfFont, Float>, TextPaint>()
+
+    fun imageSize(source: String): Pair<Int, Int>? {
+        val file = images(source) ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
+    }
+
+    /** Decodes at about twice the drawn size, enough for print without holding full-resolution bitmaps. */
+    private fun drawImage(canvas: Canvas, op: PdfOp.Image) {
+        val file = images(op.source) ?: return
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= op.width * 2 && bounds.outHeight / (sample * 2) >= op.height * 2) sample *= 2
+        val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return
+        try {
+            canvas.drawBitmap(bitmap, null, RectF(op.x, op.y, op.x + op.width, op.y + op.height), Paint(Paint.FILTER_BITMAP_FLAG))
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private fun paint(font: PdfFont, size: Float): TextPaint = paints.getOrPut(font to size) {
         TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -55,6 +81,7 @@ class AndroidPdfRenderer : TextMeasurer {
                         canvas.drawLine(op.x1, op.y1, op.x2, op.y2, stroke)
                         stroke.strokeWidth = 0.5f
                     }
+                    is PdfOp.Image -> drawImage(canvas, op)
                 }
                 document.finishPage(current)
                 page = null
@@ -69,9 +96,9 @@ class AndroidPdfRenderer : TextMeasurer {
     }
 
     /** Lays out and renders markdown to PDF bytes. */
-    suspend fun pdf(title: String?, markdown: String): ByteArray = render(PdfLayoutEngine(this).layout(title, markdown))
+    suspend fun pdf(title: String?, markdown: String): ByteArray = render(PdfLayoutEngine(this, imageSize = ::imageSize).layout(title, markdown))
 
-    suspend fun pdf(title: String?, blocks: List<DocBlock>): ByteArray = render(PdfLayoutEngine(this).layout(title, blocks))
+    suspend fun pdf(title: String?, blocks: List<DocBlock>): ByteArray = render(PdfLayoutEngine(this, imageSize = ::imageSize).layout(title, blocks))
 }
 
 /**
@@ -82,7 +109,8 @@ class AndroidPdfRenderer : TextMeasurer {
 class CreatePdfTool : Tool {
     override val name = "create_pdf"
     override val description = "Create a PDF document from Markdown: headings, paragraphs, bold/italic, bullet and numbered lists, tables, " +
-        "code blocks, block quotes and page breaks (a line with \\pagebreak). Shown to the user as a file card."
+        "code blocks, block quotes, page breaks (a line with \\pagebreak) and images from this chat's folder on their own line, " +
+        "e.g. ![Revenue by month](chart.png) after making chart.png with run_python. Shown to the user as a file card."
     override val risk = Risk.SAFE
     override val kind = ToolKind.WRITE
     override val schema = objectSchema(mapOf(
@@ -92,10 +120,13 @@ class CreatePdfTool : Tool {
     ), listOf("title", "markdown"))
 
     override suspend fun run(args: JsonObject, ctx: ToolContext): ToolResult {
-        val renderer = AndroidPdfRenderer()
-        if ("markdown" !in args) return legacy(args, ctx, renderer)
+        if ("markdown" !in args) return legacy(args, ctx, AndroidPdfRenderer())
+        // Images may only come from this chat's folder (chatFile refuses traversal and absolute paths).
+        val renderer = AndroidPdfRenderer { source ->
+            runCatching { ctx.chatFile(source) }.getOrNull()?.takeIf { it.isFile && it.length() <= 20L * 1024 * 1024 }
+        }
         val title = args.stringArg("title").trim().take(300)
-        val layout = PdfLayoutEngine(renderer).layout(title, args.stringArg("markdown"))
+        val layout = PdfLayoutEngine(renderer, imageSize = renderer::imageSize).layout(title, args.stringArg("markdown"))
         val bytes = renderer.render(layout)
         require(bytes.size <= 20 * 1024 * 1024) { "PDF exceeds 20 MB" }
         val requested = args.optionalString("file_path")?.trim()?.takeIf { it.isNotEmpty() } ?: "${slug(title)}.pdf"

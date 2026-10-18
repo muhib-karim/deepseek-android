@@ -14,6 +14,8 @@ sealed interface DocBlock {
     data class Code(val language: String, val text: String) : DocBlock
     data class Quote(val spans: List<InlineSpan>) : DocBlock
     data class Table(val header: List<List<InlineSpan>>, val rows: List<List<List<InlineSpan>>>, val alignments: List<TableAlignment>) : DocBlock
+    /** A paragraph that is only an image, e.g. ![Revenue by month](chart.png); [source] is a path in the chat folder. */
+    data class Image(val source: String, val alt: String) : DocBlock
     data object Rule : DocBlock
     data object PageBreak : DocBlock
 }
@@ -24,6 +26,7 @@ object DocumentModel {
         """^\s*(\\pagebreak|\\newpage|<!--\s*page\s*-?\s*break\s*-->|<div\s+style\s*=\s*["']\s*page-break-(after|before)\s*:\s*always;?\s*["']\s*>\s*</div>)\s*$""",
         RegexOption.IGNORE_CASE)
     private val fence = Regex("^ {0,3}(`{3,}|~{3,})")
+    private val image = Regex("^!\\[([^\\]]*)]\\(\\s*<?([^)\\s>]+)>?(?:\\s+\"[^\"]*\")?\\s*\\)$")
 
     fun parse(markdown: String): List<DocBlock> {
         require(markdown.length <= MAX_MARKDOWN_CHARS) { "Document text exceeds $MAX_MARKDOWN_CHARS characters" }
@@ -63,7 +66,10 @@ object DocumentModel {
             if (block !is MarkdownBlock.ListBlock) { indents.clear(); counters.clear(); orderedAt.clear() }
             when (block) {
                 is MarkdownBlock.Heading -> result += DocBlock.Heading(block.level.coerceIn(1, 6), MarkdownParser.inline(block.text))
-                is MarkdownBlock.Paragraph -> result += DocBlock.Paragraph(MarkdownParser.inline(block.text))
+                is MarkdownBlock.Paragraph -> {
+                    val picture = image.matchEntire(block.text.trim())
+                    result += if (picture != null) DocBlock.Image(picture.groupValues[2], picture.groupValues[1]) else DocBlock.Paragraph(MarkdownParser.inline(block.text))
+                }
                 is MarkdownBlock.ListBlock -> block.items.forEachIndexed { index, item ->
                     val width = block.indents.getOrElse(index) { 0 }
                     while (indents.isNotEmpty() && width < indents.last()) indents.removeAt(indents.lastIndex)
