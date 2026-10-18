@@ -13,7 +13,7 @@ import org.junit.rules.TemporaryFolder
 class CreateImageToolTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun rendererReceivesOnlySanitizedSvgAndOutputIsShareablePng() = runBlocking {
+    @Test fun rendererReceivesOnlySanitizedSvgAndOutputIsShareablePng() = runBlocking<Unit> {
         var rendered = ""
         val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
         val tool = CreateImageTool(SvgRasterizer { svg -> rendered = svg; png })
@@ -29,7 +29,7 @@ class CreateImageToolTest {
         assertEquals("image/png", result.artifacts.single().mimeType)
     }
 
-    @Test fun unsafeOutputCannotEscapeWorkspace() = runBlocking {
+    @Test fun unsafeOutputCannotEscapeWorkspace() = runBlocking<Unit> {
         val workspace = WorkspacePath(temporary.newFolder())
         try {
             CreateImageTool(SvgRasterizer { byteArrayOf(1) }).run(buildJsonObject {

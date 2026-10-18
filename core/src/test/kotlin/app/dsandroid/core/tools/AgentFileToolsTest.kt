@@ -27,7 +27,7 @@ class AgentFileToolsTest {
         }
     }
 
-    @Test fun writeThenReadRoundTripsWithLineNumbersOffsetAndLimit() = runBlocking {
+    @Test fun writeThenReadRoundTripsWithLineNumbersOffsetAndLimit() = runBlocking<Unit> {
         val ctx = context()
         val created = WriteTool().run(args("file_path" to "notes/plan.md", "content" to "one\ntwo\r\nthree\nfour"), ctx)
         assertEquals("Created notes/plan.md (19 bytes)", created.content)
@@ -43,7 +43,7 @@ class AgentFileToolsTest {
         assertEquals("     1\tnew", ReadTool().run(lenient, ctx).content)
     }
 
-    @Test fun pathsCannotLeaveTheChatFolder() = runBlocking {
+    @Test fun pathsCannotLeaveTheChatFolder() = runBlocking<Unit> {
         val ctx = context()
         listOf("../other/x.txt", "/etc/passwd", "a/../../x", "", "C:\\x", "~/x").forEach { path ->
             try {
@@ -57,7 +57,7 @@ class AgentFileToolsTest {
         assertThrows(IllegalArgumentException::class.java) { runBlocking { ReadTool().run(args("file_path" to "missing.txt"), ctx) } }
     }
 
-    @Test fun presentReturnsWorkspaceRelativeArtifactCards() = runBlocking {
+    @Test fun presentReturnsWorkspaceRelativeArtifactCards() = runBlocking<Unit> {
         val ctx = context()
         WriteTool().run(args("file_path" to "out/chart.svg", "content" to "<svg/>"), ctx)
         WriteTool().run(args("file_path" to "report.md", "content" to "# Hi"), ctx)
@@ -76,7 +76,7 @@ class AgentFileToolsTest {
         assertThrows(IllegalArgumentException::class.java) { runBlocking { PresentTool().run(args("files" to five), ctx) } }
     }
 
-    @Test fun writeFileCreatesTypedDocumentsWithoutOverwriting() = runBlocking {
+    @Test fun writeFileCreatesTypedDocumentsWithoutOverwriting() = runBlocking<Unit> {
         val ctx = context()
         val docx = WriteFileTool().run(args("file_path" to "summary.docx", "content" to "# Summary\n\n- point", "title" to "Summary"), ctx)
         val card = docx.artifacts.single()

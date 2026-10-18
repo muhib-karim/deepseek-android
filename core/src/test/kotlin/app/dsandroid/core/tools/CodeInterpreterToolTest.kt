@@ -17,7 +17,7 @@ class CodeInterpreterToolTest {
     @get:Rule val temporary = TemporaryFolder()
     private fun context() = ToolContext(WorkspacePath(temporary.newFolder()))
 
-    @Test fun returnsSeparateBoundedChannelsAndPreservesUndefinedVersusNull() = runBlocking {
+    @Test fun returnsSeparateBoundedChannelsAndPreservesUndefinedVersusNull() = runBlocking<Unit> {
         val tool = CodeInterpreterTool(CodeExecutor { request ->
             check(request.language == CodeLanguage.JAVASCRIPT)
             check(request.code == "return null")
@@ -34,7 +34,7 @@ class CodeInterpreterToolTest {
         assertFalse(Json.parseToJsonElement(undefined.content).jsonObject["hasValue"]!!.jsonPrimitive.boolean)
     }
 
-    @Test fun rejectsUnsupportedOrOversizedCodeBeforeExecutorCanRun() = runBlocking {
+    @Test fun rejectsUnsupportedOrOversizedCodeBeforeExecutorCanRun() = runBlocking<Unit> {
         val tool = CodeInterpreterTool(CodeExecutor { error("Invalid request reached execution") })
         for (args in listOf(
             buildJsonObject { put("language", "shell"); put("code", "anything") },
@@ -47,7 +47,7 @@ class CodeInterpreterToolTest {
         }
     }
 
-    @Test fun capsTotalNativeOutputEvenIfAnExecutorViolatesTheContract() = runBlocking {
+    @Test fun capsTotalNativeOutputEvenIfAnExecutorViolatesTheContract() = runBlocking<Unit> {
         val tool = CodeInterpreterTool(CodeExecutor {
             CodeExecution(stdout = "a".repeat(20_000), stderr = "b".repeat(20_000), value = "c".repeat(20_000))
         })
@@ -58,7 +58,7 @@ class CodeInterpreterToolTest {
         assertTrue(json["truncated"]!!.jsonPrimitive.boolean)
     }
 
-    @Test fun reportsTimeoutAsErrorAndPropagatesCancellation() = runBlocking {
+    @Test fun reportsTimeoutAsErrorAndPropagatesCancellation() = runBlocking<Unit> {
         val args = buildJsonObject { put("language", "javascript"); put("code", "while(true){}") }
         val timeout = CodeInterpreterTool(CodeExecutor { CodeExecution(timedOut = true, failed = true) }).run(args, context())
         assertTrue(timeout.isError)

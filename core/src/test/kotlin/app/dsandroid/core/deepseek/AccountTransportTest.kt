@@ -22,7 +22,7 @@ class AccountTransportTest {
     private val expiry = "Your DeepSeek session expired. Please sign in again."
     private val changed = "DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings."
 
-    @Test fun renameAndDeleteUseRemoteSessionIdsAndAuthenticatedJson() = runBlocking {
+    @Test fun renameAndDeleteUseRemoteSessionIdsAndAuthenticatedJson() = runBlocking<Unit> {
         withServer { server, client ->
             repeat(2) { server.enqueue(envelope("{}")) }
             client.renameSession(credentials, "server-session", "Renamed conversation")
@@ -41,7 +41,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun mutationsAcceptExplicitNullAcknowledgementsButStillRequireTheEnvelope() = runBlocking {
+    @Test fun mutationsAcceptExplicitNullAcknowledgementsButStillRequireTheEnvelope() = runBlocking<Unit> {
         withServer { server, client ->
             repeat(2) { server.enqueue(envelope("null")) }
             client.renameSession(credentials, "session", "Title")
@@ -53,7 +53,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun uploadUsesMultipartBytesNameAndMimeAndAcceptsBothIdShapes() = runBlocking {
+    @Test fun uploadUsesMultipartBytesNameAndMimeAndAcceptsBothIdShapes() = runBlocking<Unit> {
         withServer { server, client ->
             val file = Files.createTempFile("account-upload", ".bin").toFile()
             try {
@@ -76,7 +76,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun regenerateAndEditedBranchesKeepExplicitPriorAssistantAndModeAndFileReferences() = runBlocking {
+    @Test fun regenerateAndEditedBranchesKeepExplicitPriorAssistantAndModeAndFileReferences() = runBlocking<Unit> {
         withServer { server, client ->
             val inputs = listOf(
                 CompletionInput("session", 20L, "Original prompt", true, false, listOf("file-1")),
@@ -99,7 +99,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun everySessionExpiryEnvelopeLocationHasTheExactSafeMessage() = runBlocking {
+    @Test fun everySessionExpiryEnvelopeLocationHasTheExactSafeMessage() = runBlocking<Unit> {
         withServer { server, client ->
             listOf(40001, 40002, 40003).forEach { code ->
                 listOf(
@@ -119,7 +119,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun unexpectedHttpAndMalformedRequiredEnvelopesHaveTheExactSafeMessage() = runBlocking {
+    @Test fun unexpectedHttpAndMalformedRequiredEnvelopesHaveTheExactSafeMessage() = runBlocking<Unit> {
         withServer { server, client ->
             listOf(302, 404, 410, 500, 503).forEach { code ->
                 server.enqueue(MockResponse().setResponseCode(code).setBody("synthetic-session"))
@@ -138,7 +138,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun malformedUploadShapeAndChallengeCannotBecomeSuccess() = runBlocking {
+    @Test fun malformedUploadShapeAndChallengeCannotBecomeSuccess() = runBlocking<Unit> {
         withServer { server, client ->
             val file = Files.createTempFile("bad-upload", ".txt").toFile()
             try {
@@ -154,7 +154,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun malformedStreamAndBusinessExpiryAreTypedThroughTheTransport() = runBlocking {
+    @Test fun malformedStreamAndBusinessExpiryAreTypedThroughTheTransport() = runBlocking<Unit> {
         withServer { server, client ->
             listOf(40001, 40002, 40003).forEach { code ->
                 listOf("""{"code":$code,"message":"synthetic-session"}""", """{"data":{"biz_code":$code,"biz_msg":"synthetic-session"}}""").forEach { event ->
@@ -173,7 +173,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun anHttpBodyTruncatedDuringAStreamIsATypedProtocolFailure() = runBlocking {
+    @Test fun anHttpBodyTruncatedDuringAStreamIsATypedProtocolFailure() = runBlocking<Unit> {
         withServer { server, client ->
             server.enqueue(challenge())
             server.enqueue(sse("data: {\"v\":{\"response_message_id\":22}}\n\n")
@@ -182,7 +182,7 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun allNewRemoteActionsPropagateSessionExpiry() = runBlocking {
+    @Test fun allNewRemoteActionsPropagateSessionExpiry() = runBlocking<Unit> {
         withServer { server, client ->
             val file = Files.createTempFile("expired-upload", ".txt").toFile()
             try {
@@ -200,11 +200,11 @@ class AccountTransportTest {
         }
     }
 
-    @Test fun cancellationClosesAnInitialRequestWithoutWaitingForReadTimeout() = runBlocking {
+    @Test fun cancellationClosesAnInitialRequestWithoutWaitingForReadTimeout() = runBlocking<Unit> {
         cancellationClosesBlockingCall(SocketPolicy.NO_RESPONSE, false)
     }
 
-    @Test fun cancellationClosesABlockedStreamAndAllowsTheNextRequest() = runBlocking {
+    @Test fun cancellationClosesABlockedStreamAndAllowsTheNextRequest() = runBlocking<Unit> {
         cancellationClosesBlockingCall(SocketPolicy.KEEP_OPEN, true)
     }
 

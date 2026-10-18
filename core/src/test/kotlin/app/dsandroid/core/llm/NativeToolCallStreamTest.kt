@@ -32,7 +32,7 @@ class NativeToolCallStreamTest {
     private val pythonSpec = ToolSpec(function = FunctionSpec("run_python", "Run Python", objectSchema(mapOf(
         "code" to stringSchema("Code"), "timeout_s" to buildJsonObject { put("type", "integer") }), listOf("code"))))
 
-    @Test fun interleavedToolCallDeltasAssembleByIndex() = runBlocking {
+    @Test fun interleavedToolCallDeltasAssembleByIndex() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(sse(
                 """{"choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":"Plan."}}]}""",
@@ -58,7 +58,7 @@ class NativeToolCallStreamTest {
         }
     }
 
-    @Test fun requestCarriesToolsAndToolResultMessages() = runBlocking {
+    @Test fun requestCarriesToolsAndToolResultMessages() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(sse("""{"choices":[{"index":0,"delta":{"content":"4"},"finish_reason":"stop"}]}"""))
             val history = listOf(
@@ -83,7 +83,7 @@ class NativeToolCallStreamTest {
         }
     }
 
-    @Test fun agentLoopRoundTripsANativeToolCall() = runBlocking {
+    @Test fun agentLoopRoundTripsANativeToolCall() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(sse(
                 """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"echo","arguments":"{\"text\":"}}]}}]}""",

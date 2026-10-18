@@ -13,7 +13,7 @@ import org.junit.Test
 
 class WebClientTest {
     private val credentials = WebCredentials(SessionToken.parse("synthetic-session")!!, "ds_session_id=synthetic-cookie")
-    @Test fun requestsCarryBothCredentialsAndNextTurnUsesLatestParent() = runBlocking {
+    @Test fun requestsCarryBothCredentialsAndNextTurnUsesLatestParent() = runBlocking<Unit> {
         val server = MockWebServer()
         server.start()
         try {
@@ -49,7 +49,7 @@ class WebClientTest {
             assertEquals(true, next["search_enabled"]!!.jsonPrimitive.boolean)
         } finally { server.shutdown() }
     }
-    @Test fun terminalEventFinishesWithoutWaitingForConnectionClose() = runBlocking {
+    @Test fun terminalEventFinishesWithoutWaitingForConnectionClose() = runBlocking<Unit> {
         val server = MockWebServer(); server.start()
         try {
             server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":0,"biz_data":{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"sig"}}}}"""))
@@ -67,7 +67,7 @@ data: [DONE]
             assertTrue(reply.finished)
         } finally { server.shutdown() }
     }
-    @Test fun http401AndBusiness401ExpireSessionWithoutLeakingBody() = runBlocking {
+    @Test fun http401AndBusiness401ExpireSessionWithoutLeakingBody() = runBlocking<Unit> {
         val server = MockWebServer(); server.start()
         try {
             val client = DeepSeekWebClient(OkHttpClient(), server.url("/"))
@@ -77,7 +77,7 @@ data: [DONE]
             try { client.createSession(credentials); fail("Expected expiry") } catch (_: SessionExpired) { }
         } finally { server.shutdown() }
     }
-    @Test fun redirectsAreNeverFollowedWithSessionCredentials() = runBlocking {
+    @Test fun redirectsAreNeverFollowedWithSessionCredentials() = runBlocking<Unit> {
         val server = MockWebServer(); server.start()
         try {
             server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", server.url("/stolen")))
@@ -87,7 +87,7 @@ data: [DONE]
         } finally { server.shutdown() }
     }
 
-    @Test fun birthdayGateIsReadFromCurrentUser() = runBlocking {
+    @Test fun birthdayGateIsReadFromCurrentUser() = runBlocking<Unit> {
         val server = MockWebServer(); server.start()
         try {
             server.enqueue(MockResponse().setBody("""{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"id":"u","need_birthday":true,"minor_mode_status":"NONE"}}}"""))

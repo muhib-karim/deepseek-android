@@ -80,9 +80,20 @@ object ToolCallProtocol {
         }
     }
 
+    private val JSON_NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?")
+
+    /** kotlinx parseToJsonElement accepts unquoted literals; reject anything that is not strict JSON. */
+    private fun strictJson(element: JsonElement): Boolean = when (element) {
+        is JsonNull -> true
+        is JsonObject -> element.values.all { strictJson(it) }
+        is JsonArray -> element.all { strictJson(it) }
+        is JsonPrimitive -> element.isString || element.content == "true" || element.content == "false" || JSON_NUMBER.matches(element.content)
+    }
+
     private fun validate(json: String): Pair<String, JsonObject> {
         val element = try { Json.parseToJsonElement(escapeRawControls(json)) }
         catch (_: Exception) { throw IllegalArgumentException("The tool block is not valid JSON.") }
+        if (!strictJson(element)) throw IllegalArgumentException("The tool block is not valid JSON.")
         val root = element as? JsonObject ?: throw IllegalArgumentException("The tool block must be a JSON object.")
         require(root.keys == setOf("name", "arguments")) { "The tool block must contain only \"name\" and \"arguments\"." }
         val name = (root["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content

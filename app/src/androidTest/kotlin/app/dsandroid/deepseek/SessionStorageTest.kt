@@ -13,7 +13,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SessionStorageTest {
-    @Test fun logoutClearsOnlyDeepSeekCredentialsAndPreservesOtherHostCookies() = runBlocking {
+    @Test fun logoutClearsOnlyDeepSeekCredentialsAndPreservesOtherHostCookies() = runBlocking<Unit> {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = DeepSeekSessionStore(context)
         store.save(SessionToken.parse("synthetic-storage-session")!!)

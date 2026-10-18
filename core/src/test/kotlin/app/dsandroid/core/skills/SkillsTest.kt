@@ -119,7 +119,7 @@ class SkillsTest {
         assertEquals("# pdf-report\nUse it well.", store.instructions(store.list().single()))
     }
 
-    @Test fun skillToolLoadsInstructionsForEnabledSkillsOnly() = runBlocking {
+    @Test fun skillToolLoadsInstructionsForEnabledSkillsOnly() = runBlocking<Unit> {
         val store = SkillStore(temporary.newFolder("skills"))
         store.syncBuiltIns(listOf(pack("pdf-report"), pack("data-analysis", tools = true)))
         store.setEnabled("pdf-report", false)
@@ -136,7 +136,7 @@ class SkillsTest {
             SkillPrompt.section(store.enabled()))
     }
 
-    @Test fun skillFunctionsRunMainPyThroughThePythonHarness() = runBlocking {
+    @Test fun skillFunctionsRunMainPyThroughThePythonHarness() = runBlocking<Unit> {
         val store = SkillStore(temporary.newFolder("skills"))
         val entry = store.install(SkillPackReader.fromFiles(mapOf(
             "manifest.json" to manifest.toByteArray(), "SKILL.md" to "x".toByteArray(), "main.py" to "def describe(path): return path".toByteArray())))

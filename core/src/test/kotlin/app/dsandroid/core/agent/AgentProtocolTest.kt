@@ -23,7 +23,7 @@ class AgentProtocolTest {
     private fun response(vararg chunks: ChatChunk) = MockResponse().setHeader("Content-Type", "text/event-stream")
         .setBody(chunks.joinToString("") { "data: ${LlmJson.encodeToString(it)}\n\n" } + "data: [DONE]\n\n")
 
-    @Test fun realStreamingRequestsSearchFetchDenialAndAnswerCarryToolIdsAndReasoning() = runBlocking {
+    @Test fun realStreamingRequestsSearchFetchDenialAndAnswerCarryToolIdsAndReasoning() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(response(chunk(StreamDelta(reasoningContent = "Find evidence")),
                 chunk(StreamDelta(toolCalls = listOf(ToolCallDelta(0, "search1", function = FunctionDelta("web_search", "{\"query\":"))))),
@@ -61,7 +61,7 @@ class AgentProtocolTest {
         }
     }
 
-    @Test fun chatWireOmitsToolsAndToolChoice() = runBlocking {
+    @Test fun chatWireOmitsToolsAndToolChoice() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.enqueue(response(chunk(StreamDelta(content = "Hello"), "stop")))
             val client = OpenAiCompatibleClient(server.url("/").toString(), "deepseek-chat", CustomEndpointAuth(""), ClientIdentity("test", "en", 0))

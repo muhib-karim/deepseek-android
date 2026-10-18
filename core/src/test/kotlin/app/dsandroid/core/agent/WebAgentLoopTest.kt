@@ -65,7 +65,7 @@ class WebAgentLoopTest {
 
     private fun answers(events: List<AgentEvent>) = events.filterIsInstance<AgentEvent.StepsUpdated>().last().steps
 
-    @Test fun toolResultRoundTripsAsTheNextChatMessage() = runBlocking {
+    @Test fun toolResultRoundTripsAsTheNextChatMessage() = runBlocking<Unit> {
         val transport = FakeTransport { index ->
             if (index == 0) "I'll echo that.\n" + block("echo", """{"text": "hi"}""") else "The tool said: echo: hi"
         }
@@ -99,7 +99,7 @@ class WebAgentLoopTest {
         assertEquals("tool", history[2].role)
     }
 
-    @Test fun stepLimitStopsAModelThatNeverFinishes() = runBlocking {
+    @Test fun stepLimitStopsAModelThatNeverFinishes() = runBlocking<Unit> {
         val transport = FakeTransport { block("echo", """{"text": "again"}""") }
         val echo = EchoTool()
         val events = loop(transport, echo).run(mutableListOf(ChatMessage("user", "Loop forever"))).toList()
@@ -109,7 +109,7 @@ class WebAgentLoopTest {
         assertTrue(error.message.contains("8 assistant steps"))
     }
 
-    @Test fun slowToolTimesOutAndTheModelIsTold() = runBlocking {
+    @Test fun slowToolTimesOutAndTheModelIsTold() = runBlocking<Unit> {
         val transport = FakeTransport { index -> if (index == 0) block("slow", "{}") else "It timed out, sorry." }
         val events = loop(transport, SlowTool(), timeoutMs = 150).run(mutableListOf(ChatMessage("user", "Be slow"))).toList()
         assertTrue(events.last() is AgentEvent.Done)
@@ -120,7 +120,7 @@ class WebAgentLoopTest {
         assertFalse(json["ok"]!!.jsonPrimitive.boolean)
     }
 
-    @Test fun malformedBlockGetsOneRepairPromptThenRuns() = runBlocking {
+    @Test fun malformedBlockGetsOneRepairPromptThenRuns() = runBlocking<Unit> {
         val transport = FakeTransport { index ->
             when (index) {
                 0 -> "Working on it.\n$fence" + "tool\n{\"name\": \"echo\", \"arguments\": {\"text\": \"hi\"}\n$fence"
@@ -140,7 +140,7 @@ class WebAgentLoopTest {
         assertFalse(shown.contains(fence))
     }
 
-    @Test fun secondMalformedReplyIsShownAsPlainText() = runBlocking {
+    @Test fun secondMalformedReplyIsShownAsPlainText() = runBlocking<Unit> {
         val broken = "$fence" + "tool\n{\"name\": \"echo\" \"arguments\": {}}\n$fence"
         val transport = FakeTransport { index -> if (index == 0) "First try.\n$broken" else "Second try.\n$broken" }
         val echo = EchoTool()
@@ -154,7 +154,7 @@ class WebAgentLoopTest {
         assertTrue(text.contains("Second try.\n$broken"))
     }
 
-    @Test fun deepThinkReasoningIsStreamedAsReasoningSteps() = runBlocking {
+    @Test fun deepThinkReasoningIsStreamedAsReasoningSteps() = runBlocking<Unit> {
         val transport = object : WebChatTransport {
             override fun send(prompt: String, kind: WebPromptKind): Flow<WebReply> = flow {
                 emit(WebReply(thinking = "Consider"))

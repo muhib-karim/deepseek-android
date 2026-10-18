@@ -90,9 +90,9 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     val answer = app.dsandroid.core.chat.FollowUps.display(step.text, working)
                     val speechId = "${item.id}:$index"
                     if (speech != null && speech.owner == speechId) SpokenText(speech.text, speech, Modifier.fillMaxWidth().padding(vertical = 6.dp))
-                    else MarkdownText(answer, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
+                    else MarkdownText(answer, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources, onCitation = {
                         selectedSource = it; sourcesVisible = true
-                    }
+                    })
                     if (!working && speech != null) ReadAloudControls(speechId, answer, speech, speechError)
                     val fences = remember(step.text) { FencedArtifacts.parse(step.text) }
                     fences.forEachIndexed { fenceIndex, fence ->

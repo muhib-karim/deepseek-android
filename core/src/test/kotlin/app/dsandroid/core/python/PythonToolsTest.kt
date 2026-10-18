@@ -22,7 +22,7 @@ import org.junit.rules.TemporaryFolder
 class PythonToolsTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun runPythonReportsOutputAndTurnsNewFilesIntoCards() = runBlocking {
+    @Test fun runPythonReportsOutputAndTurnsNewFilesIntoCards() = runBlocking<Unit> {
         val ctx = ToolContext(WorkspacePath(temporary.newFolder("workspace")), chatDir = "account/chat-9")
         var seen: PythonRun? = null
         val executor = PythonExecutor { run ->
@@ -44,7 +44,7 @@ class PythonToolsTest {
         assertEquals("image/png", result.artifacts.single().mimeType)
     }
 
-    @Test fun unchangedFilesAreNotReportedAndErrorsAreFlagged() = runBlocking {
+    @Test fun unchangedFilesAreNotReportedAndErrorsAreFlagged() = runBlocking<Unit> {
         val ctx = ToolContext(WorkspacePath(temporary.newFolder("workspace")), chatDir = "c")
         ctx.workspace.root.resolve("c").mkdirs()
         ctx.workspace.root.resolve("c/data.csv").writeText("a\n1")
@@ -60,7 +60,7 @@ class PythonToolsTest {
         assertThrows(IllegalArgumentException::class.java) { runBlocking { RunPythonTool(slow).run(buildJsonObject { put("code", " ") }, ctx) } }
     }
 
-    @Test fun outputIsBoundedAcrossStreams() = runBlocking {
+    @Test fun outputIsBoundedAcrossStreams() = runBlocking<Unit> {
         val ctx = ToolContext(WorkspacePath(temporary.newFolder("workspace")))
         val noisy = PythonExecutor { PythonOutcome(stdout = "o".repeat(PythonTools.MAX_OUTPUT_CHARS), stderr = "e".repeat(100)) }
         val json = Json.parseToJsonElement(RunPythonTool(noisy).run(buildJsonObject { put("code", "noise()") }, ctx).content).jsonObject
@@ -129,7 +129,7 @@ class PythonToolsTest {
         }
     }
 
-    @Test fun installsPureWheelsWithDependenciesAndRemovesThem() = runBlocking {
+    @Test fun installsPureWheelsWithDependenciesAndRemovesThem() = runBlocking<Unit> {
         MockWebServer().use { server ->
             val pypi = FakePyPi(server)
             server.dispatcher = pypi
@@ -162,7 +162,7 @@ class PythonToolsTest {
         }
     }
 
-    @Test fun refusesChecksumMismatchesNativeCodeUnsafePathsAndMissingWheels() = runBlocking {
+    @Test fun refusesChecksumMismatchesNativeCodeUnsafePathsAndMissingWheels() = runBlocking<Unit> {
         MockWebServer().use { server ->
             val pypi = FakePyPi(server)
             server.dispatcher = pypi
