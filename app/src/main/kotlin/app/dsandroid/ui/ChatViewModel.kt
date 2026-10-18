@@ -79,6 +79,8 @@ data class ChatUiState(
     val systemPrompt: String = "",
     val facts: List<SavedFact> = emptyList(),
     val projects: List<ProjectRecord> = emptyList(),
+    val personalizing: Boolean = false,
+    val exporting: Boolean = false,
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -336,22 +338,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    // Settings and execution use the same catalog so switches cannot drift from the registry.
+    private fun builtInTools(config: AppSettings): List<Tool> = listOf(
+        CreateMarkdownTool(), CreateCsvTool(), CreateSvgTool(), CreatePdfTool(), CreateImageTool(),
+        CreateFileTool(), ListDirTool(), ListFilesTool(), ReadFileTool(), ZipFilesTool(), ListZipTool(),
+        CreateDocxTool(), CreatePptxTool(), CreateXlsxTool(), CreateChartTool(),
+        RenderChartTool(), CreateArtifactTool(), CodeInterpreterTool(codeExecutor), VisitWebTool(), WebFetchTool(),
+        WebSearchTool(if (config.searchBackend == "searxng") config.searxngUrl else null),
+        RememberTool(memoryStore) { mutableState.update { it.copy(facts = memoryStore.all()) } },
+    )
+
+    fun builtInToolNames(): List<String> = builtInTools(AppSettings()).map { it.name }
+
     private suspend fun executeRun(conversation: Conversation, run: RunConfig, checkpoint: RunCheckpoint? = null) {
         val config = settings.value
         require(config.runIdentity == run.providerKey)
         val llm = client(config, run.model, run.thinking && !(config.capabilities[run.model] ?: ModelCapabilities()).isReasoning(run.model))
-        val tools = mutableListOf<Tool>(CreateMarkdownTool(), CreateCsvTool(), CreateSvgTool(), CreatePdfTool(), CreateImageTool(),
-            CreateFileTool(), ListDirTool(), ListFilesTool(), ReadFileTool(), ZipFilesTool(), ListZipTool(),
-            CreateDocxTool(), CreatePptxTool(), CreateXlsxTool(), CreateChartTool(),
-            RenderChartTool(), CreateArtifactTool(), CodeInterpreterTool(codeExecutor))
-        if (run.agentEnabled && run.searchEnabled) {
-            tools.add(VisitWebTool()); tools.add(WebFetchTool())
-            tools.add(WebSearchTool(if (config.searchBackend == "searxng") config.searxngUrl else null))
-        }
-        if (config.memoryEnabled && !conversation.temporary) tools.add(RememberTool(memoryStore) {
-            val facts = memoryStore.all()
-            mutableState.update { it.copy(facts = facts) }
-        })
+        val tools = builtInTools(config).filterNot {
+            (it.name in setOf("web_search", "web_fetch", "visit_web") && (!run.agentEnabled || !run.searchEnabled)) ||
+                (it.name == "remember" && (!config.memoryEnabled || conversation.temporary))
+        }.toMutableList()
         config.remoteServers.forEach { server ->
             val remoteClient = McpClient(server.url)
             server.tools.forEach { tools.add(RemoteTool(server, it, remoteClient)) }
@@ -619,6 +625,70 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.running || state.value.importing) return
         conversations.map { it.id }.forEach(::deleteConversation)
     }
+    fun saveFact(id: String?, value: String) = personalize(R.string.memory_save_error) {
+        val facts = withContext(Dispatchers.IO) {
+            if (id == null) memoryStore.remember(value) else memoryStore.edit(id, value)
+            memoryStore.all()
+        }
+        mutableState.update { it.copy(facts = facts) }
+    }
+
+    fun deleteFact(id: String) = personalize(R.string.memory_save_error) {
+        val facts = withContext(Dispatchers.IO) { memoryStore.delete(id); memoryStore.all() }
+        mutableState.update { it.copy(facts = facts) }
+    }
+
+    private fun personalize(error: Int, action: suspend () -> Unit) {
+        if (!state.value.settingsReady || state.value.running || state.value.saving || state.value.importing || state.value.personalizing) return
+        mutableState.update { it.copy(personalizing = true) }
+        viewModelScope.launch {
+            try { action() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(error)) }
+            finally { mutableState.update { it.copy(personalizing = false) } }
+        }
+    }
+
+    fun setChatInstructions(value: String) {
+        if (state.value.running || value.length > 8000) return
+        current.systemPrompt = value
+        mutableState.update { it.copy(systemPrompt = value) }
+        persistConversation(current)
+    }
+
+    fun pinConversation(id: String) {
+        if (state.value.running) return
+        val conversation = conversations.find { it.id == id } ?: return
+        conversation.pinned = !conversation.pinned
+        persistConversation(conversation)
+        syncConversation()
+    }
+
+    fun exportConversation(format: ExportFormat, answerId: String?, labels: ExportLabels, language: String, ready: (Artifact) -> Unit) {
+        if (state.value.running || state.value.exporting || state.value.items.isEmpty()) return
+        val record = current.record()
+        mutableState.update { it.copy(exporting = true) }
+        viewModelScope.launch {
+            try {
+                val artifact = withContext(Dispatchers.IO) {
+                    val markdown = ConversationExporter.markdown(record, labels, answerId)
+                    val fileName = "export-${UUID.randomUUID()}.${format.extension}"
+                    val ctx = ToolContext(workspace)
+                    val result = if (format == ExportFormat.PDF) CreatePdfTool().run(buildJsonObject {
+                        put("fileName", fileName); put("content", markdown)
+                    }, ctx) else {
+                        val content = if (format == ExportFormat.HTML) ConversationExporter.html(markdown, language) else markdown
+                        writeArtifact(ctx, fileName, ".${format.extension}", format.mime, content.toByteArray(Charsets.UTF_8))
+                    }
+                    result.artifacts.single()
+                }
+                ready(artifact)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.export_error)) }
+            finally { mutableState.update { it.copy(exporting = false) } }
+        }
+    }
+
     fun answerConfirmation(allow: Boolean) { confirmationReply?.complete(allow) }
     fun stop() {
         stoppedRunId = activeRunId
