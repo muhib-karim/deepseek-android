@@ -14,6 +14,7 @@
     </queries>
     <application
         android:name=".DsAndroidApplication"
+        android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
