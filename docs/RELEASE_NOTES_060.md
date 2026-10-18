@@ -1,8 +1,8 @@
 # v0.6.0 "Agent" (2026-10-18)
 
 DeepSeek can now use tools on the phone, in account-mode web chat and with an API key.
-Validation status: implementation and tests complete; **CI and emulator results pending** (see the
-feature table in [AGENT_MODE.md](AGENT_MODE.md)).
+Validation: CI green on PR #18 (core + app unit tests, lint, debug + signed release builds) and
+62/62 instrumented tests on an API 34 x86_64 emulator, including prompt -> create_pdf tool call -> PDF artifact card and on-device Python. Full table in [AGENT_MODE.md](AGENT_MODE.md).
 
 ## New
 
