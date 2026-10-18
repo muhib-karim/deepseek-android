@@ -216,9 +216,11 @@ class AccountTransportTest {
             // A cancelled stream whose body is closed while suspended between events ends via callEnd; either way the call is closed.
             override fun callEnd(call: Call) { if (call.request().url.encodedPath.endsWith("/chat/completion")) failed.countDown() }
         }).build()
-        val server = MockWebServer(); server.start()
+        // Bind and dial one IPv4 address: a cancelled call marks its route failed in OkHttp, and "localhost" would then fall to an unbound ::1.
+        val loopback = java.net.InetAddress.getByName("127.0.0.1")
+        val server = MockWebServer(); server.start(loopback, 0)
         try {
-            val client = DeepSeekWebClient(network, server.url("/"))
+            val client = DeepSeekWebClient(network, server.url("/").newBuilder().host("127.0.0.1").build())
             if (streaming) {
                 server.enqueue(challenge())
                 server.enqueue(sse("data: {\"v\":{\"response_message_id\":22}}\n\n").setHeader("Content-Length", 1000000).setSocketPolicy(policy))
