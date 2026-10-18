@@ -14,6 +14,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.dsandroid.SmokeActivity
 import app.dsandroid.core.deepseek.SessionToken
 import app.dsandroid.core.deepseek.WebHistory
+import app.dsandroid.core.agent.ToolStatus
+import app.dsandroid.core.agent.TurnStep
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -190,7 +192,7 @@ class AgentModeTest {
         compose.waitUntil(30_000) { !vm.state.value.busy && completions.size == 2 }
         val result = completions.toList()[1]["prompt"]!!.jsonPrimitive.content
         assertTrue(result.contains("\"ok\":false") && result.contains("declined"))
-        val step = vm.state.value.messages.last().steps.filterIsInstance<app.dsandroid.core.agent.TurnStep.ToolCall>().single()
-        assertEquals(app.dsandroid.core.agent.ToolStatus.DENIED, step.status)
+        val step = vm.state.value.messages.last().steps.filterIsInstance<TurnStep.ToolCall>().single()
+        assertEquals(ToolStatus.DENIED, step.status)
     }
 }
