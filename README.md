@@ -3,9 +3,55 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current release: **v0.5.1** (not audited). Each GitHub release carries a debug APK,
-a signed minified release APK and SHA256SUMS.txt. Builds, unit
-tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
+Current version: **v0.6.0 "Agent"** (not audited; validation pending in CI, see below). The
+latest published release before it is v0.5.1. Each GitHub release carries a debug APK, a signed
+minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitHub Actions.
+Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
+emulators.
+
+## v0.6.0: Agent
+
+Turn on **Agent** in the composer, next to Think and Search, and DeepSeek can use tools on your
+phone in the same chat:
+
+- **On-device Python** (`run_python`): Python 3.13 with numpy and matplotlib, in a private
+  folder per chat. Charts and files it creates appear as cards. Code blocks in answers get a
+  **Run** button. Extra pure-Python packages install from PyPI with `pip_install`, after you
+  approve each download; **Skills → Python toolsets** lists and removes them.
+- **Files you can keep**: `create_pdf` lays out Markdown (headings, lists, tables, code, page
+  breaks and matplotlib charts) as a PDF; `write_file` makes DOCX, CSV, Markdown, HTML, JSON or
+  text. Each file is a card with a preview (PDF first page, image thumbnail or text) and **Open**,
+  **Save** (Downloads) and **Share**. Every answer also has **Export PDF**.
+- **Skills**: installable packs (`manifest.json`, `SKILL.md`, optional `main.py` whose functions
+  become tools). Open **Skills** from the drawer or Settings to install one from an https link or a
+  .zip file, enable or disable it, or remove it. Built in: `pdf-report`, `data-analysis` (CSV
+  statistics and charts) and `web-summary` (reads pages with `web_fetch` and writes a cited summary).
+- **Tool steps** show as compact rows you can expand to see the input and result; downloads and
+  new websites ask for approval first; at most 8 model replies per request.
+
+**Two backends, one agent loop.** With an API key, the app uses DeepSeek's native function calling
+on `/chat/completions` (`tools`, streamed `tool_calls`, `tool` results). Account mode uses the free
+web chat, whose session token cannot use native tools (DeepSeek's own harness requires a Platform
+OAuth grant for that), so the app asks the model to end a reply with one fenced ```` ```tool ````
+JSON block, runs the tool and sends the result back as the next message in the same chat.
+**Trade-off:** the web protocol depends on the model following instructions (the app repairs a
+malformed call once, then shows the text), each tool round trip is visible in your DeepSeek web
+history, and turns are slower than native tool calls. Details, sources and the pass/fail table:
+[docs/AGENT_MODE.md](docs/AGENT_MODE.md); release notes:
+[docs/RELEASE_NOTES_060.md](docs/RELEASE_NOTES_060.md).
+
+**Install a skill:** zip a folder containing `manifest.json` (`name`, `description`, `version`,
+optional `tools` and `pip`), `SKILL.md` and optionally `main.py`; then **Skills → Install from
+file**, or paste an https link to the .zip and choose **Install from link**. Review the tools and
+packages it lists before confirming.
+
+**APK size:** the APK bundles Python 3.13, numpy and matplotlib for arm64-v8a and x86_64, so it is
+several tens of MB larger than v0.5.x. 32-bit-only (armeabi-v7a) phones are not supported from this
+version. No install permission was added: INTERNET plus runtime RECORD_AUDIO remain the only ones.
+
+Status: implementation and tests are complete; CI unit tests, lint, builds and the emulator tests
+(agent PDF flow on the mocked server, on-device Python) are pending. No live agent run against
+chat.deepseek.com has been recorded yet.
 
 ## v0.5.0: DeepSeek account mode
 
@@ -322,7 +368,10 @@ See [SECURITY.md](SECURITY.md) for limitations and reporting guidance.
 
 No Gradle wrapper JAR is committed. Dependencies use a version catalog with
 AGP 8.7.2, Kotlin/Compose plugin 2.0.21 and Gradle 8.10.2 in CI, using JDK 17 and
-Android compile/target SDK 35.
+Android compile/target SDK 35. Since v0.6.0 the Chaquopy plugin (17.1.0) builds the on-device
+Python: the build machine needs Python 3.13 on PATH (`python3.13`; CI installs it with
+actions/setup-python), and Chaquopy downloads its runtime and the numpy/matplotlib wheels during
+the build.
 
 1. Push to `main` or open a pull request targeting `main`.
 2. In **Actions → CI**, inspect tests and lint, then download
