@@ -712,3 +712,7 @@ Remaining / human pin:
   app recreation, credential exclusion and local diagnostics Copy/Clear.
 - Real screenshots of every major screen remain pending. Only real emulator
   captures should be added; no fake images, local browser or emulator were used.
+
+### Pass G CI fix: network callback removed
+
+The chat screen no longer registers a default-network callback: that API needs ACCESS_NETWORK_STATE, which stays removed from the install permissions, so the call always failed silently. A message waiting for the network is retried from the Retry action.

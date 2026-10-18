@@ -2,9 +2,6 @@ package app.dsandroid.ui
 
 import android.app.Application
 import android.net.Uri
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.dsandroid.BuildConfig
@@ -131,14 +128,6 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
     private val session = SessionAuthMachine()
     private var credentialRevision = 0L
     private var restarting = false
-    private val connectivity = application.getSystemService(ConnectivityManager::class.java)
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) viewModelScope.launch {
-                if (state.value.waitingForNetwork && !state.value.needsSignIn) retryNow()
-            }
-        }
-    }
     private val importer = AttachmentImporter(application)
     private var agentJob: Job? = null
     private var stoppedRunId: String? = null
@@ -171,7 +160,6 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
             for (write in diskWrites) try { write() }
             catch (_: Exception) { showError(text(R.string.history_save_error)) }
         }
-        runCatching { connectivity?.registerDefaultNetworkCallback(networkCallback) }
         mutableState.update { it.copy(conversationId = current.id) }
         viewModelScope.launch {
             try {
@@ -1292,7 +1280,6 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
     }
     override fun onCleared() {
         browser.close()
-        runCatching { connectivity?.unregisterNetworkCallback(networkCallback) }
         diskWrites.close()
         super.onCleared()
     }
