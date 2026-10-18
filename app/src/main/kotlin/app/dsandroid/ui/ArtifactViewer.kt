@@ -41,6 +41,7 @@ private sealed interface Preview {
     data class Pdf(val pages: Int) : Preview
     data class Picture(val bitmap: Bitmap) : Preview
     data class Workbook(val sheets: List<SpreadsheetPreview>) : Preview
+    data object Archive : Preview
     data object Error : Preview
 }
 
@@ -48,7 +49,7 @@ private sealed interface Preview {
 @Composable
 fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Unit, share: (Artifact) -> Unit, save: (Artifact) -> Unit,
     openExternal: (Artifact) -> Unit = {}, exportPng: (Artifact) -> Unit = {}) {
-    if (artifact.mimeType in setOf("text/html", "image/svg+xml", "text/markdown", "text/vnd.mermaid", "text/csv", "text/plain", "application/json")) {
+    if (artifact.mimeType in setOf(app.dsandroid.core.artifacts.WebProject.MIME, "text/html", "image/svg+xml", "text/markdown", "text/vnd.mermaid", "text/csv", "text/plain", "application/json")) {
         ArtifactCanvas(artifact, workspace, back, share, save, exportPng)
         return
     }
@@ -59,6 +60,7 @@ fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Uni
                 val file = workspace.resolve(artifact.path)
                 require(file.isFile && file.length() <= 20 * 1024 * 1024)
                 when {
+                    artifact.mimeType == "application/zip" -> Preview.Archive
                     artifact.mimeType == "application/pdf" -> withPdf(file) { Preview.Pdf(it.pageCount) }
                     artifact.fileName.endsWith(".docx", true) -> Preview.Text(file.inputStream().use { DocxTextExtractor.extract(it) })
                     artifact.fileName.endsWith(".pptx", true) -> Preview.Text(file.inputStream().use { PptxTextExtractor.extract(it) })
@@ -100,6 +102,7 @@ fun ArtifactViewer(artifact: Artifact, workspace: WorkspacePath, back: () -> Uni
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (val loaded = preview) {
                 null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                Preview.Archive -> Text(stringResource(R.string.viewer_archive), Modifier.padding(24.dp))
                 Preview.Error -> Text(stringResource(R.string.viewer_error), Modifier.padding(24.dp))
                 is Preview.Pdf -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(loaded.pages) { page -> PdfPage(workspace, artifact.path, page) }

@@ -49,7 +49,7 @@ object SandboxWebViews {
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
         // Cached Python uses synthetic HTTPS requests: every one is intercepted below.
         settings.blockNetworkLoads = !approvedNetwork && cachedResource == null
-        settings.blockNetworkImage = !approvedNetwork
+        settings.blockNetworkImage = !approvedNetwork && cachedResource == null
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         isSaveEnabled = false
         setDownloadListener { _, _, _, _, _ -> } // Exports belong to the explicit native Save action.
@@ -110,8 +110,8 @@ object SandboxWebViews {
         }
     }
 
-    fun loadPreview(view: WebView, content: String, javaScriptEnabled: Boolean = false, approvedNetwork: Boolean = false) {
-        val document = SandboxPreviewDocument.wrap(content, javaScriptEnabled, approvedNetwork)
+    fun loadPreview(view: WebView, content: String, javaScriptEnabled: Boolean = false, approvedNetwork: Boolean = false, localProject: Boolean = false) {
+        val document = SandboxPreviewDocument.wrap(content, javaScriptEnabled, approvedNetwork, localProject)
         view.loadDataWithBaseURL(null, document, "text/html", "UTF-8", null)
     }
 

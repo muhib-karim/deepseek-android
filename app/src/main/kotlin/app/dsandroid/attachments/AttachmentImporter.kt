@@ -30,10 +30,11 @@ data class Upload(
 }
 
 class AttachmentImporter(private val context: Context) {
-    suspend fun import(uri: Uri): Upload {
+    suspend fun import(uri: Uri, maxBytes: Long = 20L * 1024 * 1024): Upload {
+        require(maxBytes > 0)
         var copiedFile: File? = null
         try {
-            return withContext(Dispatchers.IO) { importOnWorker(uri) { copiedFile = it } }
+            return withContext(Dispatchers.IO) { importOnWorker(uri, minOf(maxBytes, 20L * 1024 * 1024)) { copiedFile = it } }
         } catch (error: Exception) {
             // Also covers cancellation while returning from the IO dispatcher: the
             // caller never received ownership of the copied upload in that case.
@@ -42,7 +43,7 @@ class AttachmentImporter(private val context: Context) {
         }
     }
 
-    private suspend fun importOnWorker(uri: Uri, copied: (File) -> Unit): Upload {
+    private suspend fun importOnWorker(uri: Uri, maxBytes: Long, copied: (File) -> Unit): Upload {
         require(uri.scheme == "content") { "Choose a document from the system picker." }
         val resolver = context.contentResolver
         val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
@@ -65,7 +66,7 @@ class AttachmentImporter(private val context: Context) {
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
-                        require(total <= 20 * 1024 * 1024) { "Choose a file smaller than 20 MB." }
+                        require(total <= maxBytes) { "Choose a file smaller than 20 MB." }
                         output.write(buffer, 0, count)
                     }
                 }

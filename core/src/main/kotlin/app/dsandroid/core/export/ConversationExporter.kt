@@ -18,7 +18,7 @@ object ConversationExporter {
             items.forEach { item ->
                 if (answerId == null) append("## ${if (item.role == "user") labels.user else labels.assistant}\n\n")
                 if (item.role == "user") append(item.text)
-                else append(item.steps.filterIsInstance<TurnStep.Answer>().joinToString("\n\n") { it.text })
+                else append(item.steps.filterIsInstance<TurnStep.Answer>().joinToString("\n\n") { app.dsandroid.core.chat.FollowUps.parse(it.text).answer })
                 append("\n\n")
                 if (item.sources.isNotEmpty()) {
                     append("### ${labels.sources}\n\n")

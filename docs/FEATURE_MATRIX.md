@@ -4,7 +4,8 @@ What the big assistant apps (ChatGPT, Claude, Kimi) do on Android, and when Deep
 The goal: the official DeepSeek app only chats; this app lets DeepSeek *do* things — call tools mid-conversation and show the results inside the chat.
 
 Legend: ✓ = the app has it · — = it doesn't · **Release** = the version of this app that ships it.
-v0.1.0 = already released. Everything else is planned; a row moves to "done" only when it is in a tagged release.
+v0.1.0 and v0.2.0 are released. Pass D delivery notes describe the implementation in
+this working tree; CI and device validation are still required before a v0.3.0 tag.
 
 ## Core: the agent loop
 
@@ -36,8 +37,8 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 | 14 | Edit an artifact and re-run it; version history | ✓ | ✓ | — | v0.2.0 |
 | 15 | Downloadable generated files (.md .html .csv .txt .svg .json) via save/share | ✓ | ✓ | ✓ | v0.2.0 |
 | 16 | Syntax-highlighted code blocks with copy | ✓ | ✓ | ✓ | v0.1.0 |
-| 17 | Office files out: DOCX, XLSX, PPTX (slides) generation | ✓ | ✓ | ✓ | v0.3.0 |
-| 18 | PDF generation | ✓ | ✓ | ✓ | v0.3.0 |
+| 17 | Office files out: DOCX, XLSX, PPTX (slides) generation | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
+| 18 | PDF generation | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
 
 ## Inputs
 
@@ -45,9 +46,9 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 |---|---|---|---|---|---|
 | 19 | File input: PDF, Word, Excel, PowerPoint, text | ✓ | ✓ | ✓ | v0.1.0 |
 | 20 | Image input (text extraction on-device; vision when the model supports it) | ✓ | ✓ | ✓ | v0.2.0 |
-| 21 | Many files at once (batch analysis, ~50 files) | ✓ | ✓ | ✓ | v0.3.0 |
-| 22 | Camera input (snap a photo or document) | ✓ | ✓ | ✓ | v0.3.0 |
-| 23 | Share into the app from any other app (share target) | ✓ | ✓ | ✓ | v0.3.0 |
+| 21 | Many files at once (batch analysis, ~50 files) | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
+| 22 | Camera input (snap a photo or document) | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
+| 23 | Share into the app from any other app (share target) | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
 | 24 | Voice typing (press and hold) | ✓ | ✓ | ✓ | v0.1.0 |
 
 ## Memory, projects, personalisation
@@ -59,7 +60,7 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 | 27 | Projects: folders with shared files and instructions | ✓ | ✓ | — | v0.2.0 |
 | 28 | Temporary (no-history) chat | ✓ | ✓ | — | v0.2.0 |
 | 29 | Saved assistants / personas | ✓ | ✓ | ✓ | v0.3.0 |
-| 30 | Response styles (concise, explanatory, formal) | ✓ | ✓ | — | v0.3.0 |
+| 30 | Response styles (concise, explanatory, formal) | ✓ | ✓ | — | v0.3.0 — Pass D |
 
 ## Tools and integrations
 
@@ -109,14 +110,21 @@ v0.1.0 = already released. Everything else is planned; a row moves to "done" onl
 |---|---|---|---|---|---|
 | 48 | Browser agent: the model opens and reads pages in an in-app browser for you, every click/submit confirmed | ✓ | ✓ | ✓ | v0.3.0 |
 | 49 | Connectors to your own accounts (e.g. cloud drive, mail), read-only first, signed in by you | ✓ | ✓ | — | v0.3.0 |
-| 50 | Multi-file website / slide-deck builder in the artifacts panel, export as a zip | ✓ | ✓ | ✓ | v0.3.0 |
-| 51 | Study mode: step-by-step tutoring instead of straight answers | ✓ | ✓ | — | v0.3.0 |
-| 52 | Suggested follow-up questions under an answer | ✓ | — | ✓ | v0.3.0 |
-| 53 | Branch a conversation from any message into a new chat | ✓ | ✓ | — | v0.3.0 |
-| 54 | Library: every generated file, artifact and image from all chats in one place | ✓ | ✓ | ✓ | v0.3.0 |
+| 50 | Multi-file website / slide-deck builder in the artifacts panel, export as a zip | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
+| 51 | Study mode: step-by-step tutoring instead of straight answers | ✓ | ✓ | — | v0.3.0 — Pass D |
+| 52 | Suggested follow-up questions under an answer | ✓ | — | ✓ | v0.3.0 — Pass D |
+| 53 | Branch a conversation from any message into a new chat | ✓ | ✓ | — | v0.3.0 — Pass D |
+| 54 | Library: every generated file, artifact and image from all chats in one place | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
 | 55 | Parallel sub-agents for big tasks: one plan, several agents at once, progress shown per agent | ✓ | — | ✓ | v0.3.0 |
 | 56 | Memory upkeep: suggested memory updates drawn from past chats, each approved by the user | ✓ | ✓ | ✓ | v0.3.0 |
 | 57 | Share the camera or screen into voice mode (vision when the model supports it) | ✓ | — | — | v0.3.0 |
+
+## Pass D delivery status
+
+Rows **17, 18, 21, 22, 23, 30, 50, 51, 52, 53 and 54** — Status note:
+**shipped in v0.3.0 pass D**. This denotes delivered implementation, not a new tagged release.
+JVM coverage is included; compilation, tests, lint and device checks remain CI/release gates.
+Other v0.3.0 rows remain planned.
 
 ## Not planned
 

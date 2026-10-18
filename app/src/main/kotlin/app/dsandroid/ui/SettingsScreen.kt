@@ -87,6 +87,7 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                         OutlinedTextField(draft.customInstructions, { draft = draft.copy(customInstructions = it.take(8000)) },
                             label = { Text(stringResource(R.string.global_instructions)) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 10)
                         Text(stringResource(R.string.global_instructions_notice), style = MaterialTheme.typography.bodySmall)
+                        SettingToggle(stringResource(R.string.suggested_follow_ups), draft.suggestedFollowUps) { draft = draft.copy(suggestedFollowUps = it) }
                         SettingToggle(stringResource(R.string.collapse_thinking), draft.collapseThinking) { draft = draft.copy(collapseThinking = it) }
                         Text(stringResource(R.string.collapse_thinking_help), style = MaterialTheme.typography.bodyMedium)
                     }

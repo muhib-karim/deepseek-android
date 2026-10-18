@@ -3,10 +3,37 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-This is the v0.1 implementation, including pass 3. No local Gradle, SDK, network
-or git operations were run in this pass. Tests were written before the core
-implementation; execution, compilation and lint remain CI gates. Android 8.0
-(API 26) or newer is required.
+v0.1.0 and v0.2.0 are released. This working tree adds **v0.3.0 Pass D**; compilation,
+JVM tests and Android lint remain CI gates before release. Android 8.0 (API 26) or newer is required.
+
+## v0.3.0 Pass D features
+
+- **Files out:** `create_document`, `create_spreadsheet` and `create_presentation`
+  produce DOCX/XLSX/PPTX using the existing lightweight OOXML builders. `create_pdf`
+  supports titles, headings, paragraphs and simple tables, sharing the conversation
+  export renderer. Generated file cards offer Open and Share; external opens use FileProvider.
+- **Files in:** attach up to 50 files per message through the system document picker,
+  with a 20 MB per-file and 100 MB batch cap. Text, code, Office files and readable PDFs
+  are extracted locally; images use the existing OCR. A compact file inventory and up to
+  120,000 extracted characters go to the model. Up to four images also use vision when supported.
+  The system camera intent needs no camera permission. Share text, images or PDFs from other
+  apps into a new chat, review the attachments, then send.
+- **Per-chat styles and Study:** choose Default, Concise, Explanatory or Formal in
+  the composer. Study mode guides learning with questions and hints. Choices persist per chat.
+- **Multi-file artifacts:** `create_web_project` builds a website or HTML slide deck
+  with `index.html` plus CSS, classic JavaScript, SVG and JSON files. Select and edit files
+  in the versioned canvas, preview offline in the existing sandbox and share/save the project as ZIP.
+- **Chat ergonomics:** optional suggested follow-ups fill the composer when tapped;
+  turn them off in Settings → Personalization. Temporary chats disable them. Long-press
+  a message or choose Branch from here to copy its conversation prefix to a new chat.
+- **Library:** browse generated files, artifacts, images and exports across chats.
+  Filter by type, search by file or chat title, open/share/delete a file or jump to its source chat.
+  Temporary outputs are excluded. Deletion asks first and removes that file from all chats using it.
+- Every new control and notice has English and natural Bangla resources.
+
+The existing agent registry, tool cards, confirmations, OCR, artifact history and
+export paths are extended. No new dependency or install permission is added.
+See [feature status](docs/FEATURE_MATRIX.md) and [build notes](docs/BUILD_NOTES.md).
 
 ## What v0.1 includes
 
@@ -17,7 +44,7 @@ implementation; execution, compilation and lint remain CI gates. Android 8.0
   is off. Grouped Settings, language/appearance dialogs, personalization and local
   account/data controls use original code and the supplied screenshots as references.
 - **File upload:** Camera, Photo Picker and multi-document picker; up to 50
-  files per chat, 20 MB each, copied to private storage without storage permissions. PDF,
+  files per message, 20 MB each (100 MB combined), copied to private storage without storage permissions. PDF,
   DOCX, XLSX and PPTX text extraction plus TXT/Markdown/CSV/JSON, capped at 200,000 characters
   per file with a truncation marker. Images become JPEG data-URI parts, at most
   1568 px, only for vision-capable models. Text-only models show an explicit
@@ -61,9 +88,9 @@ implementation; execution, compilation and lint remain CI gates. Android 8.0
 
 Conversations persist as private JSON in `filesDir/conversations`; run checkpoints
 live in `filesDir/runs` and artifacts in `filesDir/workspace`. Deleting a conversation
-also deletes its checkpoints. Artifacts remain until app data is cleared or the app
-is uninstalled; Share and Save provide external copies. PDF output lays out plain
-text; Markdown and HTML are not converted into rich PDF styling.
+also deletes its checkpoints. Artifacts remain until deleted from Library, app data is cleared or the app is
+uninstalled; Share and Save provide external copies. PDF output supports structured
+text and tables; conversation exports keep Markdown punctuation as plain text.
 
 ## Connect a provider
 
@@ -81,9 +108,8 @@ Custom endpoints may specify an ID in Settings even if `/models` is unavailable.
 Model capabilities are heuristic and can be overridden; provider support for
 vision, tool calling and the thinking flag varies. The client appends `/models`
 and `/chat/completions` to the base URL; include `/v1` if the server needs it.
-Custom HTTP endpoints are permitted for local development, but HTTP exposes
-prompts and credentials on the network. Use HTTPS elsewhere. API-key and account
-providers require HTTPS.
+All configured provider endpoints require HTTPS. Calls go directly to the chosen
+provider; there is no relay or automatic account switching.
 
 ### Account sign-in caveats
 
@@ -116,8 +142,9 @@ are refused to avoid forwarding credentials to a different origin.
 
 ## Safety and permissions
 
-**Install-time permissions are INTERNET and ACCESS_NETWORK_STATE.** RECORD_AUDIO
-is requested at first dictation use. There are no storage, notification, install,
+**INTERNET is the only install-time permission.** RECORD_AUDIO
+is declared and requested at first dictation use. ACCESS_NETWORK_STATE is explicitly
+removed during manifest merging. There are no storage, notification, install,
 location or broad package-query permissions.
 Artifacts live under the app's private `filesDir/workspace` directory. The
 non-exported FileProvider exposes only artifact directories and a narrow camera
@@ -143,9 +170,11 @@ untrusted and may contain prompt injection; the guard checks subsequent tool
 calls regardless of model instructions. SVG output uses a conservative element
 and attribute allowlist; scripts, event handlers, styles, external references,
 DTDs and processing instructions are removed or rejected. AndroidSVG renders sanitized
-SVG without external resources; the HTML viewer disables JavaScript, file/content
-access, network loads and navigation and applies a restrictive content policy.
-They support static content, not interactive pages. CSV cells follow RFC 4180; spreadsheet applications
+SVG without external resources. HTML canvas previews permit sandboxed JavaScript,
+with no native bridge, file/content access, device permissions or navigation.
+Networking starts blocked and requires a separate confirmation for single-file HTML.
+Multi-file projects stay offline; their exact local resources are intercepted without
+network access. See SECURITY.md for the full preview policy. CSV cells follow RFC 4180; spreadsheet applications
 may interpret formula-like cells when opened, so review untrusted CSVs there.
 
 Do not send secrets in chat or model-generated tool arguments. Prompts, reasoning,
@@ -197,8 +226,8 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- v0.2: OCR for scanned documents/images and full LaTeX rendering.
-- v0.2: richer artifact editing, text-to-speech and live voice conversations.
+- Remaining v0.3.0 passes: voice, device actions, assistants and the other undelivered
+  rows in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.
 

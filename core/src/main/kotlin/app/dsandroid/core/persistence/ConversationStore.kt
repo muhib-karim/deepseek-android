@@ -39,6 +39,8 @@ data class ConversationRecord(
     val projectId: String? = null,
     val systemPrompt: String = "",
     val temporary: Boolean = false,
+    val responseStyle: app.dsandroid.core.personalization.ResponseStyle = app.dsandroid.core.personalization.ResponseStyle.DEFAULT,
+    val studyMode: Boolean = false,
 )
 
 /** Private JSON files, replaced atomically so a process exit cannot leave a partial record. */

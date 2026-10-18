@@ -13,9 +13,9 @@
     <string name="models_fallback_notice">Model list unavailable · fallback available</string>
     <string name="models_cache_notice">Model list unavailable · using cached models</string>
     <string name="model_remember_error">Could not remember the model choice.</string>
-    <string name="upload_limit">Attach up to 50 files per chat, each under 20 MB.</string>
+    <string name="upload_limit">Attach up to 50 files per message, 20 MB each and 100 MB combined.</string>
     <string name="upload_read_error">Could not read an attachment. Choose a PDF, DOCX, XLSX, PPTX, text file or image under 20 MB. Encrypted or damaged files may not be readable.</string>
-    <string name="upload_partial">Some attachments exceeded the 50-file chat limit and were not added.</string>
+    <string name="upload_partial">Some attachments exceeded the 50-file message limit and were not added.</string>
     <string name="image_model_error">This model cannot read images. Add a text message or choose a model that supports images.</string>
     <string name="credentials_required">Enter an API key or sign in, and check the endpoint in Settings.</string>
     <string name="chat_new_title">New chat</string>

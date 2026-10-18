@@ -65,14 +65,21 @@ class ArtifactStore(private val workspace: WorkspacePath, private val maxVersion
         require(index >= 0)
         val type = ArtifactFormat.parse(format)
         val prepared = type.prepare(content)
-        val identity = digest("$turnId\u0000$index\u0000${type.extension}\u0000$content")
-        val name = "fence_$identity.${type.extension}"
-        val artifact = Artifact(name, type.mime, name)
+        val artifact = fenceReference(turnId, index, format, content)
+        val name = artifact.fileName
         val file = workspace.resolve(name)
         if (file.exists()) {
             require(file.isFile && read(artifact) == prepared) { "Fence import collision" }
             artifact
         } else create(type.extension, name, prepared)
+    }
+
+    fun fenceReference(turnId: String, index: Int, format: String, content: String): Artifact {
+        require(index >= 0)
+        val type = ArtifactFormat.parse(format)
+        val identity = digest("$turnId\u0000$index\u0000${type.extension}\u0000$content")
+        val name = "fence_$identity.${type.extension}"
+        return Artifact(name, type.mime, name)
     }
 
     private fun writeNew(artifact: Artifact, content: String) {
@@ -138,12 +145,13 @@ class ArtifactStore(private val workspace: WorkspacePath, private val maxVersion
 
 internal enum class ArtifactFormat(val extension: String, val mime: String) {
     HTML("html", "text/html"), SVG("svg", "image/svg+xml"), MERMAID("mmd", "text/vnd.mermaid"),
-    MARKDOWN("md", "text/markdown"), CSV("csv", "text/csv"), TEXT("txt", "text/plain"), JSON("json", "application/json");
+    MARKDOWN("md", "text/markdown"), CSV("csv", "text/csv"), TEXT("txt", "text/plain"), JSON("json", "application/json"), WEB_PROJECT("webproj", WebProject.MIME);
 
     fun prepare(content: String): String {
         require(content.toByteArray(Charsets.UTF_8).size <= ArtifactStore.MAX_BYTES) { "Artifact exceeds 2 MB" }
         return when (this) {
             SVG -> SvgSanitizer.sanitize(content)
+            WEB_PROJECT -> WebProject.decode(content).encode()
             JSON -> content.also { Json.parseToJsonElement(it) }
             else -> content
         }.also { require(it.toByteArray(Charsets.UTF_8).size <= ArtifactStore.MAX_BYTES) { "Artifact exceeds 2 MB" } }
@@ -151,7 +159,7 @@ internal enum class ArtifactFormat(val extension: String, val mime: String) {
 
     companion object {
         fun parse(value: String): ArtifactFormat = when (value.lowercase()) {
-            "html", "htm" -> HTML; "svg" -> SVG; "mermaid", "mmd" -> MERMAID
+            "webproject", "webproj" -> WEB_PROJECT; "html", "htm" -> HTML; "svg" -> SVG; "mermaid", "mmd" -> MERMAID
             "markdown", "md" -> MARKDOWN; "csv" -> CSV; "text", "txt", "plain" -> TEXT; "json" -> JSON
             else -> throw IllegalArgumentException("Unsupported artifact format")
         }

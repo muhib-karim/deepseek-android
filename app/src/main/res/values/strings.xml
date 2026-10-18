@@ -170,7 +170,7 @@
     <string name="updates_notice">Installed version: %1$s. Automatic update checks are unavailable in this version.</string>
     <string name="ai_generated_footer">AI-generated content may be inaccurate. Check important information.</string>
     <string name="confirm">Confirm</string>
-    <string name="attachment_limits">Up to 50 files per chat, 20 MB per file and 200,000 extracted characters per file. Image text extraction depends on on-device recognition availability.</string>
+    <string name="attachment_limits">Up to 50 files per message, 20 MB per file and 100 MB combined. Text context is limited to 120,000 characters per message. Up to 4 images use vision; all images use on-device OCR.</string>
     <string name="searching_query">Searching: %1$s</string>
     <string name="visiting_site">Visiting %1$s</string>
     <string name="zipping_files">Zipping files</string>
@@ -237,4 +237,38 @@
     <string name="image_ocr_failed">Text extraction failed</string>
     <string name="image_vision_context">Image and extracted text will be sent</string>
     <string name="image_text_context">Only extracted text will be sent</string>
+
+    <!-- Pass D: files, styles and library -->
+    <string name="share_input_limited">Some shared content could not be attached. Use up to 50 readable files and 30,000 characters of shared text.</string>
+    <string name="response_style_value">Style: %1$s</string>
+    <string name="style_default">Default</string>
+    <string name="style_concise">Concise</string>
+    <string name="style_explanatory">Explanatory</string>
+    <string name="style_formal">Formal</string>
+    <string name="study_mode">Study</string>
+    <string name="project_share_zip">Share ZIP</string>
+    <string name="project_save_zip">Save ZIP</string>
+    <string name="project_file">File: %1$s</string>
+    <string name="project_file_limit">This edit exceeds the project size limit.</string>
+    <string name="suggested_follow_ups">Suggest follow-up questions</string>
+    <string name="follow_up_questions">Continue the conversation — tap to compose</string>
+    <string name="branch_from_here">Branch from here</string>
+    <string name="branch_title">%1$s (branch)</string>
+    <string name="branch_notice">Copy this conversation up to this message into a new chat. The original stays unchanged. Temporary chats create temporary branches.</string>
+    <string name="branch_failed">Could not create the branch. Try another message.</string>
+    <string name="library">Library</string>
+    <string name="library_search">Search files or source chats</string>
+    <string name="library_all">All</string>
+    <string name="library_documents">Documents</string>
+    <string name="library_images">Images</string>
+    <string name="library_artifacts">Artifacts</string>
+    <string name="library_archives">Archives</string>
+    <string name="library_other">Other</string>
+    <string name="library_empty">No generated files match. Files from temporary chats are not listed.</string>
+    <string name="library_file_size">%1$d KB</string>
+    <string name="library_open">Open</string>
+    <string name="library_source">Source chat</string>
+    <string name="library_delete_notice">Delete %1$s from this device? Chats that use this file will lose access to it. Other versions are kept. This cannot be undone.</string>
+    <string name="library_failed">Could not update the library. Please try again.</string>
+    <string name="viewer_archive">Open this archive with a ZIP app, or save or share it.</string>
 </resources>

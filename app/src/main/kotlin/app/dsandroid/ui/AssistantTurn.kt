@@ -35,7 +35,7 @@ import kotlinx.serialization.json.JsonElement
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, collapseThinking: Boolean = true,
+fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, shareArtifact: (Artifact) -> Unit = {}, collapseThinking: Boolean = true,
     workspace: WorkspacePath, openFence: (Int, FencedArtifact) -> Unit) {
     var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     var sourcesVisible by remember(item.id) { mutableStateOf(false) }
@@ -86,7 +86,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     }
                 }
                 is TurnStep.Answer -> Column {
-                    MarkdownText(step.text, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
+                    MarkdownText(app.dsandroid.core.chat.FollowUps.display(step.text, working), Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
                         selectedSource = it; sourcesVisible = true
                     }
                     val fences = remember(step.text) { FencedArtifacts.parse(step.text) }
@@ -114,7 +114,8 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         Text(artifact.fileName, style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.tap_preview), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("›")
+                    TextButton(onClick = { openArtifact(artifact) }) { Text(stringResource(R.string.library_open)) }
+                    TextButton(onClick = { shareArtifact(artifact) }) { Text(stringResource(R.string.viewer_share)) }
                 }
             }
         }

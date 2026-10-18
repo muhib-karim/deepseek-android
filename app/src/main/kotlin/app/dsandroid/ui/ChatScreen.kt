@@ -43,14 +43,18 @@ import kotlinx.coroutines.flow.collect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, openArtifact: (Artifact) -> Unit) {
+fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, shareArtifact: (Artifact) -> Unit, openArtifact: (Artifact) -> Unit) {
     var draft by rememberSaveable(state.conversationId) { mutableStateOf("") }
+    LaunchedEffect(state.conversationId, state.sharedDraft) {
+        state.sharedDraft?.let { draft = it; vm.consumeSharedDraft() }
+    }
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
     var agentEnabled by rememberSaveable { mutableStateOf(false) }
     var research by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable(state.conversationId) { mutableStateOf<String?>(null) }
     var editedText by rememberSaveable(state.conversationId) { mutableStateOf("") }
+    var branchItem by remember { mutableStateOf<String?>(null) }
     var attachSheet by remember { mutableStateOf(false) }
     var cameraName by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -93,31 +97,47 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
             LazyColumn(Modifier.weight(1f).widthIn(max = 840.dp).fillMaxWidth(), state = listState,
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 items(state.items, key = { it.id }) { item ->
-                    when (item) {
-                        is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                            Surface(Modifier.widthIn(max = 600.dp).fillMaxWidth(0.86f), shape = RoundedCornerShape(18.dp),
-                                color = if (MaterialTheme.colorScheme.background == Color(0xFF121212)) Color(0xFF24304F) else Color(0xFFEEF3FF)) {
-                                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    item.attachments.forEach { Text("▧ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                    if (item.text.isNotEmpty()) Text(item.text, style = MaterialTheme.typography.bodyLarge)
+                    Column(Modifier.fillMaxWidth().branchGesture(item.id, !state.running && !state.importing,
+                        context.getString(R.string.branch_from_here)) { branchItem = item.id }) {
+                        when (item) {
+                            is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                                Surface(Modifier.widthIn(max = 600.dp).fillMaxWidth(0.86f), shape = RoundedCornerShape(18.dp),
+                                    color = if (MaterialTheme.colorScheme.background == Color(0xFF121212)) Color(0xFF24304F) else Color(0xFFEEF3FF)) {
+                                    Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        item.attachments.forEach { Text("▧ $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        if (item.text.isNotEmpty()) Text(item.text, style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                }
+                                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                    TextButton(onClick = { branchItem = item.id }, enabled = !state.running && !state.importing) { Text(stringResource(R.string.branch_from_here)) }
+                                    TextButton(onClick = { vm.retryTurn(item.id, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
+                                        Text(stringResource(R.string.turn_retry))
+                                    }
+                                    TextButton(onClick = { editingId = item.id; editedText = item.text }, enabled = !state.running && !state.importing) {
+                                        Text(stringResource(R.string.turn_edit))
+                                    }
                                 }
                             }
-                            Row {
-                                TextButton(onClick = { vm.retryTurn(item.id, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
-                                    Text(stringResource(R.string.turn_retry))
+                            is ChatItem.Assistant -> Column {
+                                AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id,
+                                    openArtifact = openArtifact, shareArtifact = shareArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
+                                    openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) })
+                                if (item.id == last?.id && !state.running && !state.resumable && settings.suggestedFollowUps && !state.temporary) {
+                                    val answer = item.steps.filterIsInstance<app.dsandroid.core.agent.TurnStep.Answer>().lastOrNull()?.text.orEmpty()
+                                    val questions = remember(answer) { app.dsandroid.core.chat.FollowUps.parse(answer).questions }
+                                    if (questions.isNotEmpty()) {
+                                        Text(stringResource(R.string.follow_up_questions), style = MaterialTheme.typography.labelMedium)
+                                        questions.forEach { question ->
+                                            SuggestionChip(onClick = { draft = question }, label = { Text(question) },
+                                                enabled = !state.importing)
+                                        }
+                                    }
                                 }
-                                TextButton(onClick = { editingId = item.id; editedText = item.text }, enabled = !state.running && !state.importing) {
-                                    Text(stringResource(R.string.turn_edit))
+                                TextButton(onClick = { branchItem = item.id }, enabled = !state.running && !state.importing) { Text(stringResource(R.string.branch_from_here)) }
+                                val user = state.items.takeWhile { it.id != item.id }.filterIsInstance<ChatItem.User>().lastOrNull()
+                                if (user != null) TextButton(onClick = { vm.restartTurn(user.id, null, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
+                                    Text(stringResource(R.string.turn_regenerate))
                                 }
-                            }
-                        }
-                        is ChatItem.Assistant -> Column {
-                            AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id,
-                                openArtifact = openArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
-                                openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) })
-                            val user = state.items.takeWhile { it.id != item.id }.filterIsInstance<ChatItem.User>().lastOrNull()
-                            if (user != null) TextButton(onClick = { vm.restartTurn(user.id, null, think, search, agentEnabled) }, enabled = !state.running && !state.importing) {
-                                Text(stringResource(R.string.turn_regenerate))
                             }
                         }
                     }
@@ -128,8 +148,13 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
         Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { agentEnabled = it }, state, settings.supportsVision(think),
             { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled, research && agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
             settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError,
-            research, { research = it })
+            research, { research = it }, { style, study -> vm.setResponseStyle(style, study) })
     }
+    if (branchItem != null) AlertDialog(onDismissRequest = { branchItem = null },
+        title = { Text(stringResource(R.string.branch_from_here)) },
+        text = { Text(stringResource(R.string.branch_notice)) },
+        confirmButton = { TextButton(onClick = { branchItem?.let(vm::branchConversation); branchItem = null }) { Text(stringResource(R.string.branch_from_here)) } },
+        dismissButton = { TextButton(onClick = { branchItem = null }) { Text(stringResource(R.string.cancel)) } })
     if (editingId != null) AlertDialog(onDismissRequest = { editingId = null },
         title = { Text(stringResource(R.string.turn_edit_title)) },
         text = {
@@ -190,7 +215,8 @@ private fun AttachmentTile(label: String, glyph: Glyph, modifier: Modifier, clic
 private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setThink: (Boolean) -> Unit, search: Boolean, setSearch: (Boolean) -> Unit,
     agentEnabled: Boolean, setAgent: (Boolean) -> Unit, state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit,
     audioLanguage: String, dictate: (String) -> Unit, report: (String) -> Unit,
-    research: Boolean = false, setResearch: (Boolean) -> Unit = {}) {
+    research: Boolean = false, setResearch: (Boolean) -> Unit = {},
+    setStyle: (app.dsandroid.core.personalization.ResponseStyle, Boolean) -> Unit = { _, _ -> }) {
     val enabled = state.settingsReady && !state.saving && !state.signingIn && !state.running && !state.importing
     val placeholder = stringResource(R.string.message_placeholder)
     Surface(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -223,6 +249,7 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                 decorationBox = { field -> Box { if (draft.isEmpty()) Text(stringResource(R.string.message_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant); field() } })
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ResponseStylePicker(state.responseStyle, state.studyMode, enabled, setStyle)
                 FilterChip(selected = !agentEnabled, onClick = { setAgent(false) }, enabled = enabled,
                     label = { Text(stringResource(R.string.mode_chat)) })
                 FilterChip(selected = agentEnabled, onClick = { setAgent(true) }, enabled = enabled,
