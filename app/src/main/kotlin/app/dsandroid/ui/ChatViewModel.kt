@@ -664,6 +664,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         syncConversation()
     }
 
+    fun createProject(name: String, instructions: String = "") {
+        val clean = name.trim().take(80)
+        if (clean.isEmpty() || state.value.running) return
+        val project = ProjectRecord(java.util.UUID.randomUUID().toString(), clean, instructions.trim().take(8000))
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { projectStore.save(project) }
+            mutableState.update { it.copy(projects = it.projects + project) }
+        }
+    }
+
+    fun deleteProject(id: String) {
+        if (state.value.running) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { projectStore.delete(id) }
+            conversations.filter { it.projectId == id }.forEach { it.projectId = null; persistConversation(it) }
+            if (current.projectId == id) current.projectId = null
+            mutableState.update { ui -> ui.copy(projects = ui.projects.filterNot { it.id == id },
+                projectId = if (ui.projectId == id) null else ui.projectId) }
+            syncConversation()
+        }
+    }
+
+    fun moveToProject(conversationId: String, projectId: String?) {
+        if (state.value.running) return
+        val conversation = conversations.find { it.id == conversationId } ?: return
+        conversation.projectId = projectId
+        if (current.id == conversationId) {
+            current.projectId = projectId
+            mutableState.update { it.copy(projectId = projectId) }
+        }
+        persistConversation(conversation)
+        syncConversation()
+    }
+
     fun exportConversation(format: ExportFormat, answerId: String?, labels: ExportLabels, language: String, ready: (Artifact) -> Unit) {
         if (state.value.running || state.value.exporting || state.value.items.isEmpty()) return
         val record = current.record()
