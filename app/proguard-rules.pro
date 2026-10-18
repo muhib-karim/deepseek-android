@@ -32,3 +32,7 @@
 # No app-defined Room/DataStore models or POI dependency exist; Office packages
 # are generated/read by the project's own ZIP/XML implementation.
 # Do not add blanket app keeps or -ignorewarnings; CI assembles the R8 build.
+
+# pdfbox-android: JPEG2000 support (com.gemalto.jp2 / jp2-android) is an optional
+# dependency that this app does not ship; JPX images in PDFs are skipped.
+-dontwarn com.gemalto.jp2.**

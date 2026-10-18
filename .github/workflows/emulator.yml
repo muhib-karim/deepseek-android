@@ -36,8 +36,8 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle --no-daemon :app:connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/app.dsandroid/files/smoke-screenshots smoke-screenshots
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
+            adb pull /sdcard/Android/data/app.dsandroid/files/smoke-screenshots smoke-screenshots || echo "no smoke screenshots found on the emulator"
       - name: Upload smoke reports and real screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
