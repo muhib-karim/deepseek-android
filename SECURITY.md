@@ -63,7 +63,7 @@ assumed by this scaffold.
   rerun, version change or close. The resource loader strips page headers/cookies,
   rejects private DNS addresses and redirects, and caps requests and decoded bytes.
   CSP continues to block forms, frames, workers and fetch/WebSocket connections.
-  PDF creation renders plain text; PDF previews use the system PdfRenderer.
+  PDF creation renders bounded plain text, headings and table cells; PDF previews use the system PdfRenderer.
   CSV quoting does not disable spreadsheet formula interpretation.
 - Code runs in a disposable worker inside an offscreen WebView, with no Android
   JavaScript interface. A trusted page validates and caps the result before native
@@ -100,10 +100,10 @@ assumed by this scaffold.
 | Tools | Risk and execution policy |
 |---|---|
 | `list_files`, `list_dir`, `read_file`, `list_zip` | SAFE: reads inside the private workspace run without asking. Outside reads, traversal and invalid paths are denied. |
-| `create_file`, `create_markdown`, `create_csv`, `create_svg`, `create_pdf`, `create_image`, `create_docx`, `create_pptx`, `create_xlsx`, `create_chart`, `zip_files` | SAFE: private workspace writes run **without confirmation**, using new-file semantics. The guard requests confirmation for an outside write, but current built-in tools still reject writes outside the workspace. |
+| `create_document`, `create_spreadsheet`, `create_presentation`, `create_file`, `create_markdown`, `create_csv`, `create_svg`, `create_pdf`, `create_image`, `create_docx`, `create_pptx`, `create_xlsx`, `create_chart`, `zip_files` | SAFE: private workspace writes run **without confirmation**, using new-file semantics. The guard requests confirmation for an outside write, but current built-in tools still reject writes outside the workspace. |
 | `web_search` | CONFIRM: every call displays the exact query before sending it to the configured DuckDuckGo or SearXNG service. Invalid/empty/oversized queries are denied. |
 | `web_fetch`, `visit_web` | Declared SAFE with a dynamic guard: run without asking only for public HTTPS URLs of at most 200 characters, without a query string, on an exact host returned by search in this turn. Otherwise CONFIRM; malformed, private/local or non-HTTPS destinations are denied even if a user would approve. DNS checks also apply at connection time. |
-| `render_chart`, `create_artifact` | SAFE: bounded private workspace outputs using new-file semantics. No external writes or network execution. HTML networking requires a separate preview confirmation. |
+| `render_chart`, `create_artifact`, `create_web_project` | SAFE: bounded private workspace outputs using new-file semantics. No external writes or network execution. HTML networking requires a separate preview confirmation. |
 | `code_interpreter` | SAFE: cancellable isolated computation with time/output limits and no app/device access. Python runtime download has its own exact-resource confirmation; downloaded code never receives a network grant. |
 
 Share, Save and opening source links are explicit UI actions, not model-callable
@@ -111,6 +111,38 @@ registered tools. Sources are numbered within each assistant turn; only register
 numbers become citation links. The model can still make unsupported claims, so check
 the underlying sources. URL/path exfiltration on a trusted host cannot be ruled out
 by this rule alone, and allowing a search query can disclose its contents.
+
+## Pass D file and chat boundaries
+
+- Batch imports use SAF content URIs with a 50-file message limit, 20 MB per file
+  and 100 MB total. Model text context is capped at 120,000 extracted characters,
+  with a sanitized inventory and truncation markers. At most four images receive
+  encoded vision payloads; remaining images still supply local OCR context.
+- Camera capture uses the existing system intent and narrow FileProvider cache;
+  no CAMERA permission is declared. Share-target intake accepts bounded text and
+  content URI grants, rejecting file/network URIs and this app's own provider,
+  including encoded authority tricks. Shared content creates a new draft and is
+  never automatically sent, opened externally or interpreted as an action.
+- Multi-file artifacts accept up to 50 validated relative source paths with
+  `index.html`, 500,000 characters per file and 1.5 MB combined UTF-8 source. They
+  use the existing immutable canvas versions. Preview permits only exact local
+  resources at a synthetic HTTPS origin; every request is intercepted, missing
+  resources are blocked and none falls through to the network. CSP still denies
+  connections, frames, forms, workers and base tags. There is no native bridge,
+  file/content access, browser storage, downloads or device permission grant.
+  ZIP export contains source files only, with no traversal paths or symlinks.
+- Response styles and Study mode modify the system prompt. Follow-up suggestions
+  are bounded trailing JSON parsed as text, not instructions to execute; tapping
+  one fills the composer. They are disabled in temporary chats.
+- Branches copy only the transcript prefix, retaining attachment context and
+  complete tool/result pairs. They receive new chat/item identifiers, no pending
+  run and no confirmation grants. Temporary branches remain temporary.
+- Library indexes private workspace outputs and canvas versions, excludes internal
+  metadata and known temporary outputs, and links only to existing saved chats.
+  A per-file confirmation precedes deletion; a shared file is removed for every
+  chat that references it. A deleted fenced artifact is not silently recreated by
+  library refresh. Share, Save and external Open remain explicit user actions
+  using read-only FileProvider grants or SAF, never model-triggered exports.
 
 ## Remote tool servers
 

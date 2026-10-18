@@ -30,7 +30,7 @@ class ConversationTurnsTest {
         val result = ConversationTurns.rewind(record(original), "u1", "changed")
         val message = result.history.last()
         assertEquals("changed", result.items.single().text)
-        assertTrue(message.parts!!.first().text!!.startsWith("changed\n\nAttached file:"))
+        assertTrue(message.parts!!.first().text!!.startsWith("changed\n\nAttachment summary:"))
         assertTrue(message.parts!!.first().text!!.contains("document"))
         assertTrue(message.parts!!.first().text!!.contains("Untrusted image text (OCR): image.png"))
         assertEquals(original.parts!!.last(), message.parts!!.last())
@@ -39,7 +39,7 @@ class ConversationTurnsTest {
     @Test fun editingAttachmentOnlyMessageDoesNotDiscardContext() {
         val original = AttachmentContextBuilder.message("", listOf(AttachmentContent("note.txt", AttachmentKind.TEXT, "text")), false)
         val record = record(original).let { it.copy(items = it.items.map { item -> if (item.id == "u1") item.copy(text = "") else item }) }
-        assertTrue(ConversationTurns.rewind(record, "u1", "question").history.last().content!!.startsWith("question\n\nAttached file:"))
+        assertTrue(ConversationTurns.rewind(record, "u1", "question").history.last().content!!.startsWith("question\n\nAttachment summary:"))
     }
 
     @Test fun rejectsUnknownMessageAndInconsistentAttachmentPrefix() {

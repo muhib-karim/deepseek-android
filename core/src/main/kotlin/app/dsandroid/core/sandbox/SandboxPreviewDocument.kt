@@ -1,9 +1,9 @@
 package app.dsandroid.core.sandbox
 
 object SandboxPreviewDocument {
-    fun wrap(html: String, javaScriptEnabled: Boolean, approvedNetwork: Boolean): String {
+    fun wrap(html: String, javaScriptEnabled: Boolean, approvedNetwork: Boolean, localProject: Boolean = false): String {
         require(html.length <= 2 * 1024 * 1024) { "Preview exceeds 2 MB" }
-        val remote = if (approvedNetwork) " https:" else ""
+        val remote = if (approvedNetwork) " https:" else if (localProject) " https://artifact.invalid" else ""
         val scripts = if (javaScriptEnabled) "'unsafe-inline' 'unsafe-eval'$remote" else "'none'"
         val policy = "default-src 'none'; script-src $scripts; style-src 'unsafe-inline'$remote; " +
             "img-src data: blob:$remote; font-src data:$remote; connect-src 'none'; " +

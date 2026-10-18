@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.dsandroid.R
+import app.dsandroid.core.artifacts.WebProject
 import app.dsandroid.core.artifacts.ArtifactStore
 import app.dsandroid.core.artifacts.CsvPreview
 import app.dsandroid.core.artifacts.MarkdownPreview
@@ -46,6 +47,26 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
     var revision by remember { mutableIntStateOf(0) }
     val dirty = source != null && draft != source
     val html = original.mimeType == "text/html"
+    val project = original.mimeType == WebProject.MIME
+    fun export(selectedArtifact: Artifact, action: (Artifact) -> Unit) {
+        if (!project) { action(selectedArtifact); return }
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                val zip = withContext(Dispatchers.IO) {
+                    val content = WebProject.decode(store.read(selectedArtifact))
+                    val artifact = app.dsandroid.core.tools.writeArtifact(app.dsandroid.core.tools.ToolContext(workspace),
+                        "project-${java.util.UUID.randomUUID()}.zip", ".zip", "application/zip", content.zip()).artifacts.single()
+                    app.dsandroid.core.artifacts.ArtifactLibrary(workspace).inherit(selectedArtifact, artifact)
+                    artifact
+                }
+                action(zip)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { failed = true }
+            finally { busy = false }
+        }
+    }
     fun leave() { if (dirty) confirmDiscard = true else back() }
     BackHandler { if (!busy) leave() }
 
@@ -82,6 +103,7 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
             try {
                 val result = withContext(Dispatchers.IO + NonCancellable) {
                     val updated = if (dirty) store.edit(selected, draft) else selected
+                    app.dsandroid.core.artifacts.ArtifactLibrary(workspace).inherit(selected, updated)
                     Triple(updated, store.history(updated), store.read(updated))
                 }
                 selected = result.first; selectedPath = selected.path; versions = result.second
@@ -98,8 +120,8 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
     }, bottomBar = {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { share(selected) }, enabled = source != null && !busy && !dirty, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
-                Button(onClick = { save(selected) }, enabled = source != null && !busy && !dirty, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_save)) }
+                OutlinedButton(onClick = { export(selected, share) }, enabled = source != null && !busy && !dirty, modifier = Modifier.weight(1f)) { Text(stringResource(if (project) R.string.project_share_zip else R.string.viewer_share)) }
+                Button(onClick = { export(selected, save) }, enabled = source != null && !busy && !dirty, modifier = Modifier.weight(1f)) { Text(stringResource(if (project) R.string.project_save_zip else R.string.viewer_save)) }
             }
             if (original.mimeType == "image/svg+xml") TextButton(onClick = { exportPng(selected) }, enabled = source != null && !busy && !dirty) {
                 Text(stringResource(R.string.viewer_export_png))
@@ -138,6 +160,7 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
                 when {
                     busy -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                     content == null -> Unit
+                    codeTab && project -> WebProjectEditor(draft) { draft = it }
                     codeTab -> OutlinedTextField(value = draft, onValueChange = { value ->
                         if (value.length <= ArtifactStore.MAX_BYTES) draft = value
                     }, modifier = Modifier.fillMaxSize().padding(12.dp), label = { Text(stringResource(R.string.canvas_source)) },
@@ -165,10 +188,13 @@ internal fun ArtifactCanvas(original: Artifact, workspace: WorkspacePath, back: 
 private fun CanvasPreview(source: String, mime: String, approvedNetwork: Boolean) {
     var document by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var project by remember { mutableStateOf<WebProject?>(null) }
     LaunchedEffect(source, mime) {
         try {
+            project = if (mime == WebProject.MIME) withContext(Dispatchers.Default) { WebProject.decode(source) } else null
             document = withContext(Dispatchers.Default) {
                 when (mime) {
+                    WebProject.MIME -> requireNotNull(project).preview()
                     "text/html" -> source
                     "image/svg+xml" -> SvgSanitizer.sanitize(source)
                     "text/markdown" -> MarkdownPreview.render(source)
@@ -196,9 +222,13 @@ private fun CanvasPreview(source: String, mime: String, approvedNetwork: Boolean
                 onDispose { holder[0]?.apply { stopLoading(); destroy() }; holder[0] = null }
             }
             AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
-                SandboxWebViews.create(context, mime == "text/html", approvedNetwork, onFailure = { failed = true }).also {
+                val local = project
+                SandboxWebViews.create(context, mime == "text/html" || local != null, approvedNetwork,
+                    cachedResource = if (local == null) null else { url ->
+                        local.resource(url)?.let { (type, text) -> android.webkit.WebResourceResponse(type, "UTF-8", text.byteInputStream()) }
+                    }, onFailure = { failed = true }).also {
                     holder[0] = it
-                    SandboxWebViews.loadPreview(it, content, mime == "text/html", approvedNetwork)
+                    SandboxWebViews.loadPreview(it, content, mime == "text/html" || local != null, approvedNetwork, localProject = local != null)
                 }
             })
         }

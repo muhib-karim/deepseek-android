@@ -197,3 +197,123 @@ lint, assemble).
   for the system per-app language picker on Android 13 and later.
 - Display controls (appearance and text size) were already present from earlier passes.
 - Not included: a project shared-files panel (the data model has the field; no UI yet).
+
+## Pass D (v0.3.0)
+
+Delivered feature-matrix rows 17, 18, 21, 22, 23, 30, 50, 51, 52, 53 and 54,
+extending the released tool registry, artifact canvas, export renderer and
+attachment/OCR paths. This is an implementation handoff; no v0.3.0 tag or passing
+Android build is claimed. Existing versions, dependencies, SDK levels and MIT
+harness attribution remain unchanged.
+
+- **Office output:** registered `create_document`, `create_spreadsheet` and
+  `create_presentation` over the existing bounded java.util.zip OOXML builders.
+  Legacy tool names remain supported for saved runs. Private writes use SAFE
+  policy and new-file semantics. File cards now have Open/Share actions; previews,
+  external Office opens and sharing reuse the existing FileProvider/viewer flow.
+- **PDF output:** `create_pdf` accepts a title and heading/paragraph/table blocks,
+  with plain `content` retained for conversation exports. The existing PdfDocument
+  renderer now lays out headings and bordered tables, splitting long rows across
+  pages. Input is capped at 100,000 characters and 2,000 layout rows, tables at eight
+  columns, rendering at 200 pages, and output at the existing 2 MB artifact limit.
+- **Batch input:** the existing OpenMultipleDocuments SAF picker accepts 50 files
+  per message, with 20 MB per-file and 100 MB combined private-copy limits. Added
+  common code extensions. Existing Office/PDF/text/OCR extraction is retained;
+  model context includes a compact inventory and a fair per-file share of a
+  120,000-character text budget, with truncation markers. At most four images are
+  encoded for vision-capable models; all selected images still use local OCR.
+- **Camera:** retained the existing TakePicture system intent, FileProvider cache,
+  OCR import and cancellation/no-camera handling. No CAMERA permission was added.
+- **Share intake:** ACTION_SEND/SEND_MULTIPLE filters accept text, images and PDFs.
+  Bounded content URI grants are imported into a new chat and shared text fills
+  the composer. Nothing is automatically sent. File/network URIs and the app's
+  own provider, including encoded authorities, are rejected. Consumption survives
+  activity recreation; an incoming share waits while a current run/import is busy.
+- **Styles and Study:** Default, Concise, Explanatory and Formal presets plus an
+  independent Study toggle live in the composer, persist in conversation records
+  and compose into the system prompt. Study requests guiding questions and hints.
+  Old saved conversations deserialize with default settings.
+- **Multi-file builder:** `create_web_project` creates a website or HTML slide deck
+  containing index.html and CSS/classic JavaScript/SVG/JSON source files. Validated
+  relative paths, at most 50 files, 500,000 characters per file and 1.5 MB combined
+  source keep packages bounded. Existing canvas versions now hold the project;
+  the source tab selects individual files. Offline previews serve only exact local
+  resources through the existing sandbox WebView interceptor. Share/Save export
+  the original files as a traversal-safe ZIP, including sharing from Library.
+- **Follow-ups:** a bounded trailing JSON block supplies two or three question
+  chips under the latest completed answer. Tapping fills the composer. Settings
+  can disable suggestions; temporary chats disable both requesting and displaying
+  them. Valid metadata is hidden from answers and conversation exports; partial
+  metadata is hidden while streaming. This uses no extra provider call.
+- **Branches:** long-press any message or use its Branch from here action. The new
+  chat copies only that transcript prefix, attachment context, complete tool/result
+  exchanges and chat preferences. New identifiers, no pending checkpoint, and no
+  copied approval prevent tool replay. Temporary branches remain temporary.
+- **Library:** one drawer screen lists generated files, canvas versions, images,
+  fenced artifacts and exports. Type filters, file/chat-title search, preview,
+  share, confirmed deletion and source-chat navigation are wired. Provenance is
+  persisted privately and recovered for existing chat artifacts. Internal metadata,
+  symlinks and known temporary outputs are excluded. Tombstones prevent deleted
+  fenced artifacts from reappearing during refresh or reopening their message card.
+- **Bangla:** every new control and notice has English and natural Bangla resources;
+  existing attachment-limit messages were updated in both languages.
+
+Files touched, grouped (52 files including this section):
+
+- Core tools/security: `OfficeTools.kt`, new `PdfContent.kt` and
+  `CreateWebProjectTool.kt`, `GuardPolicy.kt`, `SandboxPreviewDocument.kt`.
+- Core input/chat/persistence: `Attachments.kt`, new `SharedContentPolicy.kt`,
+  `FollowUps.kt` and `ConversationBranch.kt`, `Personalization.kt`,
+  `ConversationStore.kt`, `ConversationExporter.kt`.
+- Core artifacts: `ArtifactStore.kt`, new `WebProject.kt` and `ArtifactLibrary.kt`.
+- Android entry/data/input: `AndroidManifest.xml`, `MainActivity.kt`,
+  `AttachmentImporter.kt`, new `SharedInput.kt`, `SettingsStore.kt`,
+  `CreatePdfTool.kt`, `SandboxWebViews.kt`.
+- Android UI: `ChatViewModel.kt`, `ChatScreen.kt`, `DsAndroidApp.kt`,
+  `AssistantTurn.kt`, `ArtifactViewer.kt`, `ArtifactCanvas.kt`, `SettingsScreen.kt`;
+  new `LibraryScreen.kt`, `ResponseStylePicker.kt`, `WebProjectEditor.kt` and
+  `MessageActions.kt`.
+- Resources: `values/strings.xml`, `values/root_strings.xml`,
+  `values-bn/strings.xml`.
+- JVM tests: new `OfficeAliasesTest`, `PdfContentTest`, `AttachmentBatchTest`,
+  `SharedContentTest`, `ResponseStyleTest`, `WebProjectTest`, `FollowUpsTest`,
+  `ConversationBranchTest`, `ArtifactLibraryTest`; updated `AttachmentsTest` and
+  `ConversationTurnsTest` for the new attachment summary.
+- Documentation: `README.md`, `SECURITY.md`, `docs/FEATURE_MATRIX.md`,
+  `docs/PROJECT_BRAIN.md` and this file. Delivered rows carry the requested
+  “shipped in v0.3.0 pass D” implementation status note; other v0.3.0 rows remain planned.
+
+Validation performed locally:
+
+- XML/TOML parsing, resource-reference checks, English/Bangla translation and
+  placeholder parity, source manifest permission checks and minSdk 26/targetSdk 35.
+- Lightweight Kotlin string/comment/delimiter checks across 170 source/test files,
+  `git diff --check`, a machine-path check and a redacted Gitleaks working-tree scan.
+  These checks passed. Lexical checks do not establish Kotlin compilation.
+- Added 24 JVM test cases covering Office aliases/new-file guards, structured PDF
+  input, bounded batch context, share URI policy, style persistence, project ZIPs
+  and preview policy, follow-up parsing/streaming, branch truncation/tool pairing,
+  library provenance/filtering/deletion and temporary-output exclusion.
+- No Gradle, Kotlin compiler, JVM suite, Android lint, APK build, browser, Playwright,
+  sub-agent, commit, push, version bump or tag was run. BUILD_NOTES was the final edit.
+
+Remaining verification and supported limits:
+
+- GitHub Actions must compile both modules, run the full existing/new JVM suites,
+  lint and assemble. Verify the merged manifest before any release.
+- Device-check DOCX/XLSX/PPTX interoperability; PDF page/table breaks and Bangla
+  shaping; 50-file batches, failure/cancellation and large images; camera absence,
+  rotation and capture handoff; cold/warm share intents and URI grant failures.
+- Device-check project file edits, offline scripts/styles/SVGs, blocked network,
+  files/frames/permissions, ZIP contents and selected-version export. Test branches
+  across selectable text and tool turns, library deletion/source links/process
+  restart, temporary sessions, large fonts and Bangla layouts.
+- Office output remains minimal OOXML. PDF conversation exports render Markdown
+  punctuation as text. Scanned PDFs may have no extractable text; bundled OCR is
+  still Latin-script recognition, not Bangla OCR. Multi-file preview supports
+  classic JavaScript and quoted relative resources, without module imports,
+  fetch, remote dependencies or multi-page navigation. WebView still has no hard
+  renderer heap quota. Follow-up chips require a valid model-supplied trailing
+  block; malformed/missing suggestions produce no fabricated questions.
+- Other v0.3.0 feature rows and the older shared-project-files UI gap are outside
+  this pass. No requested Pass D implementation item was intentionally deferred.

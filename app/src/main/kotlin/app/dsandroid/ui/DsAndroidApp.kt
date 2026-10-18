@@ -52,12 +52,19 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
+fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    LaunchedEffect(sharedInput, state.settingsReady, state.running, state.importing) {
+        if (sharedInput != null && state.settingsReady && !state.running && !state.importing) {
+            vm.receiveShare(sharedInput)
+            navigation.navigate("chat") { popUpTo("chat") { inclusive = true }; launchSingleTop = true }
+            sharedConsumed()
+        }
+    }
     var pendingSave by rememberSaveable { mutableStateOf<String?>(null) }
     var viewerPath by rememberSaveable { mutableStateOf("") }
     var viewerName by rememberSaveable { mutableStateOf("") }
@@ -83,7 +90,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
             }
         }
     }
-    fun share(artifact: Artifact) {
+    fun shareFile(artifact: Artifact) {
         try {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.artifacts", vm.workspace.resolve(artifact.path))
             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -94,6 +101,22 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
             }
             context.startActivity(Intent.createChooser(intent, context.getString(R.string.share_artifact)))
         } catch (_: Exception) { vm.showError(context.getString(R.string.share_failed)) }
+    }
+    fun share(artifact: Artifact) {
+        if (artifact.mimeType != app.dsandroid.core.artifacts.WebProject.MIME) { shareFile(artifact); return }
+        scope.launch {
+            try {
+                val zip = withContext(Dispatchers.IO) {
+                    val project = app.dsandroid.core.artifacts.WebProject.decode(app.dsandroid.core.artifacts.ArtifactStore(vm.workspace).read(artifact))
+                    val generated = app.dsandroid.core.tools.writeArtifact(app.dsandroid.core.tools.ToolContext(vm.workspace),
+                        "project-${java.util.UUID.randomUUID()}.zip", ".zip", "application/zip", project.zip()).artifacts.single()
+                    app.dsandroid.core.artifacts.ArtifactLibrary(vm.workspace).inherit(artifact, generated)
+                    generated
+                }
+                shareFile(zip)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { vm.showError(context.getString(R.string.share_failed)) }
+        }
     }
     fun save(artifact: Artifact) {
         try {
@@ -119,7 +142,8 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
                                 onAbout = { scope.launch { drawer.close() }; navigation.navigate("about") }, rename = vm::renameConversation, delete = vm::deleteConversation,
                                 onTemporary = { vm.newConversation(temporary = true); scope.launch { drawer.close() } }, pin = vm::pinConversation,
                                 move = vm::moveToProject, createProject = vm::createProject, deleteProject = vm::deleteProject,
-                                onNewInProject = { vm.newConversation(projectId = it); scope.launch { drawer.close() } })
+                                onNewInProject = { vm.newConversation(projectId = it); scope.launch { drawer.close() } },
+                                onLibrary = { scope.launch { drawer.close() }; navigation.navigate("library") })
                         }) {
                             Scaffold(topBar = {
                                 CenterAlignedTopAppBar(title = { ModelTitle(state, settings, vm::selectModel, vm::refreshModels) }, navigationIcon = {
@@ -141,12 +165,22 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
                                     }
                                 })
                             }) { padding ->
-                                ChatScreen(state, settings, Modifier.padding(padding), vm) { artifact ->
+                                ChatScreen(state, settings, Modifier.padding(padding), vm, shareArtifact = ::share) { artifact ->
                                     viewerPath = artifact.path; viewerName = artifact.fileName; viewerMime = artifact.mimeType
                                     navigation.navigate("viewer")
                                 }
                             }
                         }
+                    }
+                    composable("library") {
+                        LaunchedEffect(Unit) { vm.refreshLibrary() }
+                        LibraryScreen(state.library, state.libraryBusy, { navigation.popBackStack() }, open = { artifact ->
+                            viewerPath = artifact.path; viewerName = artifact.fileName; viewerMime = artifact.mimeType
+                            navigation.navigate("viewer")
+                        }, share = ::share, delete = vm::deleteLibraryArtifact, sourceChat = { id ->
+                            vm.openConversation(id)
+                            navigation.popBackStack("chat", false)
+                        })
                     }
                     composable("settings") {
                         Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { TextButton(onClick = { navigation.popBackStack() }) { Text(stringResource(R.string.back)) } }) }) { padding ->
@@ -262,7 +296,7 @@ private fun ModelTitle(state: ChatUiState, settings: AppSettings, select: (Strin
 private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (String) -> Unit, onSettings: () -> Unit, onAbout: () -> Unit,
     rename: (String, String) -> Unit, delete: (String) -> Unit, onTemporary: () -> Unit = {}, pin: (String) -> Unit = {},
     move: (String, String?) -> Unit = { _, _ -> }, createProject: (String, String) -> Unit = { _, _ -> }, deleteProject: (String) -> Unit = {},
-    onNewInProject: (String) -> Unit = {}) {
+    onNewInProject: (String) -> Unit = {}, onLibrary: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var menuId by remember { mutableStateOf<String?>(null) }
     var renameId by remember { mutableStateOf<String?>(null) }
@@ -327,6 +361,7 @@ private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (S
                 if (state.running) item { Text(stringResource(R.string.stop_to_switch), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall) }
             }
             HorizontalDivider()
+            TextButton(onClick = onLibrary, enabled = !state.running && !state.importing, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.library)) }
             TextButton(onClick = onSettings, enabled = !state.running && !state.signingIn, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.profile_footer)) }
             TextButton(onClick = onAbout, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.about)) }
             Spacer(Modifier.height(12.dp))

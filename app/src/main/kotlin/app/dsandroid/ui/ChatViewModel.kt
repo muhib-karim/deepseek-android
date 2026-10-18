@@ -15,6 +15,8 @@ import app.dsandroid.auth.AccountSignIn
 import app.dsandroid.core.agent.*
 import app.dsandroid.core.auth.SessionAuthMachine
 import app.dsandroid.core.attachments.AttachmentContextBuilder
+import app.dsandroid.core.artifacts.ArtifactLibrary
+import app.dsandroid.core.artifacts.LibraryEntry
 import app.dsandroid.core.artifacts.ArtifactStore
 import app.dsandroid.core.artifacts.FencedArtifact
 import app.dsandroid.core.guard.*
@@ -81,6 +83,11 @@ data class ChatUiState(
     val projects: List<ProjectRecord> = emptyList(),
     val personalizing: Boolean = false,
     val exporting: Boolean = false,
+    val sharedDraft: String? = null,
+    val library: List<LibraryEntry> = emptyList(),
+    val libraryBusy: Boolean = false,
+    val responseStyle: ResponseStyle = ResponseStyle.DEFAULT,
+    val studyMode: Boolean = false,
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -91,6 +98,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var store: SettingsStore? = null
     private val settingsLock = Mutex()
     val workspace = WorkspacePath(File(application.filesDir, "workspace"))
+    private val artifactLibrary = ArtifactLibrary(workspace)
     private val persistentCheckpoints = FileCheckpointStore(File(application.filesDir, "runs"))
     private val checkpoints = SessionCheckpointStore(persistentCheckpoints)
     private val memoryStore = MemoryStore(File(application.filesDir, "memory"))
@@ -128,6 +136,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val history: MutableList<ChatMessage>, var items: List<ChatItem> = emptyList(),
         var attachmentCount: Int = 0, var pendingRunId: String? = null, var supersededRunIds: Set<String> = emptySet(),
         var pinned: Boolean = false, var projectId: String? = null, var systemPrompt: String = "", val temporary: Boolean = false,
+        var responseStyle: ResponseStyle = ResponseStyle.DEFAULT, var studyMode: Boolean = false,
     )
     private val conversations = mutableListOf<Conversation>()
     private var current = Conversation(history = mutableListOf(systemMessage()))
@@ -152,13 +161,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val records = withContext(Dispatchers.IO) { historyStore.loadAll() }
                 val recovered = ConversationRecovery.reconcile(records, persistentCheckpoints.all(), System.currentTimeMillis())
                 conversations.addAll(recovered.map { it.toConversation() })
-                withContext(Dispatchers.IO) { recovered.forEach(historyStore::save) }
+                withContext(Dispatchers.IO) {
+                    recovered.forEach { record ->
+                        historyStore.save(record)
+                        record.items.flatMap { it.artifacts }.forEach { artifact ->
+                            runCatching { artifactLibrary.record(artifact, record.id) }
+                        }
+                    }
+                }
                 val facts = withContext(Dispatchers.IO) { memoryStore.all() }
                 val projects = withContext(Dispatchers.IO) { projectStore.all() }
                 mutableState.update { it.copy(facts = facts, projects = projects) }
                 current = conversations.firstOrNull() ?: current
                 mutableState.update { it.copy(conversationId = current.id, title = current.title, items = current.items,
-                    resumable = current.pendingRunId != null, projectId = current.projectId, systemPrompt = current.systemPrompt, temporary = current.temporary) }
+                    resumable = current.pendingRunId != null, projectId = current.projectId, systemPrompt = current.systemPrompt, temporary = current.temporary, responseStyle = current.responseStyle, studyMode = current.studyMode) }
                 mutableState.update { it.copy(settingsReady = true) }
                 syncConversation()
                 refreshModels()
@@ -173,14 +189,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun ConversationRecord.toConversation() = Conversation(id, title, createdAt, history.toMutableList(), items.map {
         if (it.role == "user") ChatItem.User(it.id, it.text, it.attachments)
         else ChatItem.Assistant(it.id, it.steps, it.artifacts, it.sources)
-    }, attachmentCount, pendingRunId, supersededRunIds, pinned, projectId, systemPrompt, temporary)
+    }, attachmentCount, pendingRunId, supersededRunIds, pinned, projectId, systemPrompt, temporary, responseStyle, studyMode)
 
     private fun Conversation.record() = ConversationRecord(id, title, createdAt, history.toList(), items.map {
         when (it) {
             is ChatItem.User -> StoredChatItem(it.id, "user", it.text, it.attachments)
             is ChatItem.Assistant -> StoredChatItem(it.id, "assistant", steps = it.steps, artifacts = it.artifacts, sources = it.sources)
         }
-    }, attachmentCount, pendingRunId, supersededRunIds, pinned, projectId, systemPrompt, temporary)
+    }, attachmentCount, pendingRunId, supersededRunIds, pinned, projectId, systemPrompt, temporary, responseStyle, studyMode)
 
     private fun persistConversation(conversation: Conversation) {
         if (conversation.items.isEmpty() || conversation.temporary) return
@@ -256,14 +272,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addAttachments(uris: List<Uri>) {
         if (state.value.running || state.value.importing || uris.isEmpty()) return
-        val remaining = 50 - current.attachmentCount - state.value.attachments.size
+        val remaining = AttachmentContextBuilder.MAX_FILES - state.value.attachments.size
         if (remaining <= 0) { showError(text(R.string.upload_limit)); return }
         mutableState.update { it.copy(importing = true) }
         viewModelScope.launch {
             try {
                 for (uri in uris.take(remaining)) {
                     try {
-                        val upload = importer.import(uri)
+                        val usedBytes = state.value.attachments.sumOf { it.file.length() }
+                        val upload = importer.import(uri, AttachmentContextBuilder.MAX_BATCH_BYTES - usedBytes)
                         mutableState.update { it.copy(attachments = it.attachments + upload) }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { showError(text(R.string.upload_read_error)) }
@@ -272,6 +289,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } finally { mutableState.update { it.copy(importing = false) } }
         }
     }
+
+    fun receiveShare(input: app.dsandroid.attachments.SharedInput) {
+        if (state.value.running || state.value.importing || !state.value.settingsReady) return
+        newConversation()
+        mutableState.update { it.copy(sharedDraft = input.text) }
+        addAttachments(input.uris)
+        if (input.limited) showError(text(R.string.share_input_limited))
+    }
+
+    fun consumeSharedDraft() { mutableState.update { it.copy(sharedDraft = null) } }
 
     fun removeAttachment(id: String) {
         if (state.value.running) return
@@ -310,7 +337,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // and its user context must be durable before cancellation leaves this block.
                 withContext(NonCancellable) {
                     val message = withContext(Dispatchers.IO) {
-                        AttachmentContextBuilder.message(userText, uploads.map { it.content(config.supportsVision(think)) }, config.supportsVision(think))
+                        val vision = config.supportsVision(think)
+                        val imageIds = uploads.filter { it.kind == app.dsandroid.core.attachments.AttachmentKind.IMAGE }
+                            .take(AttachmentContextBuilder.MAX_VISION_IMAGES).map { it.id }.toSet()
+                        AttachmentContextBuilder.message(userText, uploads.map { it.content(vision && it.id in imageIds) }, vision)
                     }
                     refreshPrompt(conversation)
                     conversation.history.add(message)
@@ -342,8 +372,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun builtInTools(config: AppSettings): List<Tool> = listOf(
         CreateMarkdownTool(), CreateCsvTool(), CreateSvgTool(), CreatePdfTool(), CreateImageTool(),
         CreateFileTool(), ListDirTool(), ListFilesTool(), ReadFileTool(), ZipFilesTool(), ListZipTool(),
+        CreateDocumentTool(), CreateSpreadsheetTool(), CreatePresentationTool(),
         CreateDocxTool(), CreatePptxTool(), CreateXlsxTool(), CreateChartTool(),
-        RenderChartTool(), CreateArtifactTool(), CodeInterpreterTool(codeExecutor), VisitWebTool(), WebFetchTool(),
+        RenderChartTool(), CreateArtifactTool(), CreateWebProjectTool(), CodeInterpreterTool(codeExecutor), VisitWebTool(), WebFetchTool(),
         WebSearchTool(if (config.searchBackend == "searxng") config.searxngUrl else null),
         RememberTool(memoryStore) { mutableState.update { it.copy(facts = memoryStore.all()) } },
     )
@@ -376,7 +407,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             when (event) {
                 is AgentEvent.StepsUpdated -> updateAssistant(run.runId) { it.copy(steps = event.steps) }
                 is AgentEvent.SourcesUpdated -> updateAssistant(run.runId) { it.copy(sources = event.sources) }
-                is AgentEvent.ArtifactCreated -> updateAssistant(run.runId) { it.copy(artifacts = (it.artifacts + event.artifact).distinctBy { artifact -> artifact.path }) }
+                is AgentEvent.ArtifactCreated -> {
+                    updateAssistant(run.runId) { it.copy(artifacts = (it.artifacts + event.artifact).distinctBy { artifact -> artifact.path }) }
+                    recordGenerated(event.artifact, conversation)
+                }
                 is AgentEvent.ToolFinished -> syncConversation()
                 is AgentEvent.RetryWaiting -> mutableState.update { it.copy(retrySeconds = ((event.remainingMs + 999) / 1000).toInt(),
                     waitingForNetwork = true, runDetails = event.details, error = null) }
@@ -408,11 +442,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openFencedArtifact(turnId: String, index: Int, fence: FencedArtifact, open: (Artifact) -> Unit) {
+        val conversation = current
         viewModelScope.launch {
             try {
                 val artifact = withContext(Dispatchers.IO) {
-                    ArtifactStore(workspace).importFence(turnId, index, fence.format, fence.content)
+                    val artifacts = ArtifactStore(workspace)
+                    check(!artifactLibrary.isDeleted(artifacts.fenceReference(turnId, index, fence.format, fence.content)))
+                    artifacts.importFence(turnId, index, fence.format, fence.content)
                 }
+                recordGenerated(artifact, conversation)
                 open(artifact)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { showError(text(R.string.canvas_open_failed)) }
@@ -558,6 +596,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     require(file.length() <= 2 * 1024 * 1024)
                     CreateImageTool().run(buildJsonObject { put("svg", file.readText()) }, ToolContext(workspace))
                 }
+                withContext(Dispatchers.IO) { artifactLibrary.inherit(artifact, result.artifacts.single()) }
                 onCreated(result.artifacts.single())
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { showError(text(R.string.viewer_error)) }
@@ -584,7 +623,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         current = Conversation(history = mutableListOf(systemMessage()), temporary = temporary, projectId = projectId)
         if (temporary) checkpoints.markTemporary(current.id)
         mutableState.update { it.copy(conversationId = current.id, title = "", items = emptyList(), error = null, attachments = emptyList(),
-            temporary = temporary, projectId = projectId, systemPrompt = "",
+            temporary = temporary, projectId = projectId, systemPrompt = "", sharedDraft = null, responseStyle = ResponseStyle.DEFAULT, studyMode = false,
             resumable = false, waitingForNetwork = false, retrySeconds = null, runDetails = null) }
     }
     fun openConversation(id: String) {
@@ -593,9 +632,66 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         discardPendingUploads()
         syncConversation(); discardTemporarySession(); current = target
         mutableState.update { it.copy(conversationId = target.id, title = target.title, items = target.items, error = null, attachments = emptyList(),
-            temporary = target.temporary, projectId = target.projectId, systemPrompt = target.systemPrompt,
+            temporary = target.temporary, projectId = target.projectId, systemPrompt = target.systemPrompt, sharedDraft = null, responseStyle = target.responseStyle, studyMode = target.studyMode,
             resumable = target.pendingRunId != null, waitingForNetwork = false, retrySeconds = null, runDetails = null) }
     }
+    private suspend fun recordGenerated(artifact: Artifact, conversation: Conversation) {
+        try { withContext(Dispatchers.IO) { artifactLibrary.record(artifact, conversation.id, conversation.temporary) } }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { showError(text(R.string.library_failed)) }
+    }
+
+    fun refreshLibrary() {
+        if (state.value.libraryBusy || state.value.running) return
+        val records = conversations.map { it.record() }
+        mutableState.update { it.copy(libraryBusy = true) }
+        viewModelScope.launch {
+            try {
+                val entries = withContext(Dispatchers.IO) { artifactLibrary.list(records) }
+                mutableState.update { it.copy(library = entries) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.library_failed)) }
+            finally { mutableState.update { it.copy(libraryBusy = false) } }
+        }
+    }
+
+    fun deleteLibraryArtifact(artifact: Artifact) {
+        if (state.value.libraryBusy || state.value.running) return
+        mutableState.update { it.copy(libraryBusy = true) }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { artifactLibrary.delete(artifact) }
+                (conversations + current).distinctBy { it.id }.forEach { conversation ->
+                    conversation.items = conversation.items.map { item ->
+                        if (item is ChatItem.Assistant) item.copy(artifacts = item.artifacts.filterNot { it.path == artifact.path }) else item
+                    }
+                    persistConversation(conversation)
+                }
+                mutableState.update { it.copy(items = current.items, library = it.library.filterNot { entry -> entry.artifact.path == artifact.path }) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { showError(text(R.string.library_failed)) }
+            finally { mutableState.update { it.copy(libraryBusy = false) } }
+        }
+    }
+
+    fun branchConversation(itemId: String) {
+        if (state.value.running || state.value.importing || restarting) return
+        try {
+            syncConversation()
+            val record = ConversationBranch.create(current.record(), itemId, UUID.randomUUID().toString(),
+                text(R.string.branch_title, current.title.ifBlank { text(R.string.chat_new_title) }), System.currentTimeMillis())
+            discardPendingUploads()
+            discardTemporarySession()
+            current = record.toConversation()
+            if (current.temporary) checkpoints.markTemporary(current.id) else conversations.add(current)
+            mutableState.update { it.copy(conversationId = current.id, title = current.title, items = current.items,
+                attachments = emptyList(), sharedDraft = null, temporary = current.temporary, projectId = current.projectId,
+                systemPrompt = current.systemPrompt, responseStyle = current.responseStyle, studyMode = current.studyMode,
+                error = null, resumable = false, retrySeconds = null, waitingForNetwork = false, runDetails = null) }
+            syncConversation()
+        } catch (_: Exception) { showError(text(R.string.branch_failed)) }
+    }
+
     fun renameConversation(id: String, title: String) {
         if (state.value.running || title.isBlank()) return
         val conversation = conversations.find { it.id == id } ?: return
@@ -617,7 +713,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             current = Conversation(history = mutableListOf(systemMessage()))
             mutableState.update { it.copy(conversationId = current.id, title = "", items = emptyList(), attachments = emptyList(),
                 resumable = false, waitingForNetwork = false, retrySeconds = null, runDetails = null, error = null,
-                temporary = false, projectId = null, systemPrompt = "") }
+                temporary = false, projectId = null, systemPrompt = "", sharedDraft = null, responseStyle = ResponseStyle.DEFAULT, studyMode = false) }
         }
         syncConversation()
     }
@@ -647,6 +743,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             catch (_: Exception) { showError(text(error)) }
             finally { mutableState.update { it.copy(personalizing = false) } }
         }
+    }
+
+    fun setResponseStyle(style: ResponseStyle, study: Boolean = current.studyMode) {
+        if (state.value.running || state.value.importing) return
+        current.responseStyle = style
+        current.studyMode = study
+        mutableState.update { it.copy(responseStyle = style, studyMode = study) }
+        refreshPrompt(current)
+        persistConversation(current)
     }
 
     fun setChatInstructions(value: String) {
@@ -700,7 +805,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportConversation(format: ExportFormat, answerId: String?, labels: ExportLabels, language: String, ready: (Artifact) -> Unit) {
         if (state.value.running || state.value.exporting || state.value.items.isEmpty()) return
-        val record = current.record()
+        val conversation = current
+        val record = conversation.record()
         mutableState.update { it.copy(exporting = true) }
         viewModelScope.launch {
             try {
@@ -716,6 +822,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     result.artifacts.single()
                 }
+                recordGenerated(artifact, conversation)
                 ready(artifact)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { showError(text(R.string.export_error)) }
@@ -843,7 +950,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun systemMessage(conversation: Conversation? = null) = ChatMessage("system", PromptComposer.compose(
         settings.value.customInstructions, conversation?.systemPrompt.orEmpty(),
         state.value.projects.find { it.id == conversation?.projectId }, state.value.facts,
-        settings.value.memoryEnabled && conversation?.temporary != true))
+        settings.value.memoryEnabled && conversation?.temporary != true, conversation?.responseStyle ?: ResponseStyle.DEFAULT, conversation?.studyMode == true) +
+        if (settings.value.suggestedFollowUps && conversation?.temporary != true) app.dsandroid.core.chat.FollowUps.PROMPT else "")
 
     private fun refreshPrompt(conversation: Conversation) {
         conversation.history.removeAll { it.role == "system" }

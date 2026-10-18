@@ -35,6 +35,7 @@ data class AppSettings(
     val appearance: Appearance = Appearance.SYSTEM,
     val fontScale: Float = 1f,
     val collapseThinking: Boolean = true,
+    val suggestedFollowUps: Boolean = true,
     val audioLanguage: String = "",
     val searchBackend: String = "duckduckgo",
     val searxngUrl: String = "",
@@ -85,6 +86,7 @@ class SettingsStore(context: Context) {
         appearance = runCatching { Appearance.valueOf(preferences.getString("appearance", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM),
         fontScale = preferences.getFloat("font_scale", 1f).coerceIn(0.85f, 1.3f),
         collapseThinking = preferences.getBoolean("collapse_thinking", true),
+        suggestedFollowUps = preferences.getBoolean("suggested_follow_ups", true),
         audioLanguage = preferences.getString("audio_language", "")!!,
         searchBackend = preferences.getString("search_backend", "duckduckgo")!!,
         searxngUrl = preferences.getString("searxng_url", "")!!,
@@ -107,6 +109,7 @@ class SettingsStore(context: Context) {
             .putString("authorize_url", value.authorizeUrl).putString("exchange_url", value.exchangeUrl)
             .putString("client_id", value.clientId)
             .putString("appearance", value.appearance.name).putFloat("font_scale", value.fontScale.coerceIn(0.85f, 1.3f))
+            .putBoolean("suggested_follow_ups", value.suggestedFollowUps)
             .putBoolean("collapse_thinking", value.collapseThinking).putString("audio_language", value.audioLanguage)
             .putString("search_backend", value.searchBackend).putString("searxng_url", value.searxngUrl)
             .putBoolean("memory_enabled", value.memoryEnabled).putString("custom_instructions", value.customInstructions.take(8000))

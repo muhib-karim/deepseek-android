@@ -38,3 +38,8 @@ class CreatePptxTool : Tool {
         return writeArtifact(ctx,args.outputName(".pptx"),".pptx","application/vnd.openxmlformats-officedocument.presentationml.presentation",PptxBuilder.build(args.stringArg("title"),slides))
     }
 }
+
+/** Descriptive v0.3 tool names; old names remain supported for saved runs. */
+class CreateDocumentTool : Tool by CreateDocxTool() { override val name = "create_document" }
+class CreateSpreadsheetTool : Tool by CreateXlsxTool() { override val name = "create_spreadsheet" }
+class CreatePresentationTool : Tool by CreatePptxTool() { override val name = "create_presentation" }
