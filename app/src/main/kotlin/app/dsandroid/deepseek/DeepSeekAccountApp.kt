@@ -40,6 +40,8 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val BIRTHDAY_NOTICE = "Confirm your date of birth on the DeepSeek page to finish signing in."
+
 @Composable
 fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
     launchRequest: LaunchRequest? = null, launchConsumed: () -> Unit = {},
@@ -94,10 +96,15 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     LaunchedEffect(state.page, apiFallback) {
         if (state.page == AccountPage.LOGIN && !apiFallback) {
             browser.openLogin()
+            var birthdayChecked = 0L
             while (true) {
                 delay(1000)
-                val token = browser.captureSession()
-                if (token != null && vm.acceptSession(token)) break
+                val token = browser.captureSession() ?: continue
+                // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
+                if (System.currentTimeMillis() - birthdayChecked < 3000) continue
+                birthdayChecked = System.currentTimeMillis()
+                if (vm.needsBirthday(token)) { vm.notice(BIRTHDAY_NOTICE); continue }
+                if (vm.acceptSession(token)) break
             }
         }
     }

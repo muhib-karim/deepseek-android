@@ -105,6 +105,12 @@ class AccountViewModel @JvmOverloads constructor(
             finally { mutable.update { it.copy(busy = false) } }
         }
     }
+    /** True only when the service says this freshly signed-in account still owes the age confirmation. */
+    suspend fun needsBirthday(token: SessionToken): Boolean = try {
+        client.needsBirthday(WebCredentials(token, DeepSeekCookies.read()))
+    } catch (cancelled: CancellationException) { throw cancelled }
+    catch (_: Exception) { false }
+
     suspend fun acceptSession(token: SessionToken): Boolean {
         if (!available() || token.bearer() == rejectedToken) return false
         if (token.isExpired(System.currentTimeMillis())) { expireSession(); return false }

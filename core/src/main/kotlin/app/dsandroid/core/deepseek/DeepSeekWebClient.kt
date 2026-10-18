@@ -45,6 +45,14 @@ class DeepSeekWebClient(
         postJson(credentials, "/api/v0/chat_session/delete", buildJsonObject { put("chat_session_id", sessionId) }, allowEmptyAcknowledgement = true)
     }
 
+    /** New accounts must confirm a date of birth on the web page before chatting (users/current need_birthday). */
+    suspend fun needsBirthday(credentials: WebCredentials): Boolean = withContext(Dispatchers.IO) {
+        val data = exchange(authenticatedRequest(credentials, "/api/v0/users/current").get().build()) { response ->
+            decodeEnvelope(readBounded(response.body ?: throw EndpointChanged()))
+        }
+        (data["need_birthday"] as? JsonPrimitive)?.booleanOrNull ?: false
+    }
+
     suspend fun uploadFile(credentials: WebCredentials, file: File, name: String, mime: String): String = withContext(Dispatchers.IO) {
         val mediaType = mime.toMediaType()
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)

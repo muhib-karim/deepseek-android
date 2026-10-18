@@ -86,4 +86,20 @@ data: [DONE]
             assertEquals(1, server.requestCount)
         } finally { server.shutdown() }
     }
+
+    @Test fun birthdayGateIsReadFromCurrentUser() = runBlocking {
+        val server = MockWebServer(); server.start()
+        try {
+            server.enqueue(MockResponse().setBody("""{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"id":"u","need_birthday":true,"minor_mode_status":"NONE"}}}"""))
+            server.enqueue(MockResponse().setBody("""{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"id":"u","need_birthday":false}}}"""))
+            server.enqueue(MockResponse().setBody("""{"code":40003,"msg":"Authorization Failed (invalid token)","data":null}"""))
+            val client = DeepSeekWebClient(OkHttpClient(), server.url("/"))
+            assertTrue(client.needsBirthday(credentials))
+            assertFalse(client.needsBirthday(credentials))
+            assertThrows(SessionExpired::class.java) { runBlocking { client.needsBirthday(credentials) } }
+            val first = server.takeRequest()
+            assertEquals("GET", first.method)
+            assertEquals("/api/v0/users/current", first.path)
+        } finally { server.shutdown() }
+    }
 }
