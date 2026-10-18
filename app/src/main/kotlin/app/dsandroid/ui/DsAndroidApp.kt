@@ -53,10 +53,14 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {},
-    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}) {
+    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}, startDestination: String = "chat") {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
+    // Keep chat underneath an explicitly requested settings entry, so Save/Back can return to it.
+    LaunchedEffect(navigation, startDestination) {
+        if (startDestination != "chat") navigation.navigate(startDestination) { launchSingleTop = true }
+    }
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle

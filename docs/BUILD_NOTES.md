@@ -720,3 +720,18 @@ The chat screen no longer registers a default-network callback: that API needs A
 ## Release v0.4.0
 
 Version 0.4.0 (versionCode 4) is the Pass G hardening release. CI compiles, runs the core and app unit tests, runs lint and assembles the debug and minified release builds; the tag workflow attaches the debug APK, the release APK signed with the project release key, and SHA256SUMS.txt to the GitHub release. Install permissions remain INTERNET only (RECORD_AUDIO is a runtime request). Device validation is still manual.
+
+
+## v0.5.0 account-client branch
+
+Account-first Compose UI, encrypted DeepSeek WebView session capture, Bearer+cookie native
+streaming, runtime official-worker PoW integration and deterministic light/dark screenshot
+fixtures are implemented. See `ACCOUNT_CLIENT_050.md` for the complete validation boundary.
+Version is 0.5.0 (5), with unchanged SDK levels and permissions. No local Gradle, emulator,
+push, tag or release was run. Public chat research returned HTTP 403; worker contract inspection
+succeeded. Real account/worker access, compilation, test execution, lint and screenshots remain
+CI/device gates. No official assets or third-party implementation code were copied.
+
+## Release v0.5.0
+
+Version 0.5.0 (versionCode 5) adds DeepSeek account mode. CI compiles, runs the core and app unit tests, runs lint and assembles the debug and minified release builds; the emulator workflow runs 54 instrumented tests on Android 14 in light and dark themes, including fourteen account-mode feature tests against a mocked DeepSeek server. The tag workflow attaches the debug APK, the signed release APK and SHA256SUMS.txt. A live completion from the app on a device remains unverified.

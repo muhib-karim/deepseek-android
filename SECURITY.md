@@ -4,6 +4,33 @@ DeepSeek Android (Unofficial) requires validation before release. CI compilation
 required before distributing an APK. It has not received a production security
 audit. Do not treat model output or web content as trusted instructions.
 
+## DeepSeek web account mode (v0.5.0)
+
+The default account mode uses a restricted embedded WebView at `https://chat.deepseek.com`.
+Passwords are entered into DeepSeek's own page within that WebView; the app does not read
+password fields. Only `localStorage.userToken` is read, with native and JavaScript exact-origin
+checks. Google sign-in may reject embedded browsers and has not been tested. There is no
+native JavaScript interface. File/content access, mixed content, popups and page permission
+grants are disabled; navigation is restricted to the exact DeepSeek and Google account hosts.
+
+The token is stored in separate EncryptedSharedPreferences. Native requests to fixed DeepSeek
+endpoints carry Bearer plus CookieManager cookies; completion also carries a challenge-specific
+PoW header. Redirects, automatic network retries and automatic API/account switching are disabled.
+HTTP/server/worker errors are mapped to fixed messages, with no raw bodies, credentials or headers
+in app diagnostics. Login-page console messages are suppressed. Runtime worker code is trusted
+from DeepSeek's HTTPS CDN, not bundled or independently integrity-pinned; live CSP/worker access
+and authenticated protocol behavior remain unverified. See [validation notes](docs/ACCOUNT_CLIENT_050.md).
+
+Logout clears the encrypted token, host storage, known-path host cookies and local account chat
+history. It preserves unrelated-site cookies and all legacy API settings/history. The shared
+`.deepseek.com` session cookie, if present, is expired as well. CookieManager cannot enumerate
+all cookie domain/path attributes, so device logout verification remains required. There is no
+server-side revocation claim. Local chat history contains no session secrets and follows the
+app's existing private-files/backup-disabled boundary. Native attachments send extracted text
+only after confirmation; there is no native DeepSeek file upload implementation.
+
+The remaining provider/OAuth sections describe the explicit legacy API client.
+
 ## Reporting
 
 Use the repository's private vulnerability reporting feature if enabled. Do not

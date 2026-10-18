@@ -3,9 +3,32 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current release: **v0.4.0** (not audited). Each GitHub release carries a debug APK,
+Current release: **v0.5.0** (not audited). Each GitHub release carries a debug APK,
 a signed minified release APK and SHA256SUMS.txt. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
+
+## v0.5.0: DeepSeek account mode
+
+The default screen targets a DeepSeek account workflow: **Log in with DeepSeek** on
+DeepSeek's own sign-in page inside the app, then native streamed chat with DeepThink and
+Search controls. Settings keeps the API-key client as an explicit fallback. The light UI
+follows the measured reference; dark colors and the abstract mark are original. It is an
+unofficial client.
+
+Validated for this release: CI (core and app unit tests, lint, debug and minified release
+builds) and 54 emulator tests on Android 14 in light and dark themes covering all fourteen
+account-mode features against a mocked DeepSeek server. The stream reader replays recorded
+live DeepSeek streams (chat, DeepThink, Search) in unit tests. Sign-in, streamed chat with
+proof-of-work, DeepThink, Search, history, logout and expired-token handling were checked on
+the live web service with a test account.
+
+Not yet verified: a live chat completion sent by the app itself on a phone. The web client
+sends an extra signed header the app does not; if the service rejects the app's request, the
+app shows a clear error within its request timeouts rather than hanging or falling back to a
+paid API. Google sign-in is hidden in the embedded sign-in page. See
+[the implementation and validation boundary](docs/ACCOUNT_CLIENT_050.md) for scope and
+attachment limitations. The historical feature lists below describe the API client, which
+remains available through Settings.
 
 ## v0.3.0 Pass F features (in v0.3.0)
 

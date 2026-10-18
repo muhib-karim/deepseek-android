@@ -9,7 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.dsandroid.attachments.SharedInput
-import app.dsandroid.ui.DsAndroidApp
+import app.dsandroid.deepseek.DeepSeekAccountApp
 
 class MainActivity : AppCompatActivity() {
     private var launchRequest by mutableStateOf<app.dsandroid.launch.LaunchRequest?>(null)
@@ -22,7 +22,7 @@ class MainActivity : AppCompatActivity() {
         app.dsandroid.launch.QuickLaunch.publish(this)
         app.dsandroid.widget.AskDeepSeekWidget.refresh(this)
         enableEdgeToEdge()
-        setContent { DsAndroidApp(sharedInput = sharedInput, sharedConsumed = { sharedInput = null }, launchRequest = launchRequest, launchConsumed = { launchRequest = null }) }
+        setContent { DeepSeekAccountApp(sharedInput = sharedInput, sharedConsumed = { sharedInput = null }, launchRequest = launchRequest, launchConsumed = { launchRequest = null }) }
     }
 
     override fun onNewIntent(intent: Intent) {
