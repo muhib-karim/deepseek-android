@@ -33,8 +33,8 @@ class WebClientTest {
                 assertEquals("Bearer synthetic-session", it.getHeader("Authorization"))
                 assertEquals("ds_session_id=synthetic-cookie", it.getHeader("Cookie"))
                 assertEquals("web", it.getHeader("x-client-platform"))
-                assertEquals("2.2.0", it.getHeader("x-client-version"))
-                assertEquals("zh_CN", it.getHeader("x-client-locale"))
+                assertEquals("2.5.0", it.getHeader("x-client-version"))
+                assertEquals("en_US", it.getHeader("x-client-locale"))
                 assertEquals("com.deepseek.chat", it.getHeader("x-client-bundle-id"))
             }
             assertEquals("{}", requests[0].body.readUtf8())

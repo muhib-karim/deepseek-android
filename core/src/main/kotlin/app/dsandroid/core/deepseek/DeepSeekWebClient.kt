@@ -111,8 +111,8 @@ class DeepSeekWebClient(
         return Request.Builder().url(origin.resolve(path) ?: throw EndpointChanged())
             .header("Authorization", "Bearer ${credentials.token.bearer()}").header("Cookie", credentials.cookies)
             .header("Origin", DeepSeekOrigin.URL).header("Referer", "${DeepSeekOrigin.URL}/")
-            .header("x-client-platform", "web").header("x-client-version", "2.2.0")
-            .header("x-client-locale", "zh_CN").header("x-client-bundle-id", "com.deepseek.chat")
+            .header("x-client-platform", "web").header("x-client-version", "2.5.0")
+            .header("x-client-locale", "en_US").header("x-client-bundle-id", "com.deepseek.chat")
     }
     private suspend fun <T> exchange(request: Request, read: suspend (Response) -> T): T = coroutineScope {
         val call = http.newCall(request)
