@@ -38,7 +38,8 @@ data: [DONE]
         truncated.feed("data: {\"v\":{\"response_message_id\":1}}\n\n")
         assertThrows(UpdateRequired::class.java) { truncated.finish() }
         assertThrows(UpdateRequired::class.java) { DeepSeekStream().feed("data: {bad}\n\n") }
-        assertThrows(UpdateRequired::class.java) { DeepSeekStream().feed("data: {\"p\":\"response/fragments\",\"o\":\"SET\",\"v\":[{\"type\":\"UNKNOWN\",\"content\":\"hidden\"}]}\n\n") }
+        assertEquals("", DeepSeekStream().feed("data: {\"p\":\"response/fragments\",\"o\":\"SET\",\"v\":[{\"type\":\"UNKNOWN\",\"content\":\"hidden\"}]}\n\n").last().response)
+        assertThrows(UpdateRequired::class.java) { DeepSeekStream().feed("data: {\"p\":\"response/fragments\",\"o\":\"SET\",\"v\":[{\"type\":\"bad type\",\"content\":\"x\"}]}\n\n") }
     }
     @Test fun operationOnlyPatchesChangeTheInheritedOperation() {
         val stream = DeepSeekStream()

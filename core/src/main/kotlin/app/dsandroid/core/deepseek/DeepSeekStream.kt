@@ -9,6 +9,13 @@ data class WebReply(
 
 /** Independently implemented reducer for the web service's SSE fragment patches. */
 class DeepSeekStream {
+    private companion object {
+        val METADATA_EVENTS = setOf("update_session", "title", "close")
+        val SHOWN = setOf("THINK", "RESPONSE")
+        val FRAGMENT_TYPE = Regex("[A-Z][A-Z_]{0,31}")
+        val FRAGMENT_CONTENT = Regex("response/fragments/(-1|[0-9]+)/content")
+        val FRAGMENT_FIELD = Regex("response/fragments/(-1|[0-9]+)(/[a-z_]{1,40})?")
+    }
     private data class Fragment(val type: String, var text: String)
     private val framing = WebSseFraming()
     private val fragments = mutableListOf<Fragment>()
@@ -40,6 +47,8 @@ class DeepSeekStream {
         }
         val json = Json.parseToJsonElement(data).jsonObject
         checkCodes(json)
+        // Live service metadata events (session timestamps, generated titles, close hints) carry no reply text.
+        if (event.name in METADATA_EVENTS) return
         if (json.containsKey("error") || event.name == "error") throw EndpointChanged()
         json["request_message_id"]?.let { requestId = id(it) }
         json["response_message_id"]?.let { messageId = id(it) }
@@ -78,11 +87,13 @@ class DeepSeekStream {
                 if (operation == "SET") fragments.clear()
                 (value as? JsonArray ?: throw EndpointChanged()).forEach { add(it as? JsonObject ?: throw EndpointChanged()) }
             }
-            path.matches(Regex("response/fragments/(-1|[0-9]+)/content")) -> {
+            path.matches(FRAGMENT_CONTENT) -> {
                 val index = path.split('/')[2].toInt().let { if (it == -1) fragments.lastIndex else it }
                 val fragment = fragments.getOrNull(index) ?: throw EndpointChanged()
                 fragment.text = if (operation == "APPEND") fragment.text + text(value) else text(value)
             }
+            // Per-fragment metadata on the live service: search results, step status, think timings.
+            path.matches(FRAGMENT_FIELD) -> Unit
             path.isEmpty() || path.contains("content") || path.contains("fragments") -> throw EndpointChanged()
             // Token counts, search metadata and server timings do not alter displayed text.
         }
@@ -113,8 +124,9 @@ class DeepSeekStream {
     }
     private fun add(value: JsonObject) {
         val type = value["type"]?.let(::text) ?: throw EndpointChanged()
-        if (type !in setOf("THINK", "RESPONSE")) throw EndpointChanged()
-        fragments += Fragment(type, value["content"]?.let(::text).orEmpty())
+        // SEARCH and other tool fragments keep their slot so "-1" stays aligned; only THINK and RESPONSE are shown.
+        if (!type.matches(FRAGMENT_TYPE)) throw EndpointChanged()
+        fragments += Fragment(type, value["content"]?.let { if (type in SHOWN) text(it) else it.toString() }.orEmpty())
     }
     private fun legacyDelta(value: JsonObject) {
         value["request_message_id"]?.let { requestId = id(it) }
