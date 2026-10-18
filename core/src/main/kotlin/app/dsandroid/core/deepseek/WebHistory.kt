@@ -9,7 +9,12 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 @Serializable
-data class WebMessage(val id: String, val user: Boolean, val text: String, val thinking: String = "")
+data class WebMessage(
+    val id: String, val user: Boolean, val text: String, val thinking: String = "",
+    val serverId: Long? = null, val parentId: Long? = null, val prompt: String? = null,
+    val thinkingEnabled: Boolean = false, val searchEnabled: Boolean = false,
+    val refFileIds: List<String> = emptyList(),
+)
 @Serializable
 data class WebChat(val id: String, val title: String, val sessionId: String? = null, val parentId: Long? = null,
     val messages: List<WebMessage> = emptyList(), val blocked: Boolean = false)

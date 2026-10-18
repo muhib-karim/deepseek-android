@@ -1,22 +1,17 @@
 package app.dsandroid.deepseek
 
-import android.graphics.Bitmap
-import android.os.Process
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
-import androidx.test.platform.app.InstrumentationRegistry
 import app.dsandroid.SmokeActivity
 import app.dsandroid.core.deepseek.SessionToken
 import app.dsandroid.data.Appearance
-import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -75,7 +70,7 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     @Test fun settings() {
         launch(AccountUiState(ready = true, signedIn = false, page = AccountPage.SETTINGS))
         compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed()
-        compose.onNodeWithText("API-key fallback").assertIsDisplayed()
+        compose.onNodeWithText("API-key fallback").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Unofficial client", substring = true).assertExists()
         screenshot("settings")
     }
@@ -95,7 +90,7 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         var fallbacks = 0
         launch(AccountUiState(ready = true, page = AccountPage.SETTINGS), fallback = { fallbacks++ })
         compose.runOnIdle { assertEquals(0, fallbacks) }
-        compose.onNodeWithText("API-key fallback").performClick()
+        compose.onNodeWithText("API-key fallback").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, fallbacks) }
     }
     @Test fun attachmentTrayShowsAllThreeActions() {
@@ -115,22 +110,7 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         try {
             store.save(SessionToken.parse(CANARY)!!)
             assertTrue(store.load() != null)
-            compose.waitForIdle()
-            val semantics = compose.onRoot(useUnmergedTree = true).printToString()
-            assertFalse("Session token reached screenshot semantics", semantics.contains(CANARY))
-            assertFalse("Authentication header reached screenshot semantics", semantics.contains("Bearer "))
-            val dir = File(compose.activity.getExternalFilesDir(null), "official-ui-screenshots").apply { mkdirs() }
-            val prefix = "${if (dark) "dark" else "light"}-$name"
-            val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-            File(dir, "$prefix.png").outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-            val metadata = "screen=$name\ntheme=${if (dark) "dark" else "light"}\nsource=deterministic-fake-data\n"
-            assertFalse(metadata.contains(CANARY) || metadata.contains("Authorization") || metadata.contains("Cookie"))
-            File(dir, "$prefix.txt").writeText(metadata)
-            val logs = InstrumentationRegistry.getInstrumentation().uiAutomation
-                .executeShellCommand("logcat -d --pid=${Process.myPid()}").use { descriptor ->
-                    android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
-                }
-            assertFalse("Session token reached application logs", logs.contains(CANARY))
+            captureOfficialScreenshot(compose, dark, name, CANARY)
         } finally { store.clear() }
     }
 }

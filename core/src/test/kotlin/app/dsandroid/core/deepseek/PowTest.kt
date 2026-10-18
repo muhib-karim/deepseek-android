@@ -31,4 +31,17 @@ class PowTest {
         live.requireUsable(1_792_308_235_104L)
         assertThrows(UpdateRequired::class.java) { live.requireUsable(1_792_308_235_105L) }
     }
+    @Test fun malformedChallengeFieldTypesAreTypedAndSanitized() {
+        val valid = Json.parseToJsonElement("""{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"signature"}""").jsonObject
+        listOf("challenge", "salt", "signature").forEach { key ->
+            val invalid = JsonObject(valid + (key to JsonPrimitive(false)))
+            val error = assertThrows(EndpointChanged::class.java) { PowChallenge.parse(invalid) }
+            assertNull(error.cause)
+        }
+        listOf("difficulty", "expire_at").forEach { key ->
+            val invalid = JsonObject(valid + (key to JsonPrimitive(valid[key]!!.jsonPrimitive.content)))
+            assertThrows(EndpointChanged::class.java) { PowChallenge.parse(invalid) }
+        }
+    }
+
 }

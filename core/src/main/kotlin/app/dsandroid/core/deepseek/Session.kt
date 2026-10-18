@@ -65,7 +65,10 @@ fun sessionRoute(token: SessionToken?, apiFallbackChosen: Boolean, nowMillis: Lo
     else -> ChatRoute.DEEPSEEK
 }
 
-class SessionExpired : Exception("Your DeepSeek session expired or is incomplete. Log in with DeepSeek again.")
-class UpdateRequired : Exception("DeepSeek's web protocol is unavailable or has changed. An app update may be required. No alternate API was used.")
+class SessionExpired : Exception("Your DeepSeek session expired. Please sign in again.")
+class EndpointChanged : Exception("DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings.")
+
+/** Source compatibility for callers of the original protocol error. */
+typealias UpdateRequired = EndpointChanged
 class WebRateLimited : Exception("DeepSeek is busy or has limited requests. Try again later.")
 class WebConnectionFailed : Exception("Could not reach DeepSeek. Check your connection and try again.")

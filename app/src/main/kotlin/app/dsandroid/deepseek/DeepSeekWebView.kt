@@ -8,6 +8,7 @@ import android.net.http.SslError
 import android.os.Message
 import android.webkit.*
 import app.dsandroid.core.deepseek.*
+import app.dsandroid.BuildConfig
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -17,7 +18,26 @@ import kotlin.coroutines.resume
 
 /** Owns a single authenticated page. No addJavascriptInterface, arbitrary script or token injection. */
 @SuppressLint("SetJavaScriptEnabled")
-class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
+class DeepSeekWebView(
+    context: Context,
+    private val loginUrl: String = "${DeepSeekOrigin.URL}/sign_in",
+    private val notice: (String) -> Unit,
+) {
+    init {
+        require(DeepSeekOrigin.isTrusted(loginUrl) || isDebugLoopback(loginUrl)) { "Unsupported login origin." }
+    }
+    private fun isDebugLoopback(url: String): Boolean {
+        val uri = Uri.parse(url)
+        return BuildConfig.DEBUG && uri.scheme in setOf("http", "https") &&
+            uri.host in setOf("localhost", "127.0.0.1", "[::1]", "::1") && uri.userInfo == null
+    }
+    private fun isLoginPage(url: String?): Boolean {
+        if (DeepSeekOrigin.isTrusted(url)) return true
+        if (url == null || !isDebugLoopback(loginUrl)) return false
+        val target = Uri.parse(url)
+        val origin = Uri.parse(loginUrl)
+        return target.scheme == origin.scheme && target.host == origin.host && target.port == origin.port && target.userInfo == null
+    }
     private var loaded = false
     private var navigationFailed = false
     private var rendererGone = false
@@ -45,24 +65,35 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
-                val allowed = DeepSeekOrigin.isTrusted(uri.toString()) || isGoogle(uri)
+                if (isGoogle(uri)) {
+                    view.stopLoading(); notice(SSO_NOTICE); return true
+                }
+                val allowed = isLoginPage(uri.toString())
                 if (!allowed && request.isForMainFrame) notice("This login destination is not supported. Stay on chat.deepseek.com or use another DeepSeek sign-in method.")
-                if (isGoogle(uri) && uri.toString().contains("disallowed_useragent", ignoreCase = true)) notice(SSO_NOTICE)
                 return !allowed
             }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
-                // No file:, content:, cleartext, or custom-scheme subresource access.
-                return if (request.url.scheme == "https") null else WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
+                // Also block embedded Google frames; never hand this session to an external browser.
+                if (isGoogle(request.url)) {
+                    view?.post { notice(SSO_NOTICE) }
+                    return WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
+                }
+                val debugFixture = isDebugLoopback(loginUrl) && isLoginPage(request.url.toString())
+                return if (request.url.scheme == "https" || debugFixture) null
+                    else WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
             }
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 loaded = false; navigationFailed = false; generation++
-                if (url != null && url != "about:blank" && !DeepSeekOrigin.isTrusted(url) && !isGoogle(Uri.parse(url))) {
-                    view.stopLoading(); notice("Unsupported login destination blocked.")
+                if (url != null && isGoogle(Uri.parse(url))) {
+                    view.stopLoading(); navigationFailed = true; notice(SSO_NOTICE)
+                } else if (url != null && url != "about:blank" && !isLoginPage(url)) {
+                    view.stopLoading(); navigationFailed = true; notice("Unsupported login destination blocked.")
                 }
             }
             override fun onPageFinished(view: WebView, url: String?) {
                 loaded = !navigationFailed && DeepSeekOrigin.isTrusted(url) && DeepSeekOrigin.isTrusted(view.url)
                 if (url != null && isGoogle(Uri.parse(url))) notice(SSO_NOTICE)
+                if (loaded) view.evaluateJavascript(HIDE_GOOGLE_JS, null)
                 CookieManager.getInstance().flush()
             }
             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler, error: SslError?) {
@@ -91,7 +122,7 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
     fun openLogin() {
         if (destroyed) { notice("Reopen the app to restart the login browser."); return }
         loaded = false; navigationFailed = false
-        view.loadUrl(DeepSeekOrigin.URL)
+        view.loadUrl(loginUrl)
     }
 
     suspend fun captureSession(): SessionToken? = withContext(Dispatchers.Main.immediate) {
@@ -185,6 +216,19 @@ class DeepSeekWebView(context: Context, private val notice: (String) -> Unit) {
     }
     private fun isGoogle(uri: Uri) = uri.scheme == "https" && uri.host == "accounts.google.com" && uri.userInfo == null && uri.port in setOf(-1, 443)
     companion object {
-        const val SSO_NOTICE = "Google may refuse sign-in inside an embedded browser. Google login has not been tested. If it is blocked, use another sign-in method offered by DeepSeek. Opening an external browser does not import its session here."
+        /** Google OAuth cannot hand a session back to an app, so its button is hidden on the sign-in page instead of left as a dead end. */
+        const val HIDE_GOOGLE_JS = """(function(){
+  function hide(){
+    var nodes = document.querySelectorAll(button,a,[role=button],div[class*=button],div[class*=btn]);
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      var t = (n.innerText || n.textContent || ).trim().toLowerCase();
+      if (t.length < 40 && t.indexOf(google) !== -1) { n.style.setProperty(display,none,important); n.setAttribute(aria-hidden,true); }
+    }
+  }
+  hide();
+  if (!window.__dsHideGoogle) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList:true, subtree:true}); }
+})();"""
+        const val SSO_NOTICE = "Google sign-in isn't allowed inside apps. Use phone number or email on this page."
     }
 }

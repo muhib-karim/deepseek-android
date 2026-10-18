@@ -31,9 +31,12 @@ data class PowChallenge(
         const val COMPLETION_PATH = "/api/v0/chat/completion"
         const val WORKER_URL = "https://fe-static.deepseek.com/chat/static/76608.8f2a9fa413.js"
         fun parse(json: JsonObject): PowChallenge = try {
-            PowChallenge(json.getValue("algorithm").jsonPrimitive.content, json.getValue("challenge").jsonPrimitive.content,
-                json.getValue("salt").jsonPrimitive.content, json.getValue("difficulty").jsonPrimitive.long,
-                json.getValue("expire_at").jsonPrimitive.long, json.getValue("signature").jsonPrimitive.content)
+            fun text(key: String): String = (json[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: throw EndpointChanged()
+            fun number(key: String): Long = (json[key] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+                ?: throw EndpointChanged()
+            PowChallenge(text("algorithm"), text("challenge"), text("salt"), number("difficulty"),
+                number("expire_at"), text("signature"))
         } catch (_: Exception) { throw UpdateRequired() }
     }
 }

@@ -26,6 +26,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -39,19 +42,20 @@ import app.dsandroid.data.Appearance
 import app.dsandroid.ui.AppIcon
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.MarkdownText
-import app.dsandroid.ui.VoiceDictation
 import kotlinx.coroutines.launch
 
 enum class AccountPage { CHAT, SETTINGS, LOGIN }
-data class AccountMessage(val id: String, val user: Boolean, val text: String, val thinking: String = "")
+data class AccountMessage(val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null)
 data class AccountHistory(val id: String, val title: String)
 data class AccountUiState(
     val ready: Boolean = false,
     val signedIn: Boolean = false,
+    val hasApiKey: Boolean = false,
     val logoutPending: Boolean = false,
     val page: AccountPage = AccountPage.CHAT,
     val appearance: Appearance = Appearance.SYSTEM,
     val title: String = "New Chat",
+    val conversationId: String = "",
     val messages: List<AccountMessage> = emptyList(),
     val history: List<AccountHistory> = emptyList(),
     val draft: String = "",
@@ -94,12 +98,21 @@ fun DeepSeekShell(
     onTheme: (Appearance) -> Unit = {}, onLogout: () -> Unit = {}, onError: (String) -> Unit = {},
     onAttachment: (String) -> Unit = {}, onRemoveAttachment: (Int) -> Unit = {},
     onFinishLogin: () -> Unit = {}, loginContent: @Composable () -> Unit = {},
+    onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
+    onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
+    onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var attachmentTray by rememberSaveable { mutableStateOf(false) }
     var logoutDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<AccountHistory?>(null) }
+    var renameTitle by remember { mutableStateOf("") }
+    var deleteTarget by remember { mutableStateOf<AccountHistory?>(null) }
+    var editTarget by remember { mutableStateOf<AccountMessage?>(null) }
+    var editText by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(AccountPage.CHAT) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -113,9 +126,14 @@ fun DeepSeekShell(
                 Text("Recent chats", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyColumn(Modifier.weight(1f)) {
                     items(state.history.filter { it.title.contains(query, true) }, key = { it.id }) { chat ->
-                        Text(chat.title, Modifier.fillMaxWidth().clickable(enabled = !state.busy) {
-                            onOpen(chat.id); scope.launch { drawer.close() }
-                        }.padding(horizontal = 20.dp, vertical = 16.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(chat.title, Modifier.weight(1f).testTag("history-open-${chat.id}").clickable(enabled = !state.busy) {
+                                onOpen(chat.id); scope.launch { drawer.close() }
+                            }.padding(horizontal = 12.dp, vertical = 16.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            TextButton(onClick = { renameTarget = chat; renameTitle = chat.title }, enabled = !state.busy,
+                                modifier = Modifier.semantics { contentDescription = "Rename ${chat.title}" }) { Text("Rename", style = MaterialTheme.typography.bodySmall) }
+                            IconButton(onClick = { deleteTarget = chat }, enabled = !state.busy) { AppIcon(Glyph.CLOSE, "Delete ${chat.title}") }
+                        }
                     }
                 }
                 HorizontalDivider()
@@ -161,20 +179,24 @@ fun DeepSeekShell(
                                 LaunchedEffect(state.messages.lastOrNull()?.text, state.messages.lastOrNull()?.thinking) {
                                     if (state.busy && state.messages.isNotEmpty()) list.scrollToItem(state.messages.lastIndex)
                                 }
-                                LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                                    items(state.messages, key = { it.id }) { message -> Message(message, state.busy && message.id == state.messages.lastOrNull()?.id) }
+                                LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("message-list"), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                                    items(state.messages, key = { it.id }) { message ->
+                                        Message(message, state.busy && message.id == state.messages.lastOrNull()?.id,
+                                            enabled = !state.busy, regenerate = !message.user && message.id == state.messages.lastOrNull()?.id,
+                                            onRegenerate = onRegenerate, onEdit = { editTarget = message; editText = message.prompt ?: message.text })
+                                    }
                                 }
                             }
                             if (!state.signedIn && state.messages.isNotEmpty()) TextButton(onClick = onLogin, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Log in with DeepSeek") }
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text("$name · extracted text", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                                    Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                                     IconButton(onClick = { onRemoveAttachment(index) }, enabled = !state.busy) { AppIcon(Glyph.CLOSE, "Remove $name") }
                                 }
                             }
                             if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-                            Composer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError)
+                            Composer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled)
                         }
                     }
                     AccountPage.SETTINGS -> Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -192,8 +214,17 @@ fun DeepSeekShell(
                             }
                         }
                         HorizontalDivider()
+                        Text("API-key mode", style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(apiKey, { apiKey = it }, label = { Text("DeepSeek API key") }, singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(), enabled = !state.busy,
+                            modifier = Modifier.fillMaxWidth().testTag("fallback-key"))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { onApiKey(apiKey); apiKey = "" }, enabled = !state.busy && apiKey.isNotBlank()) { Text("Save API key") }
+                            if (state.hasApiKey) TextButton(onClick = { apiKey = ""; onApiKey("") }, enabled = !state.busy) { Text("Clear API key") }
+                        }
+                        if (state.hasApiKey) Text("API key saved securely", style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = onApiFallback, enabled = !state.busy) { Text("API-key fallback") }
-                        Text("Configure the separate API client in its Settings. Sending there may use paid API credits; it is never selected automatically.", style = MaterialTheme.typography.bodySmall)
+                        Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("About", style = MaterialTheme.typography.titleMedium)
                         Text("DeepSeek Android · 0.5.0\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
@@ -213,7 +244,7 @@ fun DeepSeekShell(
     }
     if (attachmentTray) ModalBottomSheet(onDismissRequest = { attachmentTray = false }) {
         Text("Add to your message", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)
-        Text("Extracted text only. Photos use on-device text recognition; original files are not uploaded.", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+        Text("Files and images are uploaded to DeepSeek after you confirm sending.", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             listOf("Camera" to Glyph.CAMERA, "Photo" to Glyph.PHOTO, "Document" to Glyph.DOCUMENT).forEach { (label, icon) ->
                 Surface(Modifier.weight(1f).clickable(enabled = !state.busy && !state.importing) { attachmentTray = false; onAttachment(label) },
@@ -222,6 +253,27 @@ fun DeepSeekShell(
                 }
             }
         }
+    }
+    renameTarget?.let { chat ->
+        AlertDialog(onDismissRequest = { renameTarget = null }, title = { Text("Rename chat") },
+            text = { OutlinedTextField(renameTitle, { renameTitle = it.take(100) }, singleLine = true, label = { Text("Title") }, modifier = Modifier.testTag("rename-title")) },
+            confirmButton = { TextButton(onClick = { renameTarget = null; onRename(chat.id, renameTitle) }, enabled = renameTitle.isNotBlank()) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } })
+    }
+    deleteTarget?.let { chat ->
+        AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("Delete chat?") },
+            text = { Text("Delete “${chat.title}” from DeepSeek and this device? This cannot be undone.") },
+            confirmButton = { TextButton(onClick = { deleteTarget = null; onDelete(chat.id) }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } })
+    }
+    editTarget?.let { message ->
+        AlertDialog(onDismissRequest = { editTarget = null }, title = { Text("Edit message") },
+            text = { Column {
+                Text("Resending replaces this reply and later turns in this chat.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(editText, { editText = it.take(20_000) }, label = { Text("Message") }, modifier = Modifier.testTag("edit-message"))
+            } },
+            confirmButton = { TextButton(onClick = { editTarget = null; onEdit(message.id, editText) }, enabled = editText.isNotBlank()) { Text("Resend") } },
+            dismissButton = { TextButton(onClick = { editTarget = null }) { Text("Cancel") } })
     }
     if (logoutDialog) AlertDialog(onDismissRequest = { logoutDialog = false }, title = { Text("Log out of DeepSeek?") },
         text = { Text("This clears this app's DeepSeek session and local account chat history. Other sites' cookies are kept.") },
@@ -253,29 +305,40 @@ private fun OutlinedCircle(content: @Composable () -> Unit) {
     Box(Modifier.size(26.dp).border(1.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape), contentAlignment = Alignment.Center) { content() }
 }
 
+@Suppress("DEPRECATION")
 @Composable
-private fun Message(message: AccountMessage, working: Boolean) {
-    if (message.user) BoxWithConstraints(Modifier.fillMaxWidth()) {
-        Surface(Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * .8f), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-            Text(message.text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurface)
-        }
-    } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
-        if (message.thinking.isNotBlank()) {
-            Row(Modifier.testTag("thinking-${message.id}").clickable { expanded = !expanded }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (working && message.text.isEmpty()) "Thinking…" else "Thinking", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                AppIcon(Glyph.CHEVRON, if (expanded) "Collapse thinking" else "Expand thinking", Modifier.rotate(if (expanded) 180f else 0f))
+private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean, regenerate: Boolean, onRegenerate: () -> Unit, onEdit: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.user) Alignment.End else Alignment.Start) {
+        if (message.user) BoxWithConstraints(Modifier.fillMaxWidth()) {
+            Surface(Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * .8f), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Text(message.text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurface)
             }
-            if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
+            if (message.thinking.isNotBlank()) {
+                Row(Modifier.testTag("thinking-${message.id}").clickable { expanded = !expanded }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (working && message.text.isEmpty()) "Thinking…" else "Thinking", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    AppIcon(Glyph.CHEVRON, if (expanded) "Collapse thinking" else "Expand thinking", Modifier.rotate(if (expanded) 180f else 0f))
+                }
+                if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            if (message.text.isNotBlank()) MarkdownText(message.text)
+            else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (message.text.isNotBlank()) MarkdownText(message.text)
-        else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }, enabled = message.text.isNotEmpty()) {
+                AppIcon(Glyph.DOCUMENT, if (message.user) "Copy user message" else "Copy assistant message")
+            }
+            if (message.user) TextButton(onClick = onEdit, enabled = enabled, modifier = Modifier.testTag("edit-${message.id}").semantics { contentDescription = "Edit message" }) { Text("Edit") }
+            if (regenerate) TextButton(onClick = onRegenerate, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Regenerate response" }) { Text("Regenerate") }
+        }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit) {
+private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit, speechInput: AccountSpeechInput?, voiceTrigger: Int, onVoiceHandled: () -> Unit) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
     val pillColors = FilterChipDefaults.filterChipColors(
@@ -302,7 +365,10 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = attach, enabled = !state.busy && !state.importing) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
-                    VoiceDictation(!state.busy && state.ready, "", { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error)
+                    key(state.conversationId) {
+                        AccountDictation(!state.busy && state.ready, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
+                            speechInput, voiceTrigger, onVoiceHandled)
+                    }
                     IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy ||
                         (state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
                         val canSend = state.busy || state.draft.isNotBlank() || state.attachments.isNotEmpty()

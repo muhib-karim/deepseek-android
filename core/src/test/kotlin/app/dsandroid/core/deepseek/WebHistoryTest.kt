@@ -24,4 +24,33 @@ class WebHistoryTest {
             assertTrue(store.load().single().blocked)
         } finally { directory.deleteRecursively() }
     }
+    @Test fun branchingMetadataAndAttachmentReferencesSurviveRestart() {
+        val directory = Files.createTempDirectory("branch-history").toFile()
+        try {
+            val store = WebHistory(directory.resolve("chats.json"))
+            val user = WebMessage("u", true, "Edited", serverId = 21, parentId = 20, prompt = "Edited",
+                thinkingEnabled = true, searchEnabled = true, refFileIds = listOf("file-1"))
+            val assistant = WebMessage("a", false, "Answer", "Thinking", serverId = 22, parentId = 20, prompt = "Edited",
+                thinkingEnabled = true, searchEnabled = true, refFileIds = listOf("file-1"))
+            val chat = WebChat("local", "Title", "server", 22, listOf(user, assistant))
+            store.save(listOf(chat))
+            assertEquals(chat, store.load().single())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test fun oldHistoryLoadsWithSafeDefaultBranchingMetadata() {
+        val directory = Files.createTempDirectory("legacy-history").toFile()
+        try {
+            val file = directory.resolve("chats.json")
+            file.writeText("""[{"id":"old","title":"Title","messages":[{"id":"u","user":true,"text":"Hello"}]}]""")
+            val message = WebHistory(file).load().single().messages.single()
+            assertNull(message.serverId)
+            assertNull(message.parentId)
+            assertNull(message.prompt)
+            assertFalse(message.thinkingEnabled)
+            assertFalse(message.searchEnabled)
+            assertTrue(message.refFileIds.isEmpty())
+        } finally { directory.deleteRecursively() }
+    }
+
 }

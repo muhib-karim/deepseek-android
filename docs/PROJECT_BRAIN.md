@@ -1,17 +1,16 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-v0.4.0 is released (Pass G, versionCode 4). Next: plan v0.5.0 from FEATURE_MATRIX open rows and QC feedback.
+Complete the v0.5.0 DeepSeek account feature set and mocked-server coverage; validate Android builds and screenshots in CI.
 
 ## Status
-- Android account shell, encrypted session storage, scoped cookies, restricted login/PoW WebView and private local history are implemented. MainActivity now defaults to this shell; legacy API client is explicit in Settings.
-- v0.5.0 account-client work started on the requested feature branch from refreshed origin/main; main unchanged.
-- Read the supplied UI spec, current Compose architecture, tests, manifests, workflows and dependency catalog.
-- Design: default DeepSeek web-session shell with native streaming; existing API client remains an explicit Settings fallback. Tokens stay out of UI state and diagnostics.
-- Implemented core token/origin checks, bounded SSE patch reduction and cancellable Bearer+cookie native streaming. Added tests first for session parsing/expiry/origin/routing, PoW headers, incremental patch streams, native transport and ten light/dark screenshot fixtures. Builds, test execution and screenshots are CI-only; no push, tag or release in this session.
+- Fourteen account features have implementation and first-written MockWebServer/Compose tests in both themes, plus 21 new core protocol, cancellation and persistence test methods.
+- Static core and Android reviews found no remaining blocking issue after fixes for dictation lifetime, renamed-branch titles and API settings writes on fallback exit.
+- Diff checks, dependency/XML parsing and synthetic artifact-checker checks pass. The artifact gate requires all 38 screenshots and rejects missing feature captures and credential markers.
+- No local Gradle/build, commit or push. Kotlin compilation, test execution and screenshots remain pending CI; real-account login has not been tested.
 
 ## Next step
-Adapt emulator artifact capture, set version 0.5.0/5, document limitations and complete static/security review. Verify public worker protocol where reachable; document any unverified integration.
+Run the existing GitHub Actions JVM/lint/build and emulator workflows after an authorized push. Review all feature test results and 38 screenshot artifacts; use docs/feature-checklist.md for the mocked-only verification scope.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -43,3 +42,5 @@ Adapt emulator artifact capture, set version 0.5.0/5, document limitations and c
 - 2026-10-18 Codex: core session transport and patch reducer implemented against first-written tests; static diff check passed, compilation and execution remain CI-only. Next: Android login and shell.
 
 - 2026-10-18 Codex: implemented account login, original Compose shell, history, text-only attachment imports and explicit legacy fallback. Independent review found stream/failed-page edge cases; regression tests and fixes added. CI-only validation remains.
+
+- 2026-10-18 08:27Z Codex: added fourteen account feature paths, test-first mocked coverage, review fixes and screenshot completeness checks; next: CI compilation/tests/captures. No local build, commit or push.
