@@ -210,8 +210,9 @@ class AccountTransportTest {
 
     private suspend fun cancellationClosesBlockingCall(policy: SocketPolicy, streaming: Boolean) = coroutineScope {
         val failed = CountDownLatch(1)
+        val callErrors = java.util.concurrent.CopyOnWriteArrayList<String>()
         val network = OkHttpClient.Builder().eventListener(object : EventListener() {
-            override fun callFailed(call: Call, ioe: java.io.IOException) { failed.countDown() }
+            override fun callFailed(call: Call, ioe: java.io.IOException) { callErrors.add("${call.request().url.encodedPath}: $ioe"); failed.countDown() }
             // A cancelled stream whose body is closed while suspended between events ends via callEnd; either way the call is closed.
             override fun callEnd(call: Call) { if (call.request().url.encodedPath.endsWith("/chat/completion")) failed.countDown() }
         }).build()
@@ -235,7 +236,8 @@ class AccountTransportTest {
             withTimeout(3000) { job.cancelAndJoin() }
             assertTrue("Cancelled HTTP call must close promptly", withContext(Dispatchers.IO) { failed.await(2, TimeUnit.SECONDS) })
             server.enqueue(envelope("""{"id":"next-session"}"""))
-            assertEquals("next-session", withTimeout(3000) { client.createSession(credentials) })
+            val next = try { withTimeout(3000) { client.createSession(credentials) } } catch (error: WebConnectionFailed) { fail("next request failed; call failures: $callErrors; served: ${server.requestCount}") }
+            assertEquals("next-session", next)
         } finally { server.shutdown() }
     }
 
