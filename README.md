@@ -7,6 +7,45 @@ Current release: **v0.2.0**, a debug testing build (debug-key signed, not audite
 The debug APK and SHA256SUMS are attached to each GitHub release. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
+## v0.3.0 Pass F features (working tree, not yet released)
+
+- **Voice conversation:** open Voice from the chat header, grant microphone access
+  when requested, then tap Start listening. Speak → send → hear the answer → listen
+  again, with the transcript saved through the existing chat flow. Tap to interrupt
+  speech or stop a reply. Leaving the activity pauses voice; returning or launching
+  from a shortcut never silently starts the microphone. Enable tools in the voice
+  screen to use the existing per-action confirmations.
+- **Read aloud:** each completed answer has sentence highlighting, pause/resume and
+  a 0.5×–2× speed control. Resume repeats the interrupted sentence. English and
+  Bangla use installed offline Android TTS voices. System speech recognition prefers
+  on-device recognition when available; its fallback service may use the network.
+- **Voice images:** take a photo through the system camera or choose Share screen,
+  review the image and attach it to the next spoken turn. Existing model capability
+  checks send image bytes only to vision models; text-only models receive OCR text.
+  The existing Latin OCR model may not recognize Bangla text in images.
+- **Phone tools:** `draft_sms`, `draft_email`, `add_calendar_event` and `open_map`
+  validate inputs and ask for confirmation before opening the standard phone app.
+  Sending/saving is finished there. `set_alarm` is intentionally unavailable because
+  Android requires the extra `com.android.alarm.permission.SET_ALARM` permission.
+- **One-shot screen capture:** Android 8–9 use fresh MediaProjection consent for
+  each screenshot while this app is visible. Android 10+ require foreground-service
+  permissions for MediaProjection, so only this app window is captured via PixelCopy.
+  Other-app/background capture, continuous recording and protected-content capture
+  are unavailable. Every image is reviewed before attaching and sending.
+- **Quick launch:** New chat, Voice and Camera static shortcuts, dynamic counterparts
+  within the launcher’s combined shortcut limit, a Quick Settings voice tile, and
+  an `ACTION_ASSIST` entry where supported. No overlay or assistant-service permission.
+- **Home-screen widget:** an Ask DeepSeek field launcher, Voice button and the latest
+  active saved chat title. Temporary chats are excluded. The title is visible to
+  the home-screen launcher; message bodies are never placed in the widget.
+- New controls, errors and notices have English and natural Bangla resources.
+
+No dependencies or install permissions were added. INTERNET plus runtime
+RECORD_AUDIO remain the only requested permissions, with minSdk 26/targetSdk 35.
+JVM tests are supplied; compilation, test execution, lint and device validation
+remain CI/release gates. See [feature status](docs/FEATURE_MATRIX.md) and
+[build notes](docs/BUILD_NOTES.md).
+
 ## v0.3.0 Pass E features (working tree, not yet released)
 
 - **Saved assistants:** create, edit and delete named personas with a built-in icon,

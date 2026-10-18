@@ -65,7 +65,7 @@ fun ToolsSettings(draft: AppSettings, builtIns: List<String>, busy: Boolean, upd
     }
     Text(stringResource(R.string.tools_notice), style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.tools_builtin), style = MaterialTheme.typography.titleMedium)
-    builtIns.forEach { id -> ToolSwitch(id, id !in draft.disabledTools, !busy) { toggle(id, it) } }
+    builtIns.forEach { id -> ToolSwitch(phoneActionLabel(id)?.let { stringResource(it) } ?: id, id !in draft.disabledTools, !busy) { toggle(id, it) } }
     Text(stringResource(R.string.tools_custom), style = MaterialTheme.typography.titleMedium)
     if (draft.remoteServers.isEmpty()) Text(stringResource(R.string.tools_empty))
     draft.remoteServers.forEach { server ->

@@ -4,7 +4,7 @@ What the big assistant apps (ChatGPT, Claude, Kimi) do on Android, and when Deep
 The goal: the official DeepSeek app only chats; this app lets DeepSeek *do* things — call tools mid-conversation and show the results inside the chat.
 
 Legend: ✓ = the app has it · — = it doesn't · **Release** = the version of this app that ships it.
-v0.1.0 and v0.2.0 are released. Pass D and E delivery notes describe the implementation in
+v0.1.0 and v0.2.0 are released. Pass D, E and F delivery notes describe the implementation in
 this working tree; CI and device validation are still required before a v0.3.0 tag.
 
 ## Core: the agent loop
@@ -74,17 +74,17 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 
 | # | Feature | ChatGPT | Claude | Kimi | Release |
 |---|---|---|---|---|---|
-| 34 | Voice mode: hands-free spoken conversation | ✓ | ✓ | ✓ | v0.3.0 |
-| 35 | Read aloud with sentence highlighting | ✓ | ✓ | ✓ | v0.3.0 |
+| 34 | Voice mode: hands-free spoken conversation | ✓ | ✓ | ✓ | v0.3.0 — Pass F |
+| 35 | Read aloud with sentence highlighting | ✓ | ✓ | ✓ | v0.3.0 — Pass F |
 
 ## Phone actions (every action behind a confirm)
 
 | # | Feature | ChatGPT | Claude | Kimi | Release |
 |---|---|---|---|---|---|
-| 36 | Draft SMS / email, add calendar events, set alarms, open maps | ✓ | — | — | v0.3.0 |
-| 37 | Screen awareness (opt-in screenshot of the current screen) | ✓ | — | — | v0.3.0 |
-| 38 | Floating assistant bubble / quick launch | ✓ | — | — | v0.3.0 |
-| 39 | Home-screen widget | ✓ | ✓ | — | v0.3.0 |
+| 36 | Draft SMS / email, add calendar events, set alarms, open maps | ✓ | — | — | v0.3.0 — Pass F |
+| 37 | Screen awareness (opt-in screenshot of the current screen) | ✓ | — | — | v0.3.0 — Pass F |
+| 38 | Floating assistant bubble / quick launch | ✓ | — | — | v0.3.0 — Pass F |
+| 39 | Home-screen widget | ✓ | ✓ | — | v0.3.0 — Pass F |
 
 ## Conversations and sharing
 
@@ -117,7 +117,7 @@ this working tree; CI and device validation are still required before a v0.3.0 t
 | 54 | Library: every generated file, artifact and image from all chats in one place | ✓ | ✓ | ✓ | v0.3.0 — Pass D |
 | 55 | Parallel sub-agents for big tasks: one plan, several agents at once, progress shown per agent | ✓ | — | ✓ | v0.3.0 — Pass E |
 | 56 | Memory upkeep: suggested memory updates drawn from past chats, each approved by the user | ✓ | ✓ | ✓ | v0.3.0 — Pass E |
-| 57 | Share the camera or screen into voice mode (vision when the model supports it) | ✓ | — | — | v0.3.0 |
+| 57 | Share the camera or screen into voice mode (vision when the model supports it) | ✓ | — | — | v0.3.0 — Pass F |
 
 ## Pass D delivery status
 
@@ -137,7 +137,29 @@ The browser supports static public pages and simple confirmed forms, with site
 scripts and login disabled. The generic connector supports configurable public-client
 OAuth2 PKCE and read-only GET search/read endpoints, requiring a compatible provider
 registration. Scheduled prompts run without tools, notifications or exact timing;
-the original account must remain manually selected. Other v0.3.0 rows remain planned.
+the original account must remain manually selected.
+
+## Pass F delivery status
+
+Rows **34, 35, 36, 37, 38, 39 and 57** — Status note:
+**shipped in v0.3.0 pass F**. This denotes delivered implementation, not a new
+release or a successful build. JVM cases are included; CI compilation, tests,
+lint and device verification remain required.
+
+Voice uses foreground system speech recognition and installed offline English/Bangla
+TTS, with sentence playback controls and chat transcripts. Camera and screen images
+are reviewed before joining the existing attachment path. Image bytes require a
+vision-capable model; the existing Latin OCR model is the text-only fallback.
+
+Row 36 delivers SMS/email drafts, calendar insertion and maps through confirmed
+standard intents. Alarms are skipped because `SET_ALARM` needs an extra install
+permission. Row 37 uses fresh, single-frame MediaProjection consent on API 26–28
+only while visible; API 29+ support **this app window only** via PixelCopy because
+MediaProjection requires forbidden foreground-service permissions. No continuous
+or background capture is provided. Row 38 delivers static/dynamic shortcuts (subject
+to launcher capacity), the voice tile and ACTION_ASSIST; no floating overlay or
+full VoiceInteractionService is installed. The RemoteViews widget exposes the
+latest active saved title to the launcher, excluding temporary chats.
 
 ## Not planned
 

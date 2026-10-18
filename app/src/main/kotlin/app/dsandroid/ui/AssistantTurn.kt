@@ -36,7 +36,8 @@ import kotlinx.serialization.json.JsonElement
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, shareArtifact: (Artifact) -> Unit = {}, collapseThinking: Boolean = true,
-    workspace: WorkspacePath, openFence: (Int, FencedArtifact) -> Unit) {
+    workspace: WorkspacePath, openFence: (Int, FencedArtifact) -> Unit,
+    speech: app.dsandroid.voice.SpeechPlayer? = null, speechError: (String) -> Unit = {}) {
     var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     var sourcesVisible by remember(item.id) { mutableStateOf(false) }
     var selectedSource by remember(item.id) { mutableStateOf<Int?>(null) }
@@ -66,7 +67,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary)
-                            Text(step.name, Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
+                            Text(phoneActionLabel(step.name)?.let { stringResource(it) } ?: step.name, Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             TextButton(onClick = { detailsIndex = index }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text(stringResource(R.string.details), style = MaterialTheme.typography.labelMedium) }
                             ToolStatusIcon(step.status)
@@ -86,9 +87,13 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                     }
                 }
                 is TurnStep.Answer -> Column {
-                    MarkdownText(app.dsandroid.core.chat.FollowUps.display(step.text, working), Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
+                    val answer = app.dsandroid.core.chat.FollowUps.display(step.text, working)
+                    val speechId = "${item.id}:$index"
+                    if (speech != null && speech.owner == speechId) SpokenText(speech.text, speech, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                    else MarkdownText(answer, Modifier.fillMaxWidth().padding(vertical = 6.dp), item.sources) {
                         selectedSource = it; sourcesVisible = true
                     }
+                    if (!working && speech != null) ReadAloudControls(speechId, answer, speech, speechError)
                     val fences = remember(step.text) { FencedArtifacts.parse(step.text) }
                     fences.forEachIndexed { fenceIndex, fence ->
                         OutlinedCard(onClick = { openFence(index * 100 + fenceIndex, fence) }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -140,6 +145,7 @@ private fun toolLabel(step: TurnStep.ToolCall): String {
     val resultName = if(step.status == ToolStatus.DONE && step.resultPreview.startsWith("Created ")) step.resultPreview.lineSequence().first().removePrefix("Created ") else ""
     val done = step.status == ToolStatus.DONE
     val zippedCount = if(done) Regex("^Zipped (\\d+) files").find(step.resultPreview)?.groupValues?.get(1)?.toIntOrNull() else null
+    phoneActionLabel(step.name)?.let { return stringResource(it) }
     return when {
         step.name == "code_interpreter" -> stringResource(if (done) R.string.interpreter_ran else R.string.interpreter_running)
         step.name == "render_chart" -> stringResource(if (done) R.string.chart_rendered else R.string.chart_rendering)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="new_chat" android:enabled="true" android:icon="@drawable/ic_shortcut_chat" android:shortcutShortLabel="@string/new_chat">
+        <intent android:action="app.dsandroid.action.NEW_CHAT" android:targetPackage="app.dsandroid" android:targetClass="app.dsandroid.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="voice" android:enabled="true" android:icon="@drawable/ic_shortcut_voice" android:shortcutShortLabel="@string/voice_mode">
+        <intent android:action="app.dsandroid.action.VOICE" android:targetPackage="app.dsandroid" android:targetClass="app.dsandroid.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="camera" android:enabled="true" android:icon="@drawable/ic_shortcut_camera" android:shortcutShortLabel="@string/camera">
+        <intent android:action="app.dsandroid.action.CAMERA" android:targetPackage="app.dsandroid" android:targetClass="app.dsandroid.MainActivity" />
+    </shortcut>
+</shortcuts>

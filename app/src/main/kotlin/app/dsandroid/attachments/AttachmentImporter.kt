@@ -31,15 +31,21 @@ data class Upload(
 
 class AttachmentImporter(private val context: Context) {
     suspend fun import(uri: Uri, maxBytes: Long = 20L * 1024 * 1024): Upload {
-        require(maxBytes > 0)
         var copiedFile: File? = null
         try {
+            require(maxBytes > 0)
             return withContext(Dispatchers.IO) { importOnWorker(uri, minOf(maxBytes, 20L * 1024 * 1024)) { copiedFile = it } }
         } catch (error: Exception) {
             // Also covers cancellation while returning from the IO dispatcher: the
             // caller never received ownership of the copied upload in that case.
             copiedFile?.delete()
             throw error
+        }
+        finally {
+            if (uri.authority == "${context.packageName}.artifacts" && uri.pathSegments.firstOrNull() == "camera") {
+                val cameraName = uri.lastPathSegment.orEmpty()
+                if (Regex("[a-fA-F0-9-]+\\.(?:jpg|png)").matches(cameraName)) File(File(context.cacheDir, "camera"), cameraName).delete()
+            }
         }
     }
 
@@ -85,12 +91,6 @@ class AttachmentImporter(private val context: Context) {
             currentCoroutineContext().ensureActive()
             return Upload(id, name, kind, file, text, imageText?.status)
         } catch (error: Exception) { file.delete(); throw error }
-        finally {
-            if (uri.authority == "${context.packageName}.artifacts" && uri.pathSegments.firstOrNull() == "camera") {
-                val cameraName = uri.lastPathSegment.orEmpty()
-                if (Regex("[a-fA-F0-9-]+\\.jpg").matches(cameraName)) File(File(context.cacheDir, "camera"), cameraName).delete()
-            }
-        }
     }
 
     companion object {

@@ -459,3 +459,142 @@ Remaining verification and supported limits:
   documented boundaries. Other v0.3.0 rows, the older project shared-files UI gap,
   supported DeepSeek-specific account contracts and production signing remain
   outside this pass. CI and device validation are still required before release.
+
+## Pass F (v0.3.0)
+
+Implemented in the working tree after Passes D/E. This is not a tagged release
+or a claim that compilation, JVM tests, lint or device validation have passed.
+No Gradle, Kotlin compiler, browser, sub-agent, code-review skill, commit or push
+was used. Version values, minSdk 26, targetSdk 35 and MIT harness attribution are
+unchanged. No dependency or install permission was added.
+
+Delivered, in scope order:
+
+1. **Voice conversation:** a full-screen Voice entry in the chat header uses
+   runtime microphone permission and an explicit Start listening tap. System
+   recognition sends through the existing ChatViewModel/history path; completed
+   answers play through Android TTS, then listening resumes. Generation checks
+   reject stale/duplicate callbacks. Tap to interrupt speech or stop a reply.
+   Activity pause and audio-focus loss pause voice; reopening never automatically
+   activates the microphone. The on-device recognizer is preferred when available,
+   with one system-service fallback for an unavailable language. The UI discloses
+   that the system service may use its network. An Agent switch exposes the existing
+   guarded tool flow, including phone-action confirmations.
+2. **Read aloud:** completed answers have play, pause/resume, sentence highlighting
+   and 0.5×–2× speed controls. Resume repeats the interrupted sentence because TTS
+   has no native pause primitive. The existing Markdown parser supplies readable
+   text without formatting delimiters or hidden link targets; normal Markdown and
+   artifact rendering return when playback stops. Long sentences are chunked with
+   UTF-16-safe boundaries. Installed offline English/Bangla voices are selected by
+   sentence language; missing voices and engine failures surface a localized notice.
+   Audio focus is released after playback, and focus gain never resumes it silently.
+3. **Images in voice:** system camera capture uses the existing TakePicture intent,
+   FileProvider cache and importer without CAMERA permission. Camera and screen
+   images are reviewed before attaching to the next spoken turn. Capture pauses
+   voice; the user explicitly restarts listening after review/import. Existing
+   batch limits and model capabilities decide image bytes versus OCR text. Imported
+   PNG screenshots receive the same source-cache cleanup as camera JPEGs, including
+   failed/cancelled imports. The existing Latin OCR model may not read Bangla text.
+4. **Phone actions:** `draft_sms`, `draft_email`, `add_calendar_event` and `open_map`
+   extend the existing registry, tool switches, guard and confirmation sheet.
+   Bounded typed inputs reject unknown fields and recipient/URI injection before
+   confirmation. Calendar previews include localized start/end times and timezone.
+   Only standard SENDTO, CalendarContract INSERT and encoded geo VIEW intents are
+   built. Launch requires the resumed activity. Results distinguish a successful
+   app launch from a missing handler; the user finishes sending/saving in that app.
+   **Alarms are omitted:** AlarmClock.ACTION_SET_ALARM requires
+   `com.android.alarm.permission.SET_ALARM`, which violates the install-permission
+   rule. No alarm tool or permission is declared.
+5. **Screen awareness:** opt-in, one screenshot per request with image review and
+   no automatic send. On API 26–28, every request obtains fresh MediaProjection
+   consent and captures only while this activity remains visible. Display/reader/
+   projection resources close after one frame, timeout or cancellation. On API 29+,
+   MediaProjection requires foreground-service permissions, so the app captures
+   **only its own visible window** using PixelCopy after per-request confirmation.
+   The longest edge is capped at 1280 pixels. There is no foreground capture service,
+   continuous recording, other-app capture on modern Android, accessibility access,
+   overlay or protected-surface bypass. Process-death leftovers may remain in private
+   cache until Android clears them; they are never automatically attached or sent.
+6. **Quick launch:** New chat, Voice and Camera static shortcuts and dynamic
+   counterparts, limited by the launcher's combined static/dynamic capacity. A
+   Quick Settings tile opens paused voice mode after unlock, using the PendingIntent
+   API on Android 14+. Its BIND_QUICK_SETTINGS_TILE component permission restricts
+   system binding and is not an install permission requested by this app.
+   ACTION_ASSIST routes to voice where supported; assist payloads are ignored and
+   no full VoiceInteractionService is installed. Cold/warm intents are consumed
+   once, and camera launch reuses the existing attachment flow.
+7. **Home-screen widget:** RemoteViews provides an Ask DeepSeek field launcher,
+   Voice button and the active saved chat title, with fallback to the newest saved
+   title. Rename/delete/open/send refresh the summary; clearing history clears it.
+   Temporary chats and message bodies are excluded. Only the bounded displayed
+   title is stored in private widget preferences and exposed to the launcher.
+   Actions use explicit immutable PendingIntents; no periodic work or new permission.
+8. **Bangla and documentation:** every added UI label, notice and error has English
+   and natural Bangla resources. README and SECURITY describe behavior and limits;
+   feature rows 34, 35, 36, 37, 38, 39 and 57 carry the requested status note
+   “shipped in v0.3.0 pass F”, explicitly identifying implementation rather than a
+   validated release. Existing artifacts and export implementations remain intact.
+
+Files touched, grouped (52 files including this section):
+
+- Core: new launch/QuickAction.kt, phone/PhoneActions.kt,
+  screen/ScreenCapturePolicy.kt, voice/VoiceSession.kt, SpeechText.kt and
+  SpeechPlayback.kt, and widget/WidgetSummary.kt; extended guard/GuardPolicy.kt.
+- Android adapters: new launch/QuickLaunch.kt and VoiceTileService.kt,
+  phone/PhoneActionLauncher.kt, screen/OneShotScreenCapture.kt,
+  voice/VoiceRecognizer.kt and SpeechPlayer.kt, and widget/AskDeepSeekWidget.kt.
+- Android UI: new VoiceScreen.kt, VoiceAttachments.kt, ScreenCaptureButton.kt,
+  ReadAloud.kt and PhoneActionDetails.kt. Extended MainActivity.kt,
+  attachments/AttachmentImporter.kt, AssistantTurn.kt, ChatScreen.kt,
+  ChatViewModel.kt, DsAndroidApp.kt, PersonalizationSettings.kt and
+  ToolConfirmationSheet.kt.
+- Resources: AndroidManifest.xml, values/strings.xml and values-bn/strings.xml;
+  three original shortcut vectors, two widget shapes, ask_deepseek_widget.xml,
+  ask_deepseek_widget_info.xml and shortcuts.xml. INTERNET and runtime RECORD_AUDIO
+  remain the only requested permissions; ACCESS_NETWORK_STATE remains removed.
+- JVM tests: VoiceSessionTest, SpeechTextTest, SpeechPlaybackTest, PhoneActionsTest,
+  PhoneAgentTest, ScreenCapturePolicyTest, QuickLaunchTest and WidgetSummaryTest.
+- Documentation: README.md, SECURITY.md, FEATURE_MATRIX.md, PROJECT_BRAIN.md and
+  this file. NOTICE and dependency/version configuration are unchanged.
+
+Validation performed locally before this final documentation edit:
+
+- Parsed resource/manifest XML and the dependency catalog; checked duplicate and
+  missing string resources, English/Bangla placeholder parity, source permission
+  declarations, preserved SDK values and absence of machine paths.
+- Checked literals/comments/delimiters and explicit project imports in 36 new or
+  modified Kotlin files. Inspected Android/Compose call sites against the existing
+  dependency versions. These are lightweight source checks, not compilation.
+- Diff whitespace checks and a redacted Gitleaks working-tree scan passed.
+- Wrote **40 JVM cases across eight files**: voice sequencing and stale events;
+  playback pause/resume/duplicates; sentence offsets, Bangla punctuation, long
+  Unicode text, Markdown conversion and speed limits; phone validation, exact
+  approval/denial and Chat-mode refusal through the real agent loop; capture API
+  policy and pixel bounds; launch routing/capacity; widget privacy, rename/deletion
+  and title bounds. **The tests were not executed locally.**
+- This section was written as the final edit, after the project handoff and checks.
+
+Remaining verification and supported limits:
+
+- GitHub Actions must compile both modules, run existing/new JVM suites, run
+  lintDebug and assemble. Inspect the merged manifest to confirm the existing
+  WorkManager permission removals and the new tile/widget declarations before release.
+- Device-test English/Bangla recognition and installed/missing offline voices,
+  permission denial/revocation, interrupted/failed inference, TTS errors, audio-focus
+  changes, tap interruption, lifecycle/process recreation, large fonts and Bangla UI.
+  Check sentence highlighting, long/code/table answers and rate/pause/resume behavior.
+- Device-test camera success/cancel, image review/discard/import failures, OCR versus
+  vision routing, batch limits, and image-cache cleanup. Check API 26–28 fresh consent,
+  screen timeout/cancellation and rotation; check API 29+ own-window capture, secure
+  surfaces and the explicit absence of other-app capture. No continuous capture.
+- Exercise allow/deny for each phone action, missing/default handlers, exact SMS/
+  email body and recipient encoding, calendar times/timezones, map queries and
+  background launch refusal. The app cannot guarantee how third-party handlers
+  render drafts; no actual send/save result is inferred from opening them.
+- Check cold/warm shortcut launches, launcher capacity, camera result recreation,
+  locked/unlocked Quick Settings behavior on both tile APIs, ACTION_ASSIST support,
+  and widget add/resize, locale change, rename/delete and temporary-chat exclusion.
+- Alarms and modern other-app screen capture are intentionally unavailable under
+  the permission rules. Full default-assistant service integration and floating
+  overlays are not implemented. Runtime device behavior, production signing and
+  a v0.3.0 release remain unverified; no commit, push or tag was created.
