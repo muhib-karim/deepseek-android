@@ -34,7 +34,8 @@ feature table in [AGENT_MODE.md](AGENT_MODE.md)).
 - ABIs: arm64-v8a and x86_64 only (Chaquopy Python 3.13 has no 32-bit builds); the APK is
   several tens of MB larger.
 - CI, emulator and release workflows install Python 3.13 (actions/setup-python) for Chaquopy.
-- `create_pdf` takes `{title, markdown, file_path?}`; conversation export input is unchanged.
+- `create_pdf` takes `{title, markdown, file_path?}`. PDF exports in the API-key client are now laid out
+  as Markdown by the same engine, and each answer there also has **Export PDF**.
 
 ## Tests added
 

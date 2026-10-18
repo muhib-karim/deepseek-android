@@ -974,8 +974,9 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
                     val markdown = ConversationExporter.markdown(record, labels, answerId)
                     val fileName = "export-${UUID.randomUUID()}.${format.extension}"
                     val ctx = ToolContext(workspace)
+                    // PDF exports are laid out as Markdown (headings, lists, tables, code) by the :core engine.
                     val result = if (format == ExportFormat.PDF) CreatePdfTool().run(buildJsonObject {
-                        put("fileName", fileName); put("content", markdown)
+                        put("title", record.title.ifBlank { "DeepSeek conversation" }); put("markdown", markdown); put("file_path", fileName)
                     }, ctx) else {
                         val content = if (format == ExportFormat.HTML) ConversationExporter.html(markdown, language) else markdown
                         writeArtifact(ctx, fileName, ".${format.extension}", format.mime, content.toByteArray(Charsets.UTF_8))
