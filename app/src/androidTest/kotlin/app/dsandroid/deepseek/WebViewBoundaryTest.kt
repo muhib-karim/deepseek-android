@@ -20,7 +20,7 @@ class WebViewBoundaryTest {
             localStorage.setItem('userToken', JSON.stringify({value:'synthetic-boundary-token'}));
             localStorage.setItem('unrelatedSecret', 'must-not-read');
             window.Worker = function() { throw new Error('blocked by fixture'); };
-        </script></body></html>""", "text/html", "UTF-8", null)
+        </script></body></html>""", "text/html", "UTF-8", origin)
         browser
     }
     @Test fun exactOriginCaptureAndBlockedWorkerFailWithoutNetwork() = runBlocking {
@@ -33,7 +33,7 @@ class WebViewBoundaryTest {
             }
             assertEquals("synthetic-boundary-token", captured.bearer())
             try {
-                browser.solve(PowChallenge("DeepSeekHashV1", "abcdef", "salt", 64, 9999999999, "signature"))
+                browser.solve(PowChallenge("DeepSeekHashV1", "abcdef", "salt", 64, 9999999999999, "signature"))
                 fail("Expected a visible worker error")
             } catch (error: UpdateRequired) { assertTrue(error.message!!.contains("update")) }
         } finally {
