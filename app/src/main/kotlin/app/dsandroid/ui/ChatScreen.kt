@@ -43,7 +43,7 @@ import kotlinx.coroutines.flow.collect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, shareArtifact: (Artifact) -> Unit, openArtifact: (Artifact) -> Unit) {
+fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, cameraRequest: String? = null, cameraConsumed: () -> Unit = {}, shareArtifact: (Artifact) -> Unit, openArtifact: (Artifact) -> Unit) {
     var draft by rememberSaveable(state.conversationId) { mutableStateOf("") }
     LaunchedEffect(state.conversationId, state.sharedDraft) {
         state.sharedDraft?.let { draft = it; vm.consumeSharedDraft() }
@@ -58,6 +58,8 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
     var attachSheet by remember { mutableStateOf(false) }
     var cameraName by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val speech = rememberSpeechPlayer()
+    LaunchedEffect(state.conversationId, state.running) { speech.stop() }
     fun cameraFile(name: String) = File(File(context.cacheDir, "camera"), name)
     fun cameraUri(name: String): Uri = FileProvider.getUriForFile(context, "${context.packageName}.artifacts", cameraFile(name))
     val documents = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { vm.addAttachments(it) }
@@ -70,6 +72,20 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
             else cameraFile(name).delete()
         }
     }
+    fun launchCamera() {
+        try {
+            val name = "${UUID.randomUUID()}.jpg"
+            val file = cameraFile(name)
+            check(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
+            check(file.createNewFile())
+            cameraName = name
+            camera.launch(cameraUri(name))
+        } catch (_: Exception) {
+            cameraName?.let { cameraFile(it).delete() }; cameraName = null
+            vm.showError(context.getString(R.string.camera_unavailable))
+        }
+    }
+    LaunchedEffect(cameraRequest) { if (cameraRequest != null) { cameraConsumed(); launchCamera() } }
     val listState = rememberLazyListState()
     var followTail by rememberSaveable(state.conversationId) { mutableStateOf(true) }
     var scrollingToEnd by remember { mutableStateOf(false) }
@@ -121,7 +137,8 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                             is ChatItem.Assistant -> Column {
                                 AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id,
                                     openArtifact = openArtifact, shareArtifact = shareArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
-                                    openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) })
+                                    openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) },
+                                    speech = speech, speechError = vm::showError)
                                 if (item.id == last?.id && !state.running && !state.resumable && settings.suggestedFollowUps && !state.temporary) {
                                     val answer = item.steps.filterIsInstance<app.dsandroid.core.agent.TurnStep.Answer>().lastOrNull()?.text.orEmpty()
                                     val questions = remember(answer) { app.dsandroid.core.chat.FollowUps.parse(answer).questions }
@@ -175,17 +192,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
         Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AttachmentTile(stringResource(R.string.camera), Glyph.CAMERA, Modifier.weight(1f)) {
                 attachSheet = false
-                try {
-                    val name = "${UUID.randomUUID()}.jpg"
-                    val file = cameraFile(name)
-                    check(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
-                    check(file.createNewFile())
-                    cameraName = name
-                    camera.launch(cameraUri(name))
-                } catch (_: Exception) {
-                    cameraName?.let { cameraFile(it).delete() }; cameraName = null
-                    vm.showError(context.getString(R.string.camera_unavailable))
-                }
+                launchCamera()
             }
             AttachmentTile(stringResource(R.string.photo), Glyph.PHOTO, Modifier.weight(1f)) {
                 attachSheet = false

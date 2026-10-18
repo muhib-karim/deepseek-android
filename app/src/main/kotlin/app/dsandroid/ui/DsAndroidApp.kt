@@ -52,7 +52,8 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {}) {
+fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {},
+    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
@@ -66,6 +67,18 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
+    DisposableEffect(context, lifecycle) {
+        val activity = context as? Activity
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (activity != null) {
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.phoneActions.attach(activity)
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) vm.phoneActions.detach(activity)
+            }
+        }
+        lifecycle.addObserver(observer)
+        if (activity != null && lifecycle.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) vm.phoneActions.attach(activity)
+        onDispose { lifecycle.removeObserver(observer); if (activity != null) vm.phoneActions.detach(activity) }
+    }
     LaunchedEffect(sharedInput, state.settingsReady, state.running, state.importing) {
         if (sharedInput != null && state.settingsReady && !state.running && !state.importing) {
             vm.receiveShare(sharedInput)
@@ -73,12 +86,24 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
             sharedConsumed()
         }
     }
+    var cameraRequest by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(launchRequest, state.settingsReady, state.running, state.importing) {
+        if (launchRequest != null && state.settingsReady && !state.running && !state.importing) {
+            vm.newConversation()
+            navigation.navigate("chat") { popUpTo("chat") { inclusive = true }; launchSingleTop = true }
+            when (launchRequest.action) {
+                app.dsandroid.core.launch.QuickAction.NEW_CHAT -> Unit
+                app.dsandroid.core.launch.QuickAction.VOICE -> navigation.navigate("voice")
+                app.dsandroid.core.launch.QuickAction.CAMERA -> cameraRequest = launchRequest.token
+            }
+            launchConsumed()
+        }
+    }
     var pendingSave by rememberSaveable { mutableStateOf<String?>(null) }
     var viewerPath by rememberSaveable { mutableStateOf("") }
     var viewerName by rememberSaveable { mutableStateOf("") }
     var viewerMime by rememberSaveable { mutableStateOf("") }
     var runDetailsVisible by remember { mutableStateOf(false) }
-    var audioInfoVisible by remember { mutableStateOf(false) }
     var chatMenu by remember { mutableStateOf(false) }
     var exportVisible by remember { mutableStateOf(false) }
     var instructionsVisible by remember { mutableStateOf(false) }
@@ -174,20 +199,21 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                                                 onClick = { chatMenu = false; instructionsVisible = true })
                                         }
                                     }
-                                    IconButton(onClick = { audioInfoVisible = true }) { AppIcon(Glyph.MUTE, stringResource(R.string.voice)) }
+                                    IconButton(onClick = { navigation.navigate("voice") }, enabled = !state.running && !state.importing) { AppIcon(Glyph.MIC, stringResource(R.string.voice_mode)) }
                                     IconButton(onClick = vm::newConversation, enabled = !state.running && !state.importing,
                                         modifier = Modifier.padding(end = 8.dp).size(40.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
                                         AppIcon(Glyph.PLUS, stringResource(R.string.new_chat))
                                     }
                                 })
                             }) { padding ->
-                                ChatScreen(state, settings, Modifier.padding(padding), vm, shareArtifact = ::share) { artifact ->
+                                ChatScreen(state, settings, Modifier.padding(padding), vm, cameraRequest = cameraRequest, cameraConsumed = { cameraRequest = null }, shareArtifact = ::share) { artifact ->
                                     viewerPath = artifact.path; viewerName = artifact.fileName; viewerMime = artifact.mimeType
                                     navigation.navigate("viewer")
                                 }
                             }
                         }
                     }
+                    composable("voice") { VoiceScreen(state, settings, vm) { navigation.popBackStack() } }
                     composable("tasks") { LaunchedEffect(Unit) { vm.refreshTasks() }; TasksScreen(state, vm) { navigation.popBackStack() } }
                     composable("browser") { BrowserScreen(vm) { navigation.popBackStack() } }
                     composable("accounts") {
@@ -272,8 +298,6 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                 state.error?.let { message -> ErrorCard(message, vm::dismissError) { navigation.navigate("settings") { launchSingleTop = true }; vm.dismissError() } }
             }
         }
-        if(audioInfoVisible) AlertDialog(onDismissRequest = { audioInfoVisible = false }, title = { Text(stringResource(R.string.voice)) },
-            text = { Text(stringResource(R.string.voice_muted)) }, confirmButton = { TextButton(onClick = { audioInfoVisible = false }) { Text(stringResource(R.string.confirm)) } })
         if(runDetailsVisible) ModalBottomSheet(onDismissRequest = { runDetailsVisible = false }) {
             SelectionContainer { Text(state.runDetails.orEmpty(), Modifier.padding(24.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) }
         }

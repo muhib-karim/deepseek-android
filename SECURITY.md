@@ -28,7 +28,7 @@ assumed by this scaffold.
   providers must be changed to HTTPS. Inference goes directly to the selected endpoint;
   the app adds no relay and never switches accounts automatically.
 - Install-time access is INTERNET only. RECORD_AUDIO remains declared and is requested
-  at dictation use. ACCESS_NETWORK_STATE is explicitly removed during manifest merge;
+  at dictation or voice-mode use. ACCESS_NETWORK_STATE is explicitly removed during manifest merge;
   there are no storage, camera, overlay, accessibility or package-install permissions.
 - Tool calls pass through the registry and guard before execution. Chat mode advertises
   no tools and refuses unsolicited tool calls. Agent mode runs only registered tools;
@@ -303,3 +303,65 @@ vulnerabilities remain device-validation concerns.
 Uninstalling clears them. Debug APKs are not production-signed and CI keys can
 change between runs. Never commit API keys, account grants, signing keys,
 `local.properties`, or private conversation fixtures.
+
+## Pass F voice, capture and phone boundaries
+
+- Voice is an explicit foreground session. Runtime RECORD_AUDIO permission and a
+  deliberate Start listening tap precede capture; shortcuts, the widget, the tile,
+  assist intents and process recreation never automatically activate the microphone.
+  System recognition prefers the on-device service on API 31+ when available;
+  fallback recognition can send audio to the selected system service. The app does
+  not store audio. Recognized text enters the existing send/history path, including
+  temporary-chat behavior. Starting voice means each recognized utterance is sent
+  to the selected inference provider. No voice-specific relay or account switching.
+- Playback uses installed offline TTS voices only, selecting English/Bangla by
+  sentence text. TTS engines are platform/user-installed components and receive
+  the text being read. Missing voices surface an error instead of selecting a
+  network voice or downloading one. Pause/resume repeats the interrupted sentence.
+  Callback generations prevent old recognition/TTS events from submitting twice,
+  skipping sentences or restarting the microphone after interruption. Activity
+  pause or audio-focus loss stops the voice loop; standalone read-aloud stays
+  paused until explicitly resumed. Audio focus is released when speech ends.
+- Camera snapshots use ACTION_IMAGE_CAPTURE through the existing TakePicture and
+  narrow FileProvider path, without CAMERA permission. Voice snapshots are shown
+  before attachment. Screen capture is always user-initiated, one frame per request,
+  bounded to a 1280-pixel longest edge, and requires an image review before attachment.
+  Capture resources close after the frame, cancellation, timeout or activity pause.
+  A capture request never automatically sends a message or grants an agent screen access.
+- On API 26–28, a fresh system MediaProjection consent is obtained per request and
+  the app must remain resumed. Consent tokens are never persisted or reused. On
+  API 29+, MediaProjection requires a foreground service; newer versions also need
+  its mediaProjection type permission. Those install permissions are forbidden,
+  so only the app’s own visible window is captured with PixelCopy after explicit
+  per-request confirmation. There is no foreground capture service, other-app
+  capture on those versions, overlay, accessibility access or continuous recording.
+  Secure surfaces remain protected. Capture previews remain in private cache until
+  discarded/imported or cleared by Android; successful/failed imports remove the
+  original camera/PNG source. Process-death leftovers can remain in private cache.
+- Attaching approves the staged image for the next spoken send. The existing batch
+  limits, OCR and selected-model vision checks apply unchanged: image bytes are
+  sent only for vision models; other models receive extracted text/failure context.
+  Review sensitive content before attaching. The existing Latin OCR model may not
+  extract Bangla text; Bangla TTS support does not imply Bangla OCR support.
+- `draft_sms`, `draft_email`, `add_calendar_event` and `open_map` are ACTION tools
+  with CONFIRM risk. The guard rejects invalid recipients, extra fields, malformed
+  times and oversized payloads before confirmation. Each preview shows exact
+  arguments; calendar previews also show localized times and the device timezone.
+  The adapter builds only ACTION_SENDTO (`smsto:`/`mailto:`), ACTION_INSERT with
+  CalendarContract.Events, or ACTION_VIEW with an encoded `geo:` query. User input
+  cannot choose intent actions, components, flags or extra permission grants.
+  Launch requires the resumed activity and uses the existing durable tool-result
+  path. No SMS is sent, email delivered or calendar row written by the app; the
+  user finishes in the target app. Maps can disclose the approved place query to
+  the selected maps provider. No SMS, contacts, calendar or location permission.
+- `set_alarm` is not registered: AlarmClock.ACTION_SET_ALARM requires
+  `com.android.alarm.permission.SET_ALARM`, contrary to the install-permission rule.
+  There is no silent alarm fallback. Existing scheduled prompts are unrelated.
+- Quick launch accepts only fixed actions and ignores assist payload/context.
+  The tile component is protected by BIND_QUICK_SETTINGS_TILE; this is a system
+  binding restriction, not a uses-permission granted to this app. Widget actions
+  use explicit immutable PendingIntents. The widget receiver is not exported,
+  requests no periodic background work, and stores only a bounded saved title in
+  private preferences. The launcher can read that displayed title; message bodies,
+  credentials and temporary-chat titles are excluded. Renaming/deleting chats
+  refreshes/clears the title. No new install permissions or dependencies are added.

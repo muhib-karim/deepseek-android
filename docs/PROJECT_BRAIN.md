@@ -1,14 +1,16 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-Deliver v0.3.0 Pass E in order: assistants, manual accounts, browser, connectors, sub-agents, memory upkeep, scheduled tasks. Preserve the released v0.2.0 registry, confirmations, export and attachment paths; CI gates any release.
+Deliver v0.3.0 Pass F in numbered order: voice, read aloud, voice images, phone intents, screen capture, quick launch and widget. Preserve existing registry, attachments and export.
 
 ## Status
-- All seven Pass E features and English/Bangla UI are implemented, extending existing paths. Added 39 JVM cases across nine test files; execution, compilation and lint remain deferred to CI.
-- Static resource/XML/TOML, Kotlin lexical/import, fixed-script syntax, SDK/source-permission and diff checks passed, as did a redacted secret scan. README, matrix, security and connector setup notes are updated. No Gradle, browser, sub-agents, commits or pushes.
+- Pass F implementation and English/Bangla resources are saved: foreground voice/TTS, sentence reading controls, reviewed camera/screen attachments, confirmed phone intents, quick launch and RemoteViews widget. Existing chat, registry, importer, artifacts and export paths are retained.
+- Added 40 JVM cases in eight files. Lightweight XML/TOML, resource/localization, Kotlin lexical/import, SDK/source-permission, machine-path and diff checks passed; redacted secret scanning passed. Compilation, tests and lint are unrun and remain CI gates.
+- Alarms are omitted because SET_ALARM requires an install permission. API 26–28 projection uses fresh consent while visible; API 29+ capture only this app window via PixelCopy. Dynamic shortcuts respect launcher capacity. No new dependencies or install permissions.
+- README, SECURITY and feature rows 34–39/57 are updated. No Gradle, browsers, sub-agents, review skills, commits, pushes, tags or version changes.
 
 ## Next step
-Run CI tests/lint/assembly and validate browser, OAuth, secure accounts and WorkManager on devices before release. The final local edit records the Pass E BUILD_NOTES handoff.
+Final edit adds the Pass F BUILD_NOTES handoff. Then run GitHub Actions tests/lint/assembly and device-check microphone/voice availability, interruption, capture lifecycle/review, phone handlers, launcher/tile/assist and widget privacy before release.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -30,3 +32,5 @@ Run CI tests/lint/assembly and validate browser, OAuth, secure accounts and Work
 - 2026-10-18 Codex: saved Pass D steps 1–7 and JVM cases; next: chat ergonomics and library, then static checks. No local build or commit.
 - 2026-10-18 01:22Z Codex: completed Pass D code/tests/resources and README/matrix/security updates; lightweight checks and secret scan pass. Final edit writes BUILD_NOTES; next: CI and device validation.
 - 2026-10-18 02:02Z Codex: completed resumed Pass E implementation, 39 JVM cases and documentation; final edit writes BUILD_NOTES, then CI and device validation remain.
+
+- 2026-10-18 02:32Z Codex: saved Pass F implementation, 40 JVM cases and documentation; lightweight checks pass, CI/device validation remains. Final edit is the Pass F BUILD_NOTES section; no commit or push.

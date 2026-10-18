@@ -23,10 +23,12 @@ fun ToolConfirmationSheet(confirmation: Confirmation, reply: (Boolean) -> Unit) 
                 Text(stringResource(R.string.tools_destination, destination))
                 Text(confirmation.remoteName.orEmpty(), style = MaterialTheme.typography.titleMedium)
             }
-            Text(if (confirmation.name == "python_runtime_download") stringResource(R.string.python_download_title) else confirmation.name,
+            val phoneLabel = phoneActionLabel(confirmation.name)
+            Text(if (phoneLabel != null) stringResource(phoneLabel) else if (confirmation.name == "python_runtime_download") stringResource(R.string.python_download_title) else confirmation.name,
                 style = MaterialTheme.typography.titleMedium)
             Text(stringResource(when (confirmation.name) {
                 "open_url", "read_page", "click", "type", "submit", "back" -> R.string.browser_confirm
+                "draft_sms", "draft_email", "add_calendar_event", "open_map" -> R.string.phone_action_confirm
                 "schedule_prompt" -> R.string.task_confirm_notice
                 "remember" -> R.string.confirm_memory_explanation
                 "web_search" -> R.string.confirm_search_explanation
@@ -34,6 +36,7 @@ fun ToolConfirmationSheet(confirmation: Confirmation, reply: (Boolean) -> Unit) 
                 "python_runtime_download" -> R.string.python_download_explanation
                 else -> if (connector) R.string.confirm_connector_explanation else if (confirmation.destination != null) R.string.confirm_remote_explanation else R.string.confirm_tool_explanation
             }))
+            if (confirmation.name == "add_calendar_event") PhoneCalendarTimes(confirmation.arguments)
             SelectionContainer {
                 Text(confirmation.arguments.toString(), Modifier.heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState()), fontFamily = FontFamily.Monospace,

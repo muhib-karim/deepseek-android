@@ -112,6 +112,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsLock = Mutex()
     private val confirmationLock = Mutex()
     private val connectorGrants = ConnectorGrants()
+    val phoneActions = app.dsandroid.phone.PhoneActionLauncher(application)
     val browser = app.dsandroid.browser.BrowserController(application)
     private val taskScheduler = app.dsandroid.tasks.TaskScheduler(application)
     val workspace = WorkspacePath(File(application.filesDir, "workspace"))
@@ -402,7 +403,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         RenderChartTool(), CreateArtifactTool(), CreateWebProjectTool(), CodeInterpreterTool(codeExecutor), VisitWebTool(), WebFetchTool(),
         WebSearchTool(if (config.searchBackend == "searxng") config.searxngUrl else null),
         RememberTool(memoryStore) { mutableState.update { it.copy(facts = memoryStore.all()) } },
-    ) + app.dsandroid.core.browser.BrowserTool.NAMES.map { app.dsandroid.core.browser.BrowserTool(it, browser) }
+    ) + app.dsandroid.core.phone.PhoneActionTool.NAMES.map { app.dsandroid.core.phone.PhoneActionTool(it, phoneActions::launch) } + app.dsandroid.core.browser.BrowserTool.NAMES.map { app.dsandroid.core.browser.BrowserTool(it, browser) }
 
     fun builtInToolNames(): List<String> = builtInTools(AppSettings()).map { it.name } + listOf("parallel_agents", "schedule_prompt")
 
@@ -698,7 +699,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 when (item) { is ChatItem.User -> item.text; is ChatItem.Assistant -> item.steps.filterIsInstance<TurnStep.Answer>().joinToString("\n") { answer -> answer.text } }
             }, c.pinned, c.projectId)
         }) }
+        refreshWidget()
         persistConversation(current)
+    }
+    private fun refreshWidget() {
+        runCatching {
+            app.dsandroid.widget.AskDeepSeekWidget.update(getApplication<Application>(), app.dsandroid.core.widget.WidgetSummary.select(
+                conversations.map { app.dsandroid.core.widget.WidgetChat(it.id, it.title, it.createdAt, it.temporary) }, current.id))
+        }
     }
     fun newConversation(temporary: Boolean = false, projectId: String? = null, assistant: SavedAssistant? = null) {
         if (state.value.running || state.value.importing || restarting) return
@@ -720,6 +728,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { it.copy(conversationId = target.id, title = target.title, items = target.items, error = null, attachments = emptyList(),
             temporary = target.temporary, projectId = target.projectId, systemPrompt = target.systemPrompt, sharedDraft = null, responseStyle = target.responseStyle, studyMode = target.studyMode, agentPlan = "", subAgents = emptyList(),
             resumable = target.pendingRunId != null, waitingForNetwork = false, retrySeconds = null, runDetails = null) }
+        refreshWidget()
     }
     private suspend fun recordGenerated(artifact: Artifact, conversation: Conversation) {
         try { withContext(Dispatchers.IO) { artifactLibrary.record(artifact, conversation.id, conversation.temporary) } }

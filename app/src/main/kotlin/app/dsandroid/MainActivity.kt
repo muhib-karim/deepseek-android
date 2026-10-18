@@ -12,22 +12,28 @@ import app.dsandroid.attachments.SharedInput
 import app.dsandroid.ui.DsAndroidApp
 
 class MainActivity : AppCompatActivity() {
+    private var launchRequest by mutableStateOf<app.dsandroid.launch.LaunchRequest?>(null)
     private var sharedInput by mutableStateOf<SharedInput?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState?.getBoolean("shareConsumed") != true) sharedInput = SharedInput.read(intent, packageName)
+        if (savedInstanceState?.getBoolean("launchConsumed") != true) launchRequest = app.dsandroid.core.launch.QuickAction.fromAction(intent?.action)?.let { app.dsandroid.launch.LaunchRequest(it) }
+        app.dsandroid.launch.QuickLaunch.publish(this)
+        app.dsandroid.widget.AskDeepSeekWidget.refresh(this)
         enableEdgeToEdge()
-        setContent { DsAndroidApp(sharedInput = sharedInput, sharedConsumed = { sharedInput = null }) }
+        setContent { DsAndroidApp(sharedInput = sharedInput, sharedConsumed = { sharedInput = null }, launchRequest = launchRequest, launchConsumed = { launchRequest = null }) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         sharedInput = SharedInput.read(intent, packageName)
+        launchRequest = app.dsandroid.core.launch.QuickAction.fromAction(intent.action)?.let { app.dsandroid.launch.LaunchRequest(it) }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("launchConsumed", launchRequest == null)
         outState.putBoolean("shareConsumed", sharedInput == null)
         super.onSaveInstanceState(outState)
     }
