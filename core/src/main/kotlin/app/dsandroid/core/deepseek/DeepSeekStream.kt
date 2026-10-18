@@ -42,22 +42,20 @@ class DeepSeekStream {
     private fun apply(patch: JsonObject, prefix: String = "") {
         val explicitPath = patch["p"]?.jsonPrimitive?.content
         val path = if (explicitPath == null) lastPath else listOf(prefix, explicitPath.trim('/')).filter { it.isNotEmpty() }.joinToString("/")
-        val operation = patch["o"]?.jsonPrimitive?.content ?: if (explicitPath == null) lastOperation else "SET"
+        val operation = patch["o"]?.jsonPrimitive?.content ?: lastOperation
         val value = patch["v"] ?: return
-        if (explicitPath != null) { lastPath = path; lastOperation = operation }
+        if (explicitPath != null) lastPath = path
         if (operation == "BATCH") {
             value.jsonArray.forEach { apply(it.jsonObject, path) }
             return
         }
         if (operation !in setOf("APPEND", "SET")) throw UpdateRequired()
+        lastOperation = operation
         when {
             path.isEmpty() && value is JsonObject -> root(value)
             path == "response_message_id" -> messageId = value.jsonPrimitive.long
             path == "response" && value is JsonObject -> response(value)
-            path == "response/status" -> if (value.jsonPrimitive.content in setOf("FINISHED", "INTERRUPTED")) {
-                if (value.jsonPrimitive.content == "INTERRUPTED") throw UpdateRequired()
-                finished = true
-            }
+            path == "response/status" -> status(value.jsonPrimitive.content)
             path == "response/fragments" -> {
                 if (operation == "SET") fragments.clear()
                 value.jsonArray.forEach { add(it.jsonObject) }
@@ -79,7 +77,11 @@ class DeepSeekStream {
     }
     private fun response(value: JsonObject) {
         value["fragments"]?.jsonArray?.let { list -> fragments.clear(); list.forEach { add(it.jsonObject) } }
-        if (value["status"]?.jsonPrimitive?.content == "FINISHED") finished = true
+        value["status"]?.jsonPrimitive?.content?.let(::status)
+    }
+    private fun status(value: String) {
+        if (value == "INTERRUPTED") throw UpdateRequired()
+        if (value == "FINISHED") finished = true
     }
     private fun add(value: JsonObject) {
         val type = value.getValue("type").jsonPrimitive.content

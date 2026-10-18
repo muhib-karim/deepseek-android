@@ -2,6 +2,9 @@ package app.dsandroid.deepseek
 
 import android.graphics.Bitmap
 import android.os.Process
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -34,11 +37,14 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         AccountMessage("u1", true, "Show me a small Kotlin example."),
         AccountMessage("a1", false, "## A simple greeting\n\nUse a function to greet someone.\n\n```kotlin\nfun greet() = \"Hello!\"\n```", "Choose a clear, minimal example."),
     )
-    private fun launch(state: AccountUiState, login: () -> Unit = {}, fallback: () -> Unit = {}) {
+    private fun launch(state: AccountUiState, fontScale: Float = 1f, login: () -> Unit = {}, fallback: () -> Unit = {}) {
         compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
             AccountTheme(theme) {
                 DeepSeekShell(state.copy(appearance = theme), onLogin = login, onApiFallback = fallback,
                     loginContent = { Text("Sign in on chat.deepseek.com", Modifier.fillMaxSize()) })
+            }
             }
         }
     }
@@ -96,6 +102,12 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         launch(AccountUiState(ready = true, signedIn = true))
         compose.onNodeWithContentDescription("Add attachment").performClick()
         listOf("Camera", "Photo", "Document").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+    }
+    @Test fun doubledFontKeepsLoginAndComposerReachable() {
+        launch(AccountUiState(ready = true), fontScale = 2f)
+        compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Send message").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
     }
     private fun screenshot(name: String) {
         // Exercise real encrypted storage with a synthetic marker; never seed real account data.

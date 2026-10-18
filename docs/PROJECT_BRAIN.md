@@ -4,13 +4,14 @@
 v0.4.0 is released (Pass G, versionCode 4). Next: plan v0.5.0 from FEATURE_MATRIX open rows and QC feedback.
 
 ## Status
+- Android account shell, encrypted session storage, scoped cookies, restricted login/PoW WebView and private local history are implemented. MainActivity now defaults to this shell; legacy API client is explicit in Settings.
 - v0.5.0 account-client work started on the requested feature branch from refreshed origin/main; main unchanged.
 - Read the supplied UI spec, current Compose architecture, tests, manifests, workflows and dependency catalog.
 - Design: default DeepSeek web-session shell with native streaming; existing API client remains an explicit Settings fallback. Tokens stay out of UI state and diagnostics.
 - Implemented core token/origin checks, bounded SSE patch reduction and cancellable Bearer+cookie native streaming. Added tests first for session parsing/expiry/origin/routing, PoW headers, incremental patch streams, native transport and ten light/dark screenshot fixtures. Builds, test execution and screenshots are CI-only; no push, tag or release in this session.
 
 ## Next step
-Implement Android encrypted storage, restricted login/worker WebView and the tested account shell. Verify public worker protocol where reachable; document any unverified integration.
+Adapt emulator artifact capture, set version 0.5.0/5, document limitations and complete static/security review. Verify public worker protocol where reachable; document any unverified integration.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -40,3 +41,5 @@ Implement Android encrypted storage, restricted login/worker WebView and the tes
 - 2026-10-18 Codex: authored v0.5.0 protocol and screenshot tests before production changes; CI execution pending. Public worker contract inspected; public chat page returned HTTP 403.
 
 - 2026-10-18 Codex: core session transport and patch reducer implemented against first-written tests; static diff check passed, compilation and execution remain CI-only. Next: Android login and shell.
+
+- 2026-10-18 Codex: implemented account login, original Compose shell, history, text-only attachment imports and explicit legacy fallback. Independent review found stream/failed-page edge cases; regression tests and fixes added. CI-only validation remains.

@@ -40,6 +40,43 @@ data: [DONE]
         assertThrows(UpdateRequired::class.java) { DeepSeekStream().feed("data: {bad}\n\n") }
         assertThrows(UpdateRequired::class.java) { DeepSeekStream().feed("data: {\"p\":\"response/fragments\",\"o\":\"SET\",\"v\":[{\"type\":\"UNKNOWN\",\"content\":\"hidden\"}]}\n\n") }
     }
+    @Test fun operationOnlyPatchesChangeTheInheritedOperation() {
+        val stream = DeepSeekStream()
+        stream.feed("""data: {"p":"response/fragments","o":"SET","v":[{"type":"RESPONSE","content":"old"}]}
+
+data: {"p":"response/fragments/0/content","o":"APPEND","v":" appended"}
+
+data: {"o":"SET","v":"replacement"}
+
+data: {"v":"final"}
+
+data: [DONE]
+
+""")
+        assertEquals("final", stream.finish().response)
+    }
+    @Test fun pathOnlyPatchInheritsTheLastTextOperation() {
+        val stream = DeepSeekStream()
+        stream.feed("""data: {"p":"response/fragments","o":"SET","v":[{"type":"THINK","content":"A"},{"type":"RESPONSE","content":"B"}]}
+
+data: {"p":"response/fragments/0/content","o":"APPEND","v":"1"}
+
+data: {"p":"response/fragments/1/content","v":"2"}
+
+data: [DONE]
+
+""")
+        assertEquals("B2", stream.finish().response)
+    }
+    @Test fun interruptedSnapshotCannotBecomeSuccessAtDone() {
+        assertThrows(UpdateRequired::class.java) {
+            DeepSeekStream().feed("""data: {"v":{"response_message_id":1,"response":{"status":"INTERRUPTED","fragments":[{"type":"RESPONSE","content":"partial"}]}}}
+
+data: [DONE]
+
+""")
+        }
+    }
     @Test fun streamAuthFailureRequiresLoginWithoutEchoingServerPayload() {
         val error = assertThrows(SessionExpired::class.java) {
             DeepSeekStream().feed("data: {\"code\":401,\"message\":\"screenshot-canary-not-a-real-token\"}\n\n")

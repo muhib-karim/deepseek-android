@@ -53,7 +53,7 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {},
-    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}) {
+    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}, startDestination: String = "chat") {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
@@ -164,7 +164,7 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
     ChatTheme(settings.appearance, settings.fontScale) {
         Surface(Modifier.fillMaxSize()) {
             Column {
-                NavHost(navController = navigation, startDestination = "chat", modifier = Modifier.weight(1f)) {
+                NavHost(navController = navigation, startDestination = startDestination, modifier = Modifier.weight(1f)) {
                     composable("chat") {
                         val drawer = rememberDrawerState(DrawerValue.Closed)
                         BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
