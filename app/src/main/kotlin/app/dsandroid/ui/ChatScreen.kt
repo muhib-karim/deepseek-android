@@ -48,6 +48,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
     var agentEnabled by rememberSaveable { mutableStateOf(false) }
+    var research by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable(state.conversationId) { mutableStateOf<String?>(null) }
     var editedText by rememberSaveable(state.conversationId) { mutableStateOf("") }
     var attachSheet by remember { mutableStateOf(false) }
@@ -125,8 +126,9 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
             }
         }
         Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { agentEnabled = it }, state, settings.supportsVision(think),
-            { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
-            settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError)
+            { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled, research && agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
+            settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError,
+            research, { research = it })
     }
     if (editingId != null) AlertDialog(onDismissRequest = { editingId = null },
         title = { Text(stringResource(R.string.turn_edit_title)) },
@@ -187,7 +189,8 @@ private fun AttachmentTile(label: String, glyph: Glyph, modifier: Modifier, clic
 @Composable
 private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setThink: (Boolean) -> Unit, search: Boolean, setSearch: (Boolean) -> Unit,
     agentEnabled: Boolean, setAgent: (Boolean) -> Unit, state: ChatUiState, vision: Boolean, attach: () -> Unit, send: () -> Unit, stop: () -> Unit, remove: (String) -> Unit,
-    audioLanguage: String, dictate: (String) -> Unit, report: (String) -> Unit) {
+    audioLanguage: String, dictate: (String) -> Unit, report: (String) -> Unit,
+    research: Boolean = false, setResearch: (Boolean) -> Unit = {}) {
     val enabled = state.settingsReady && !state.saving && !state.signingIn && !state.running && !state.importing
     val placeholder = stringResource(R.string.message_placeholder)
     Surface(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -226,6 +229,11 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                     label = { Text(stringResource(R.string.mode_agent)) })
                 ComposerChip(stringResource(R.string.think), Glyph.THINK, think, enabled) { setThink(!think) }
                 ComposerChip(stringResource(R.string.search), Glyph.SEARCH, search && agentEnabled, enabled && agentEnabled) { setSearch(!search) }
+                ComposerChip(stringResource(R.string.deep_research), Glyph.SEARCH, research && agentEnabled, enabled && agentEnabled) {
+                    val next = !research
+                    setResearch(next)
+                    if (next) setSearch(true)
+                }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(if (agentEnabled) R.string.mode_description else R.string.mode_chat), Modifier.weight(1f),

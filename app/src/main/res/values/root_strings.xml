@@ -81,4 +81,20 @@
     <string name="export_html">Web page (.html)</string>
     <string name="export_pdf">PDF (.pdf)</string>
     <string name="export_error">Export failed. Try another format.</string>
+    <!-- v0.2.0 pass C part 3: projects, temporary chat, pins, deep research -->
+    <string name="deep_research">Deep research</string>
+    <string name="temporary_chat">Temporary chat</string>
+    <string name="pinned">Pinned</string>
+    <string name="pin">Pin</string>
+    <string name="unpin">Unpin</string>
+    <string name="new_project">New project</string>
+    <string name="project_name">Project name</string>
+    <string name="project_instructions">Project instructions (optional)</string>
+    <string name="new_chat_in_project">New chat in project</string>
+    <string name="delete_project">Delete project</string>
+    <string name="delete_project_notice">Delete this project? Its chats stay in your history without a project.</string>
+    <string name="move_to_project">Move to project</string>
+    <string name="no_project">No project</string>
+    <string name="export_user_label">You</string>
+    <string name="export_assistant_label">Assistant</string>
 </resources>

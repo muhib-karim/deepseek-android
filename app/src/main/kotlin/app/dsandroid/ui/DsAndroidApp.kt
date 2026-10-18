@@ -36,7 +36,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import app.dsandroid.core.export.ExportFormat
+import app.dsandroid.core.export.ExportLabels
 import app.dsandroid.core.llm.ModelInfo
+import app.dsandroid.core.personalization.ProjectRecord
 import app.dsandroid.core.llm.ModelSelector
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.data.AppSettings
@@ -61,6 +64,9 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
     var viewerMime by rememberSaveable { mutableStateOf("") }
     var runDetailsVisible by remember { mutableStateOf(false) }
     var audioInfoVisible by remember { mutableStateOf(false) }
+    var chatMenu by remember { mutableStateOf(false) }
+    var exportVisible by remember { mutableStateOf(false) }
+    var instructionsVisible by remember { mutableStateOf(false) }
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val path = pendingSave
         pendingSave = null
@@ -110,12 +116,24 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
                             ConversationDrawer(state, onNew = { vm.newConversation(); scope.launch { drawer.close() } },
                                 onOpen = { vm.openConversation(it); scope.launch { drawer.close() } },
                                 onSettings = { scope.launch { drawer.close() }; navigation.navigate("settings") },
-                                onAbout = { scope.launch { drawer.close() }; navigation.navigate("about") }, rename = vm::renameConversation, delete = vm::deleteConversation)
+                                onAbout = { scope.launch { drawer.close() }; navigation.navigate("about") }, rename = vm::renameConversation, delete = vm::deleteConversation,
+                                onTemporary = { vm.newConversation(temporary = true); scope.launch { drawer.close() } }, pin = vm::pinConversation,
+                                move = vm::moveToProject, createProject = vm::createProject, deleteProject = vm::deleteProject,
+                                onNewInProject = { vm.newConversation(projectId = it); scope.launch { drawer.close() } })
                         }) {
                             Scaffold(topBar = {
                                 CenterAlignedTopAppBar(title = { ModelTitle(state, settings, vm::selectModel, vm::refreshModels) }, navigationIcon = {
                                     IconButton(onClick = { scope.launch { drawer.open() } }) { AppIcon(Glyph.MENU, stringResource(R.string.open_navigation)) }
                                 }, actions = {
+                                    Box {
+                                        IconButton(onClick = { chatMenu = true }) { AppIcon(Glyph.MORE, stringResource(R.string.details)) }
+                                        DropdownMenu(expanded = chatMenu, onDismissRequest = { chatMenu = false }) {
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.export_conversation)) }, enabled = state.items.isNotEmpty() && !state.running && !state.exporting,
+                                                onClick = { chatMenu = false; exportVisible = true })
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.chat_instructions)) }, enabled = !state.running,
+                                                onClick = { chatMenu = false; instructionsVisible = true })
+                                        }
+                                    }
                                     IconButton(onClick = { audioInfoVisible = true }) { AppIcon(Glyph.MUTE, stringResource(R.string.voice)) }
                                     IconButton(onClick = vm::newConversation, enabled = !state.running && !state.importing,
                                         modifier = Modifier.padding(end = 8.dp).size(40.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
@@ -196,6 +214,13 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel()) {
         state.confirmation?.let { confirmation ->
             ToolConfirmationSheet(confirmation, vm::answerConfirmation)
         }
+        if (exportVisible) {
+            val labels = ExportLabels(stringResource(R.string.export_user_label), stringResource(R.string.export_assistant_label), stringResource(R.string.sources_title))
+            ConversationExportDialog(false, { format: ExportFormat ->
+                vm.exportConversation(format, null, labels, java.util.Locale.getDefault().language) { share(it) }
+            }, { exportVisible = false })
+        }
+        if (instructionsVisible) InstructionsDialog(state.systemPrompt, { vm.setChatInstructions(it); instructionsVisible = false }, { instructionsVisible = false })
     }
 }
 
@@ -235,27 +260,54 @@ private fun ModelTitle(state: ChatUiState, settings: AppSettings, select: (Strin
 
 @Composable
 private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (String) -> Unit, onSettings: () -> Unit, onAbout: () -> Unit,
-    rename: (String, String) -> Unit, delete: (String) -> Unit) {
+    rename: (String, String) -> Unit, delete: (String) -> Unit, onTemporary: () -> Unit = {}, pin: (String) -> Unit = {},
+    move: (String, String?) -> Unit = { _, _ -> }, createProject: (String, String) -> Unit = { _, _ -> }, deleteProject: (String) -> Unit = {},
+    onNewInProject: (String) -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var menuId by remember { mutableStateOf<String?>(null) }
     var renameId by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
     var deleteId by remember { mutableStateOf<String?>(null) }
+    var moveId by remember { mutableStateOf<String?>(null) }
+    var deleteProjectId by remember { mutableStateOf<String?>(null) }
+    var projectDialog by remember { mutableStateOf(false) }
+    var projectName by remember { mutableStateOf("") }
+    var projectInstructions by remember { mutableStateOf("") }
     val today = LocalDate.now()
     val todayLabel = stringResource(R.string.today)
     val recentLabel = stringResource(R.string.last_30_days)
-    val grouped = state.conversations.filter { it.title.contains(query, ignoreCase = true) || it.searchText.contains(query, ignoreCase = true) }.groupBy {
+    val filtered = state.conversations.filter { it.title.contains(query, ignoreCase = true) || it.searchText.contains(query, ignoreCase = true) }
+    val projectIds = state.projects.map { it.id }.toSet()
+    val pinnedLabel = stringResource(R.string.pinned)
+    val grouped = filtered.filter { !it.pinned && it.projectId?.let { id -> id in projectIds } != true }.groupBy {
         val date = Instant.ofEpochMilli(it.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
         when { date == today -> todayLabel; date >= today.minusDays(30) -> recentLabel
             else -> date.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.getDefault())) }
+    }
+    val sections = buildList {
+        filtered.filter { it.pinned }.takeIf { it.isNotEmpty() }?.let { add(DrawerSection(pinnedLabel, it, null)) }
+        state.projects.forEach { project -> add(DrawerSection(project.name, filtered.filter { !it.pinned && it.projectId == project.id }, project)) }
+        grouped.forEach { (label, entries) -> add(DrawerSection(label, entries, null)) }
     }
     ModalDrawerSheet {
         Column(Modifier.fillMaxHeight().widthIn(max = 320.dp).padding(horizontal = 12.dp)) {
             OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(vertical = 12.dp), placeholder = { Text(stringResource(R.string.search_chats)) }, singleLine = true)
             NavigationDrawerItem(label = { Text(stringResource(R.string.new_chat)) }, selected = state.items.isEmpty(), onClick = { if (!state.running && !state.importing) onNew() }, icon = { AppIcon(Glyph.PLUS) })
+            NavigationDrawerItem(label = { Text(stringResource(R.string.temporary_chat)) }, selected = state.temporary, onClick = { if (!state.running && !state.importing) onTemporary() }, icon = { AppIcon(Glyph.SHIELD) })
+            NavigationDrawerItem(label = { Text(stringResource(R.string.new_project)) }, selected = false, onClick = { if (!state.running) { projectName = ""; projectInstructions = ""; projectDialog = true } }, icon = { AppIcon(Glyph.DOCUMENT) })
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 12.dp)) {
-                grouped.forEach { (group, entries) ->
-                    item { Text(group, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium) }
+                sections.forEach { section ->
+                    val group = section.label
+                    val entries = section.entries
+                    val project = section.project
+                    item {
+                        if (project == null) Text(group, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                        else Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(group, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            IconButton(onClick = { onNewInProject(project.id) }, enabled = !state.running && !state.importing) { AppIcon(Glyph.PLUS, stringResource(R.string.new_chat_in_project)) }
+                            IconButton(onClick = { deleteProjectId = project.id }, enabled = !state.running) { AppIcon(Glyph.CLOSE, stringResource(R.string.delete_project)) }
+                        }
+                    }
                     items(entries, key = { it.id }) { conversation ->
                         NavigationDrawerItem(label = { Text(conversation.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             selected = state.conversationId == conversation.id, onClick = { if (!state.running && !state.importing) onOpen(conversation.id) },
@@ -264,6 +316,8 @@ private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (S
                                     IconButton(onClick = { menuId = conversation.id }, enabled = !state.running) { AppIcon(Glyph.MORE, stringResource(R.string.details)) }
                                     DropdownMenu(expanded = menuId == conversation.id, onDismissRequest = { menuId = null }) {
                                         DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menuId = null; title = conversation.title; renameId = conversation.id })
+                                        DropdownMenuItem(text = { Text(stringResource(if (conversation.pinned) R.string.unpin else R.string.pin)) }, onClick = { menuId = null; pin(conversation.id) })
+                                        DropdownMenuItem(text = { Text(stringResource(R.string.move_to_project)) }, enabled = state.projects.isNotEmpty() || conversation.projectId != null, onClick = { menuId = null; moveId = conversation.id })
                                         DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menuId = null; deleteId = conversation.id })
                                     }
                                 }
@@ -284,7 +338,29 @@ private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (S
     if(deleteId != null) AlertDialog(onDismissRequest = { deleteId = null }, title = { Text(stringResource(R.string.delete)) }, text = { Text(stringResource(R.string.delete_chat_notice)) },
         confirmButton = { TextButton(onClick = { deleteId?.let(delete); deleteId = null }) { Text(stringResource(R.string.delete)) } },
         dismissButton = { TextButton(onClick = { deleteId = null }) { Text(stringResource(R.string.cancel)) } })
+    moveId?.let { target ->
+        AlertDialog(onDismissRequest = { moveId = null }, title = { Text(stringResource(R.string.move_to_project)) }, text = {
+            Column {
+                TextButton(onClick = { move(target, null); moveId = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.no_project)) }
+                state.projects.forEach { project -> TextButton(onClick = { move(target, project.id); moveId = null }, modifier = Modifier.fillMaxWidth()) { Text(project.name) } }
+            }
+        }, confirmButton = {}, dismissButton = { TextButton(onClick = { moveId = null }) { Text(stringResource(R.string.cancel)) } })
+    }
+    if (projectDialog) AlertDialog(onDismissRequest = { projectDialog = false }, title = { Text(stringResource(R.string.new_project)) }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(projectName, { projectName = it.take(80) }, label = { Text(stringResource(R.string.project_name)) }, singleLine = true)
+            OutlinedTextField(projectInstructions, { projectInstructions = it.take(8000) }, label = { Text(stringResource(R.string.project_instructions)) }, maxLines = 6)
+        }
+    }, confirmButton = { TextButton(onClick = { createProject(projectName, projectInstructions); projectDialog = false }, enabled = projectName.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = { projectDialog = false }) { Text(stringResource(R.string.cancel)) } })
+    deleteProjectId?.let { target ->
+        AlertDialog(onDismissRequest = { deleteProjectId = null }, title = { Text(stringResource(R.string.delete_project)) }, text = { Text(stringResource(R.string.delete_project_notice)) },
+            confirmButton = { TextButton(onClick = { deleteProject(target); deleteProjectId = null }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { deleteProjectId = null }) { Text(stringResource(R.string.cancel)) } })
+    }
 }
+
+private data class DrawerSection(val label: String, val entries: List<ConversationSummary>, val project: ProjectRecord?)
 
 @Composable
 private fun ErrorCard(message: String, dismiss: () -> Unit, settings: () -> Unit) {
