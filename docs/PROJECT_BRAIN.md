@@ -1,9 +1,10 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-Complete Pass G, the v0.4.0 hardening and packaging pass, without changing version metadata or adding assistant features.
+v0.4.0 is released (Pass G, versionCode 4). Next: plan v0.5.0 from FEATURE_MATRIX open rows and QC feedback.
 
 ## Status
+- v0.4.0 released: Pass G merged; CI green (core tests, app unit tests, lint, assembleDebug, assembleRelease); version 0.4.0 (versionCode 4); debug APK, signed release APK and SHA256SUMS.txt on the v0.4.0 GitHub release.
 - Pass G implementation saved: optional signed R8 release, APK checksums, unsigned release CI and merged-permission gate; emulator workflow and fake-backend smoke tests need the human action pin and CI execution.
 - Accessibility changes, English/Bangla strings, confirmed SAF backup merging and a bounded redacted local diagnostics screen are saved. Restore preserves existing IDs, pauses imported tasks and strips unfinished execution state; credentials and workspace binaries are excluded.
 - Added 18 JVM cases and four instrumentation cases. Lightweight XML/TOML/YAML/shell, localization, Kotlin lexical, checksum/manifest/redaction fixtures and contrast checks passed; Gitleaks found no leaks. No compilation, lint, JVM or emulator test success is claimed.

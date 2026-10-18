@@ -3,9 +3,8 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current release: **v0.3.0**, a debug testing build (debug-key signed, not audited).
-The debug APK is attached to each GitHub release. Pass G adds SHA256SUMS.txt
-and an optional signed release APK. Builds, unit
+Current release: **v0.4.0** (not audited). Each GitHub release carries a debug APK,
+a signed minified release APK and SHA256SUMS.txt. Builds, unit
 tests and lint run on GitHub Actions. Android 8.0 (API 26) or newer is required.
 
 ## v0.3.0 Pass F features (in v0.3.0)
@@ -373,10 +372,9 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 ## Roadmap
 
 - v0.3.0 delivered every row in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
-- v0.4.0 Pass G implementation: optional signed/minified release APK, checksums,
-  emulator smoke tests, accessibility changes, local backup/restore and local
-  diagnostics. CI/device validation and real screenshots remain pending. See the
-  v0.4.0 section of the matrix.
+- v0.4.0 released (Pass G): signed minified release APK, SHA256SUMS.txt, emulator
+  smoke tests, accessibility changes, local backup/restore and local diagnostics.
+  Real-device validation and screenshots remain pending.
 - Full LaTeX rendering and OCR for scanned PDF pages.
 - Supported account-provider adapter, token lifecycle and integration validation.
 - Device tests for PDFs, encrypted preferences and system document actions.
