@@ -171,6 +171,16 @@ class AccountFeaturesTest(private val dark: Boolean) {
     private fun bodies(path: String) = requests.filter { it.path == path }.map { Json.parseToJsonElement(it.body).jsonObject }
     private fun screenshot(feature: String) = captureOfficialScreenshot(compose, dark, feature, TOKEN, "mocked-server")
     private fun drawer() { compose.onNodeWithContentDescription("Open navigation").performClick() }
+    /** Official drawer: Rename, Pin and Delete are in each chat's "..." menu. */
+    private fun historyAction(title: String, action: String) {
+        compose.onNodeWithContentDescription("More options for $title").performClick()
+        compose.onNodeWithContentDescription("$action $title").performClick()
+    }
+    /** Official chat: Copy, Edit and Share for your own message are on long press. */
+    private fun userMessageMenu(id: String) {
+        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("user-bubble-$id"))
+        compose.onNodeWithTag("user-bubble-$id").performTouchInput { longClick() }
+    }
     private fun settings() { drawer(); compose.onNodeWithText("Settings").performClick() }
     private fun clipboard(): String = compose.runOnIdle {
         (compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
@@ -218,28 +228,28 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithContentDescription("New Chat").performClick()
         drawer(); compose.onNodeWithTag("history-open-$id").performClick()
         compose.onNodeWithText("Hello world.").assertIsDisplayed()
-        drawer(); compose.onNodeWithContentDescription("Rename History chat").performClick()
+        drawer(); historyAction("History chat", "Rename")
         compose.onNodeWithTag("rename-title").performTextReplacement("Renamed chat")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(10_000) { vm.state.value.history.single().title == "Renamed chat" }
         assertEquals("Renamed chat", bodies(RENAME).single()["title"]!!.jsonPrimitive.content)
         assertEquals("Renamed chat", WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().single().title)
         queue(RENAME, MockResponse().setResponseCode(500))
-        compose.onNodeWithContentDescription("Rename Renamed chat").performClick()
+        historyAction("Renamed chat", "Rename")
         compose.onNodeWithTag("rename-title").performTextReplacement("Should fail")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(10_000) { vm.state.value.error != null }
         assertEquals("Renamed chat", vm.state.value.history.single().title)
         queue(DELETE, MockResponse().setResponseCode(500))
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Delete", substring = false).performClick()
         compose.waitUntil(10_000) { bodies(DELETE).size == 1 && !vm.state.value.busy }
         assertEquals(1, vm.state.value.history.size)
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(1, bodies(DELETE).size)
         screenshot("feature04-history")
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Delete", substring = false).performClick()
         compose.waitUntil(10_000) { vm.state.value.history.isEmpty() }
         assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())
@@ -299,7 +309,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         assertEquals(2, requests.count { it.path == "/api/v0/file/upload_file" })
         assertEquals("file-1", bodies(COMPLETION).last()["ref_file_ids"]!!.jsonArray.single().jsonPrimitive.content)
         val imageUser = vm.state.value.messages.last { it.user }.id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$imageUser"))
+        userMessageMenu(imageUser)
         compose.onNodeWithTag("edit-$imageUser").performClick()
         compose.onNodeWithTag("edit-message").assertTextContains("Describe image")
         compose.onNodeWithText("Cancel").performClick()
@@ -313,6 +323,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { speech.result?.invoke("Dictated words") }
         compose.onNodeWithTag("account-composer").assertTextEquals("Dictated words")
         screenshot("feature08-voice")
+        // Official composer: the microphone shows while the field is empty; text turns it into Send.
+        compose.onNodeWithContentDescription("Dictate message").assertDoesNotExist()
+        compose.onNodeWithTag("account-composer").performTextReplacement("")
         compose.onNodeWithContentDescription("Dictate message").performClick()
         compose.runOnIdle { speech.failed?.invoke() }
         compose.onNodeWithTag("account-error").assertTextContains("Speech recognition is unavailable", substring = true)
@@ -322,6 +335,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { speech.result?.invoke("Voice shortcut") }
         settings(); compose.onNodeWithText("Back", substring = false).performClick()
         compose.runOnIdle { assertEquals(starts + 1, speech.starts) }
+        compose.onNodeWithTag("account-composer").performTextReplacement("")
         compose.onNodeWithContentDescription("Dictate message").performClick()
         val oldResult = compose.runOnIdle { checkNotNull(speech.result) }
         compose.onNodeWithContentDescription("New Chat").performClick()
@@ -343,6 +357,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         launch(); send("Original prompt"); finished()
         compose.runOnIdle { vm.rename(vm.state.value.history.single().id, "Keep this title") }
         compose.waitUntil(10_000) { !vm.state.value.busy && vm.state.value.title == "Keep this title" }
+        userMessageMenu(vm.state.value.messages.first { it.user }.id)
         compose.onNodeWithContentDescription("Copy user message").performClick()
         assertEquals("Original prompt", clipboard())
         compose.onNodeWithContentDescription("Copy assistant message").performClick()
@@ -361,7 +376,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithContentDescription("Regenerate response").performScrollTo().performClick(); finished()
         assertEquals(previousParent, bodies(COMPLETION).last()["parent_message_id"])
         val laterUser = vm.state.value.messages.last { it.user }.id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$laterUser"))
+        userMessageMenu(laterUser)
         compose.onNodeWithTag("edit-$laterUser").performClick()
         compose.onNodeWithTag("edit-message").performTextReplacement("Edited later turn")
         queue(COMPLETION, reply("Later edited"))
@@ -369,7 +384,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         assertEquals(4, vm.state.value.messages.size)
         assertEquals(previousParent, bodies(COMPLETION).last()["parent_message_id"])
         val firstUser = vm.state.value.messages.first().id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$firstUser"))
+        userMessageMenu(firstUser)
         compose.onNodeWithTag("edit-$firstUser").performClick()
         compose.onNodeWithTag("edit-message").performTextReplacement("Edited prompt")
         queue(COMPLETION, reply("Edited answer"))

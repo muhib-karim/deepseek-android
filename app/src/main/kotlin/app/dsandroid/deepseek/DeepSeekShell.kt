@@ -40,10 +40,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.deepseek.WebCitation
 import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.data.Appearance
 import app.dsandroid.ui.AppIcon
+import app.dsandroid.ui.DarkChatColors
+import app.dsandroid.ui.DarkOfficialColors
+import app.dsandroid.ui.LightChatColors
+import app.dsandroid.ui.LightOfficialColors
+import app.dsandroid.ui.LocalOfficialColors
+import app.dsandroid.ui.OfficialTypography
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.MarkdownText
 import app.dsandroid.workbench.WorkbenchPane
@@ -55,6 +62,10 @@ data class AccountMessage(
     val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null,
     val steps: List<TurnStep> = emptyList(), val artifacts: List<Artifact> = emptyList(), val codeRuns: List<TurnStep.ToolCall> = emptyList(),
     val revisionOf: String? = null,
+    /** "Thought for N seconds", as the service reported it; null for older messages or no thinking. */
+    val thinkingSeconds: Double? = null,
+    /** Pages a Search turn read, shown as "Read N web pages". */
+    val citations: List<WebCitation> = emptyList(),
 )
 /** One row of Settings > Accounts: no credential, only what the list shows. */
 data class AccountRow(val id: String, val label: String, val type: AccountType, val active: Boolean, val signedIn: Boolean,
@@ -104,7 +115,8 @@ interface AccountActions {
     fun refreshBalances(id: String?) {}
     object None : AccountActions
 }
-data class AccountHistory(val id: String, val title: String)
+/** A drawer row: [updatedAt] and [pinned] place it in a group; [searchText] is lowercase title and message text. */
+data class AccountHistory(val id: String, val title: String, val updatedAt: Long = 0, val pinned: Boolean = false, val searchText: String = "")
 data class AccountUiState(
     val ready: Boolean = false,
     val signedIn: Boolean = false,
@@ -112,7 +124,7 @@ data class AccountUiState(
     val logoutPending: Boolean = false,
     val page: AccountPage = AccountPage.CHAT,
     val appearance: Appearance = Appearance.SYSTEM,
-    val title: String = "New Chat",
+    val title: String = "New chat",
     val conversationId: String = "",
     val messages: List<AccountMessage> = emptyList(),
     val history: List<AccountHistory> = emptyList(),
@@ -149,26 +161,13 @@ data class AccountUiState(
     val profilePhone: String? = null,
 )
 
-/** Light measurements follow ui-spec.md; the dark palette is an original interpretation. */
+/** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
 @Composable
 fun AccountTheme(appearance: Appearance, content: @Composable () -> Unit) {
     val dark = appearance == Appearance.DARK || (appearance == Appearance.SYSTEM && isSystemInDarkTheme())
-    val colors = if (dark) darkColorScheme(
-        primary = Color(0xFFACBEFF), onPrimary = Color(0xFF142550), primaryContainer = Color(0xFF263653), onPrimaryContainer = Color(0xFFD6E2FF),
-        surface = Color(0xFF151619), background = Color(0xFF151619), onSurface = Color(0xFFEDEEF2), onBackground = Color(0xFFEDEEF2),
-        surfaceVariant = Color(0xFF23252B), onSurfaceVariant = Color(0xFFB9BBC3), outlineVariant = Color(0xFF3A3D46),
-    ) else lightColorScheme(
-        primary = Color(0xFF426EFE), onPrimary = Color.White, primaryContainer = Color(0xFFF3F7FF), onPrimaryContainer = Color(0xFF3154C7),
-        surface = Color.White, background = Color.White, onSurface = Color(0xFF1A1A1A), onBackground = Color(0xFF1A1A1A),
-        surfaceVariant = Color(0xFFF5F6F8), onSurfaceVariant = Color(0xFF6B6F76), outlineVariant = Color(0xFFE9EAED),
-    )
-    val body = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, lineHeight = 21.sp)
-    MaterialTheme(colorScheme = colors, typography = Typography(
-        bodyLarge = body, bodyMedium = body, bodySmall = body.copy(fontSize = 12.sp, lineHeight = 18.sp),
-        titleMedium = body.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
-        titleLarge = body.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
-        headlineSmall = body.copy(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
-    ), content = content)
+    CompositionLocalProvider(LocalOfficialColors provides if (dark) DarkOfficialColors else LightOfficialColors) {
+        MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography, content = content)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,6 +186,7 @@ fun DeepSeekShell(
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
     actions: AgentActions = AgentActions.None, accountActions: AccountActions = AccountActions.None,
     heldShare: Boolean = false, onUseApiKey: (String) -> Unit = {}, onOpenLink: (String) -> Unit = {}, onDismissNotice: () -> Unit = {},
+    onPin: (String, Boolean) -> Unit = { _, _ -> }, onShareText: (String) -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -208,58 +208,26 @@ fun DeepSeekShell(
     var editTarget by remember { mutableStateOf<AccountMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
+    var sources by remember { mutableStateOf<List<WebCitation>?>(null) }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(AccountPage.CHAT) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = state.page == AccountPage.CHAT, drawerContent = {
-            ModalDrawerSheet(Modifier.fillMaxWidth(.86f).widthIn(max = 360.dp), drawerContainerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                Text("DeepSeek", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge)
-                OutlinedTextField(query, { query = it }, label = { Text("Search chats") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("history-search"), shape = RoundedCornerShape(18.dp))
-                NavigationDrawerItem(label = { Text("New Chat") }, selected = false, icon = { AppIcon(Glyph.PLUS) },
-                    onClick = { onNew(); scope.launch { drawer.close() } }, modifier = Modifier.padding(12.dp))
-                Text("Recent chats", Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LazyColumn(Modifier.weight(1f)) {
-                    items(state.history.filter { it.title.contains(query, true) }, key = { it.id }) { chat ->
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(chat.title, Modifier.weight(1f).testTag("history-open-${chat.id}").clickable(enabled = !state.busy) {
-                                onOpen(chat.id); scope.launch { drawer.close() }
-                            }.padding(horizontal = 12.dp, vertical = 16.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            TextButton(onClick = { renameTarget = chat; renameTitle = chat.title }, enabled = !state.busy,
-                                modifier = Modifier.semantics { contentDescription = "Rename ${chat.title}" }) { Text("Rename", style = MaterialTheme.typography.bodySmall) }
-                            IconButton(onClick = { deleteTarget = chat }, enabled = !state.busy) { AppIcon(Glyph.CLOSE, "Delete ${chat.title}") }
-                        }
-                    }
-                }
-                HorizontalDivider()
-                NavigationDrawerItem(label = { Text("Files in this chat") }, selected = false, icon = { AppIcon(Glyph.DOCUMENT) },
-                    onClick = { actions.openChatFiles(); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp).testTag("chat-files"))
-                NavigationDrawerItem(label = { Text("Skills") }, selected = false, icon = { AppIcon(Glyph.TOOL) },
-                    onClick = { onNavigate(AccountPage.SKILLS); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
-                NavigationDrawerItem(label = { Text("Settings") }, selected = false,
-                    onClick = { onNavigate(AccountPage.SETTINGS); scope.launch { drawer.close() } }, modifier = Modifier.padding(12.dp))
-            }
+            HistoryDrawer(state, query, onQuery = { query = it.take(200) },
+                onNew = { onNew(); scope.launch { drawer.close() } },
+                onOpen = { id -> onOpen(id); scope.launch { drawer.close() } },
+                onRename = { chat -> renameTarget = chat; renameTitle = chat.title }, onPin = { chat -> onPin(chat.id, !chat.pinned) },
+                onDelete = { chat -> deleteTarget = chat },
+                onFiles = { actions.openChatFiles(); scope.launch { drawer.close() } },
+                onSkills = { onNavigate(AccountPage.SKILLS); scope.launch { drawer.close() } },
+                onSettings = { onNavigate(AccountPage.SETTINGS); scope.launch { drawer.close() } })
         }) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-                Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                    if (state.page == AccountPage.CHAT) {
-                        IconButton(onClick = { scope.launch { drawer.open() } }, modifier = Modifier.align(Alignment.CenterStart).size(48.dp)) { AppIcon(Glyph.MENU, "Open navigation") }
-                        Column(Modifier.align(Alignment.Center).padding(horizontal = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(state.title.ifBlank { "New Chat" }, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            // With several accounts, the one in use is always visible; it changes only from Settings > Accounts.
-                            if (state.accounts.size > 1) state.accounts.firstOrNull { it.active }?.let { active ->
-                                Text(active.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("active-account"))
-                            }
-                        }
-                        IconButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterEnd).size(48.dp)) {
-                            OutlinedCircle { AppIcon(Glyph.PLUS, "New Chat", Modifier.size(14.dp)) }
-                        }
-                    } else {
-                        TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
-                        Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
-                            textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
-                    }
+                if (state.page == AccountPage.CHAT) ChatTopBar(state, onMenu = { scope.launch { drawer.open() } }, onNew = onNew)
+                else Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
+                    Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
+                        textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                 }
                 state.error?.let { error ->
                     Text(error, Modifier.fillMaxWidth().heightIn(max = 96.dp).background(MaterialTheme.colorScheme.errorContainer).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account-error"),
@@ -274,34 +242,20 @@ fun DeepSeekShell(
                 when (state.page) {
                     AccountPage.CHAT -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(Modifier.widthIn(max = 840.dp).fillMaxHeight()) {
-                            if (state.messages.isEmpty()) {
-                                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    AppMark(Modifier.size(52.dp))
-                                    Spacer(Modifier.height(16.dp))
-                                    Text("How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                                }
-                            } else {
-                                val list = rememberLazyListState()
-                                LaunchedEffect(state.messages.lastOrNull()?.text, state.messages.lastOrNull()?.thinking) {
-                                    if (state.busy && state.messages.isNotEmpty()) list.scrollToItem(state.messages.lastIndex)
-                                }
-                                LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("message-list"), state = list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                                    items(state.messages, key = { it.id }) { message ->
-                                        Message(message, state.busy && message.id == state.messages.lastOrNull()?.id,
-                                            enabled = !state.busy, regenerate = !message.user && message.id == state.messages.lastOrNull()?.id,
-                                            onRegenerate = onRegenerate, onEdit = { editTarget = message; editText = message.prompt ?: message.text }, actions = actions)
-                                    }
-                                }
-                            }
+                            if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
+                            else MessageList(state, Modifier.weight(1f).fillMaxWidth(), onRegenerate = onRegenerate,
+                                onEdit = { message -> editTarget = message; editText = message.prompt ?: message.text },
+                                onShareText = onShareText, onSources = { sources = it }, actions = actions)
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                                    IconButton(onClick = { onRemoveAttachment(index) }, enabled = !state.busy) { AppIcon(Glyph.CLOSE, "Remove $name") }
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    AppIcon(Glyph.DOCUMENT, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(name, Modifier.weight(1f).padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                                    IconButton(onClick = { onRemoveAttachment(index) }, enabled = !state.busy) { AppIcon(Glyph.CLOSE, "Remove $name", Modifier.size(18.dp)) }
                                 }
                             }
-                            if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-                            Composer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
+                            if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
+                            ChatComposer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
                         }
                     }
                     AccountPage.SETTINGS -> Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -370,18 +324,9 @@ fun DeepSeekShell(
             }
         }
     }
-    if (attachmentTray) ModalBottomSheet(onDismissRequest = { attachmentTray = false }) {
-        Text("Add to your message", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)
-        Text("Files and images are uploaded to DeepSeek after you confirm sending.", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
-        Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            listOf("Camera" to Glyph.CAMERA, "Photo" to Glyph.PHOTO, "Document" to Glyph.DOCUMENT).forEach { (label, icon) ->
-                Surface(Modifier.weight(1f).clickable(enabled = !state.busy && !state.importing) { attachmentTray = false; onAttachment(label) },
-                    color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp)) {
-                    Column(Modifier.padding(12.dp).heightIn(min = 64.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { AppIcon(icon); Text(label, textAlign = TextAlign.Center) }
-                }
-            }
-        }
-    }
+    if (attachmentTray) AttachmentSheet(enabled = !state.busy && !state.importing, onDismiss = { attachmentTray = false },
+        onPick = { label -> attachmentTray = false; onAttachment(label) })
+    sources?.let { list -> SourcesSheet(list, onDismiss = { sources = null }, onOpen = onOpenLink) }
     state.chatFiles?.let { files ->
         ModalBottomSheet(onDismissRequest = actions::hideChatFiles) {
             Text("Files in this chat", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)
@@ -403,14 +348,14 @@ fun DeepSeekShell(
         }
     }
     renameTarget?.let { chat ->
-        AlertDialog(onDismissRequest = { renameTarget = null }, title = { Text("Rename chat") },
+        AlertDialog(onDismissRequest = { renameTarget = null }, title = { Text("Rename Chat") },
             text = { OutlinedTextField(renameTitle, { renameTitle = it.take(100) }, singleLine = true, label = { Text("Title") }, modifier = Modifier.testTag("rename-title")) },
             confirmButton = { TextButton(onClick = { renameTarget = null; onRename(chat.id, renameTitle) }, enabled = renameTitle.isNotBlank()) { Text("Save") } },
             dismissButton = { TextButton(onClick = { renameTarget = null }) { Text("Cancel") } })
     }
     deleteTarget?.let { chat ->
         AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("Delete chat?") },
-            text = { Text("Delete “${chat.title}” from DeepSeek and this device? This cannot be undone.") },
+            text = { Text("Once deleted, “${chat.title}” can't be recovered. It is deleted from DeepSeek and from this phone.") },
             confirmButton = { TextButton(onClick = { deleteTarget = null; onDelete(chat.id) }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } })
     }
@@ -503,114 +448,3 @@ private fun SkillsPage(state: AccountUiState, actions: AgentActions, modifier: M
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
-@Composable
-private fun OutlinedCircle(content: @Composable () -> Unit) {
-    Box(Modifier.size(26.dp).border(1.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape), contentAlignment = Alignment.Center) { content() }
-}
-
-@Suppress("DEPRECATION")
-@Composable
-private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean, regenerate: Boolean, onRegenerate: () -> Unit, onEdit: () -> Unit,
-    actions: AgentActions = AgentActions.None) {
-    val clipboard = LocalClipboardManager.current
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.user) Alignment.End else Alignment.Start) {
-        if (message.user) BoxWithConstraints(Modifier.fillMaxWidth()) {
-            Surface(Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * .8f), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                Text(message.text, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurface)
-            }
-        } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            val onRun: (String) -> Unit = { code -> actions.runCode(message.id, code) }
-            val runCode = onRun.takeIf { enabled }
-            // Finished code blocks open in the artifacts panel (HTML, SVG, Markdown) or in the editor (other languages).
-            val onPreview: (String, String) -> Unit = { language, code -> actions.previewCode(message.id, message.revisionOf, language, code) }
-            val onEdit: (String, String) -> Unit = { language, code -> actions.editCode(language, code) }
-            val preview = onPreview.takeIf { !working }
-            val edit = onEdit.takeIf { !working }
-            if (message.steps.isNotEmpty()) AgentTimeline(message.id, message.steps, working, runCode, preview, edit)
-            else {
-                var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
-                if (message.thinking.isNotBlank()) {
-                    Row(Modifier.testTag("thinking-${message.id}").clickable { expanded = !expanded }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (working && message.text.isEmpty()) "Thinking…" else "Thinking", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                        AppIcon(Glyph.CHEVRON, if (expanded) "Collapse thinking" else "Expand thinking", Modifier.rotate(if (expanded) 180f else 0f))
-                    }
-                    if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-                if (message.text.isNotBlank()) MarkdownText(message.text, onRunCode = runCode, onPreviewCode = preview, onEditCode = edit)
-                else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            message.codeRuns.forEach { ToolStepRow(it) }
-            message.artifacts.forEach { artifact ->
-                ArtifactCard(artifact, actions.artifactFile(artifact), onOpen = { actions.openArtifact(artifact) },
-                    onSave = { actions.saveArtifact(artifact) }, onShare = { actions.shareArtifact(artifact) },
-                    onEdit = { actions.editArtifact(artifact) }.takeIf { EditorLanguage.forFileName(artifact.fileName) != null })
-            }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }, enabled = message.text.isNotEmpty()) {
-                AppIcon(Glyph.DOCUMENT, if (message.user) "Copy user message" else "Copy assistant message")
-            }
-            if (message.user) TextButton(onClick = onEdit, enabled = enabled, modifier = Modifier.testTag("edit-${message.id}").semantics { contentDescription = "Edit message" }) { Text("Edit") }
-            if (regenerate) TextButton(onClick = onRegenerate, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Regenerate response" }) { Text("Regenerate") }
-            if (!message.user && message.text.isNotBlank()) TextButton(onClick = { actions.exportPdf(message.id) }, enabled = enabled,
-                modifier = Modifier.testTag("export-${message.id}").semantics { contentDescription = "Export as PDF" }) { Text("Export PDF") }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Boolean, Boolean) -> Unit, stop: () -> Unit, attach: () -> Unit, error: (String) -> Unit, speechInput: AccountSpeechInput?, voiceTrigger: Int, onVoiceHandled: () -> Unit,
-    onAgent: (Boolean) -> Unit = {}) {
-    var think by rememberSaveable { mutableStateOf(false) }
-    var search by rememberSaveable { mutableStateOf(false) }
-    // The chat page is composed only for a confirmed session; this stays as a second line of defence.
-    val locked = !state.signedIn
-    val pillColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    )
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp), shape = RoundedCornerShape(22.dp),
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f)),
-        color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-            BasicTextField(state.draft, draft, Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(top = 8.dp).testTag("account-composer")
-                .semantics { contentDescription = if (locked) "Log in to chat" else "Type a message" }
-                .then(if (locked) Modifier.clickable(onClickLabel = "Log in") { send(false, false) } else Modifier),
-                maxLines = 6, enabled = !state.busy && state.ready && !locked,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { inner -> Box { if (state.draft.isEmpty()) Text(if (locked) "Log in to chat" else "Type a message or hold to speak", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp); inner() } })
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.Center) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(selected = think, onClick = { think = !think }, label = { Text("Think", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
-                    FilterChip(selected = search, onClick = { search = !search }, label = { Text("Search", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
-                    FilterChip(selected = state.agent, onClick = { onAgent(!state.agent) }, label = { Text("Agent", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.testTag("agent-toggle").semantics { contentDescription = if (state.agent) "Agent mode on" else "Agent mode off" })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = attach, enabled = !state.busy && !state.importing && !locked) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
-                    key(state.conversationId) {
-                        AccountDictation(!state.busy && state.ready && !locked, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
-                            speechInput, voiceTrigger, onVoiceHandled)
-                    }
-                    IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy ||
-                        (!locked && state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
-                        val canSend = state.busy || state.draft.isNotBlank() || state.attachments.isNotEmpty()
-                        if (canSend) Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-                            AppIcon(if (state.busy) Glyph.STOP else Glyph.SEND, if (state.busy) "Stop response" else "Send message", Modifier.padding(6.dp))
-                        } else OutlinedCircle { AppIcon(Glyph.SEND, "Send message", Modifier.size(14.dp)) }
-                    }
-                }
-            }
-        }
-    }
-}
-

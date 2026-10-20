@@ -400,6 +400,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         actions = agentActions, accountActions = accountActions,
                         heldShare = sharedInput != null,
                         onUseApiKey = { key -> vm.useApiKey(key) { apiFallback = true } }, onOpenLink = ::openLink, onDismissNotice = vm::dismissNotice,
+                        onPin = vm::pin, onShareText = { text -> shareText("DeepSeek answer", text) },
                     )
                 }
                 if (wide && pane != null) {

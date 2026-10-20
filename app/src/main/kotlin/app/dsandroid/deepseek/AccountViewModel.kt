@@ -553,7 +553,8 @@ class AccountViewModel @JvmOverloads constructor(
                     final = reply
                     receivedId = reply.responseMessageId ?: receivedId
                     current = current.copy(messages = prefix + sent.copy(serverId = reply.requestMessageId) +
-                        WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf))
+                        WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf,
+                            thinkingSeconds = reply.thinkingSeconds, citations = reply.citations))
                     mutable.update { it.copy(messages = displayMessages()) }
                 }
                 val completed = final?.takeIf { it.finished && it.responseMessageId != null } ?: throw EndpointChanged()
@@ -600,14 +601,38 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun stop() { sending?.cancel() }
     private suspend fun persist() {
+        current = current.copy(updatedAt = System.currentTimeMillis())
         val next = (listOf(current) + chats.filterNot { it.id == current.id }).take(100)
         withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
         chats = next
     }
-    private fun summaries() = chats.map { AccountHistory(it.id, it.title) }
-    private fun displayMessages() = current.messages.map { AccountMessage(it.id, it.user, it.text, it.thinking, it.prompt, it.steps, it.artifacts, it.codeRuns, it.revisionOf) }
+    private fun summaries() = chats.map { chat ->
+        // The drawer searches chat content, as the official app does ("Search chat content...").
+        val content = (listOf(chat.title) + chat.messages.map { it.text }).joinToString("\n").take(SEARCH_TEXT_LIMIT).lowercase()
+        AccountHistory(chat.id, chat.title, chat.updatedAt, chat.pinned, content)
+    }
+    private fun displayMessages() = current.messages.map {
+        AccountMessage(it.id, it.user, if (it.user) it.text else CITATION.replace(it.text) { match -> "[${match.groupValues[1]}]" }, it.thinking, it.prompt,
+            it.steps, it.artifacts, it.codeRuns, it.revisionOf, it.thinkingSeconds, it.citations)
+    }
+
+    /** Pinning is local to this phone; pinned chats lead the drawer. */
+    fun pin(id: String, pinned: Boolean) {
+        if (!available() || locked()) return
+        val next = chats.map { if (it.id == id) it.copy(pinned = pinned) else it }
+        if (next == chats) return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
+                chats = next
+                if (current.id == id) current = current.copy(pinned = pinned)
+                mutable.update { it.copy(history = summaries()) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The chat could not be pinned. Try again.") }
+        }
+    }
     private fun clearUploads() { uploads.forEach { it.file.delete() }; uploads.clear() }
-    private fun emptyChat() = WebChat(UUID.randomUUID().toString(), "New Chat")
+    private fun emptyChat() = WebChat(UUID.randomUUID().toString(), "New chat")
     /** Each DeepSeek account keeps its own chats, agent files and artifact versions; the first one uses the original paths. */
     private fun historyFor(id: String) = WebHistory(File(getApplication<Application>().filesDir,
         if (id == DeepSeekSessionStore.DEFAULT_SLOT) "deepseek-web-chats.json" else "deepseek-web-chats-$id.json"))
@@ -1363,6 +1388,9 @@ class AccountViewModel @JvmOverloads constructor(
         const val QUICK_KEY_ID = "api-key"
         /** Pages that exist while signed out; everything else waits for a confirmed session. */
         val SIGNED_OUT_PAGES = setOf(AccountPage.CHAT, AccountPage.LOGIN, AccountPage.ACCOUNTS)
+        /** DeepSeek's Search replies cite pages as [citation:N]; the chat shows [N]. */
+        private val CITATION = Regex("\\[citation:(\\d{1,3})]")
+        private const val SEARCH_TEXT_LIMIT = 4000
         private const val MAX_EDITOR_BYTES = 1024 * 1024
     }
 }

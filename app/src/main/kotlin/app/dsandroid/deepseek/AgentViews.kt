@@ -52,22 +52,13 @@ fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, on
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         steps.forEachIndexed { index, step ->
             when (step) {
-                is TurnStep.Reasoning -> ReasoningRow("$messageId-$index", step.text, working && !step.complete)
+                is TurnStep.Reasoning -> ThinkingBlock("$messageId-$index", step.text, working && !step.complete,
+                    step.durationMs.takeIf { step.complete && it > 0 }?.let { it / 1000.0 })
                 is TurnStep.ToolCall -> ToolStepRow(step)
                 is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(step.text.trim(), onRunCode = onRunCode, onPreviewCode = onPreviewCode, onEditCode = onEditCode)
             }
         }
     }
-}
-
-@Composable
-private fun ReasoningRow(key: String, text: String, active: Boolean) {
-    var expanded by rememberSaveable(key) { mutableStateOf(false) }
-    Row(Modifier.clickable { expanded = !expanded }.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (active) "Thinking\u2026" else "Thought", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        AppIcon(Glyph.CHEVRON, if (expanded) "Collapse reasoning" else "Expand reasoning", Modifier.size(18.dp).rotate(if (expanded) 180f else 0f))
-    }
-    if (expanded) Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 }
 
 /** One tool call as a single compact line; tapping shows its input and result. */

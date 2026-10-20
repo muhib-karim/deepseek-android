@@ -202,7 +202,11 @@ Response settings and read-aloud options. **Ours:** collapse thinking automatica
 4. **Agent extensions:** Agent pill, tool steps, file cards, Files panel, Plugins & tools, Skills, artifacts panel and
    editor. They appear only when used or from the drawer, so the default chat matches the reference.
 5. **Not offered:** voice calls, model mode picker on the web route, server-side share links, account deletion,
-   report, WeChat / Apple binding, training switch.
+   report, WeChat / Apple binding, training switch, like / dislike (there is no feedback channel for an unofficial
+   client).
+6. **Contrast:** the accent is `#3D63F5` (white text on the official `#426EFE` is about 4.3:1) and secondary text is
+   `#6E7178` (the measured `#909398` is about 3.2:1 on white), so text keeps 4.5:1. The dark palette is ours until the
+   reference capture measures the official one.
 
 ## Comparing captures
 

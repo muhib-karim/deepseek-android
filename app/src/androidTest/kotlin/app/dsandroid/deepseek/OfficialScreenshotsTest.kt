@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import app.dsandroid.SmokeActivity
 import app.dsandroid.core.deepseek.SessionToken
+import app.dsandroid.core.deepseek.WebCitation
 import app.dsandroid.data.Appearance
 import org.junit.Assert.*
 import org.junit.Rule
@@ -57,11 +58,37 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         screenshot("populated-chat")
         compose.onNodeWithTag("thinking-a1").performClick()
         compose.onNodeWithText("Choose a clear, minimal example.").assertIsDisplayed()
+        screenshot("thinking-expanded")
+    }
+    @Test fun thinkingTimeAndSearchSources() {
+        val answer = AccountMessage("a2", false, "Kotlin 2.0 is current [1].", "Check the release notes.", thinkingSeconds = 12.4,
+            citations = listOf(WebCitation("Kotlin releases", "https://kotlinlang.org/docs/releases.html"), WebCitation("Blog", "https://blog.jetbrains.com/kotlin/")))
+        launch(AccountUiState(ready = true, signedIn = true, title = "Kotlin version", messages = listOf(AccountMessage("u2", true, "Latest Kotlin?"), answer)))
+        compose.onNodeWithText("Thought for 12 seconds").assertIsDisplayed()
+        compose.onNodeWithText("Read 2 web pages").assertIsDisplayed()
+        screenshot("search-answer")
+        compose.onNodeWithTag("search-sources").performClick()
+        compose.onNodeWithText("Kotlin releases").assertIsDisplayed()
+        compose.onNodeWithText("kotlinlang.org").assertIsDisplayed()
+        screenshot("search-sources")
+    }
+    @Test fun thinkAndSearchPillsShowTheirState() {
+        launch(AccountUiState(ready = true, signedIn = true))
+        compose.onNodeWithText("Search", substring = false).assertIsNotSelected().performClick().assertIsSelected()
+        compose.onNodeWithText("Think", substring = false).performClick().assertIsSelected()
+        screenshot("think-search-on")
+    }
+    @Test fun composerWithKeyboard() {
+        launch(AccountUiState(ready = true, signedIn = true, draft = "A question"))
+        compose.onNodeWithTag("account-composer").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Send message").assertIsDisplayed()
+        screenshot("keyboard")
     }
     @Test fun drawer() {
         launch(AccountUiState(ready = true, signedIn = true, history = history))
         compose.onNodeWithContentDescription("Open navigation").performClick()
-        compose.onNodeWithText("Search chats").assertIsDisplayed()
+        compose.onNodeWithText("Search chat content...").assertIsDisplayed()
         compose.onNodeWithText("Weekend ideas").assertIsDisplayed()
         screenshot("drawer")
         compose.onNodeWithTag("history-search").performTextInput("Kotlin")
@@ -116,6 +143,21 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         launch(AccountUiState(ready = true, signedIn = true))
         compose.onNodeWithContentDescription("Add attachment").performClick()
         listOf("Camera", "Photo", "Document").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        screenshot("attachment-tray")
+    }
+    @Test fun drawerGroupsChatsByDateAndHidesActionsBehindTheMenu() {
+        val now = System.currentTimeMillis()
+        launch(AccountUiState(ready = true, signedIn = true, history = listOf(
+            AccountHistory("p", "Pinned plan", now - 40L * 86_400_000, pinned = true),
+            AccountHistory("t", "Today's chat", now - 60_000),
+            AccountHistory("o", "An older chat", now - 3L * 86_400_000))))
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        listOf("Pinned", "Today", "7 Days").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        compose.onNodeWithContentDescription("Rename Today's chat").assertDoesNotExist()
+        compose.onNodeWithContentDescription("More options for Today's chat").performClick()
+        compose.onNodeWithContentDescription("Rename Today's chat").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Pin Today's chat").assertIsDisplayed()
+        screenshot("drawer-menu")
     }
     @Test fun doubledFontKeepsLoginAndComposerReachable() {
         launch(AccountUiState(ready = true), fontScale = 2f)
@@ -127,8 +169,13 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     }
     @Test fun doubledFontKeepsTheSignedInComposerReachable() {
         launch(AccountUiState(ready = true, signedIn = true), fontScale = 2f)
-        compose.onNodeWithContentDescription("Send message").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Dictate message").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
+    }
+    @Test fun doubledFontShowsSendOnceThereIsText() {
+        launch(AccountUiState(ready = true, signedIn = true, draft = "Hello"), fontScale = 2f)
+        compose.onNodeWithContentDescription("Send message").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithContentDescription("Dictate message").assertDoesNotExist()
     }
     private fun screenshot(name: String) {
         // Exercise real encrypted storage with a synthetic marker; never seed real account data.
