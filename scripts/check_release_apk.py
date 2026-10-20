@@ -3,7 +3,7 @@
 
 Reads `aapt2 dump badging` and `apksigner verify --print-certs` from the newest SDK build-tools and requires:
 package app.dsandroid, the expected versionName/versionCode (when given), minSdk 26 and targetSdk 35, exactly the
-INTERNET and RECORD_AUDIO permissions, arm64-v8a and x86_64 native code, no debuggable flag, an intact v2+ signature
+INTERNET, RECORD_AUDIO and photo-access permissions, arm64-v8a and x86_64 native code, no debuggable flag, an intact v2+ signature
 and, when --cert is given, that signer certificate SHA-256. Writes a JSON report; exits 1 on any mismatch.
 
 Usage: check_release_apk.py APK [--version-name 1.0.0 --version-code 10] [--cert HEX] [--json report.json]
@@ -16,7 +16,8 @@ import re
 import subprocess
 import sys
 
-ALLOWED_PERMISSIONS = {"android.permission.INTERNET", "android.permission.RECORD_AUDIO"}
+ALLOWED_PERMISSIONS = {"android.permission.INTERNET", "android.permission.RECORD_AUDIO", "android.permission.READ_MEDIA_IMAGES",
+                       "android.permission.READ_EXTERNAL_STORAGE"}
 REQUIRED_ABIS = {"arm64-v8a", "x86_64"}
 
 
@@ -64,7 +65,7 @@ def main(argv):
     if not target_sdk or target_sdk.group(1) != "35":
         problems.append("targetSdk is not 35")
     if permissions != ALLOWED_PERMISSIONS:
-        problems.append(f"permissions differ from INTERNET + RECORD_AUDIO: {sorted(permissions ^ ALLOWED_PERMISSIONS)}")
+        problems.append(f"permissions differ from INTERNET + RECORD_AUDIO + photo access: {sorted(permissions ^ ALLOWED_PERMISSIONS)}")
     if not REQUIRED_ABIS <= native:
         problems.append(f"native code lacks {sorted(REQUIRED_ABIS - native)}")
     if debuggable:

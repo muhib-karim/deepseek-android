@@ -4,7 +4,11 @@
     <!-- Internet-only install permissions: network auto-retry degrades gracefully without this. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- No storage, camera, shell or install permissions. Microphone is requested at first use. -->
+    <!-- Runtime only, asked when the person taps Recent photos in the attach panel (official recent-photos strip); the
+         Photo tile's system picker needs no permission. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- No camera, write, shell or install permissions. Microphone is requested at first use. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove" />
     <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />

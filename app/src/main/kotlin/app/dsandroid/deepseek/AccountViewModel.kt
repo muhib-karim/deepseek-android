@@ -864,6 +864,14 @@ class AccountViewModel @JvmOverloads constructor(
         }
     }
 
+    /** Create image: the question and the reply of one turn, nothing else of the chat. */
+    fun shareTurn(replyId: String): Pair<String, String>? {
+        val index = current.messages.indexOfFirst { it.id == replyId && !it.user && it.text.isNotBlank() }
+        if (index < 0) return null
+        val question = current.messages.take(index).lastOrNull { it.user }
+        return (question?.text?.ifBlank { question.files.joinToString { it.name } }.orEmpty()) to current.messages[index].text
+    }
+
     /** The open chat as Markdown, for Share chat. AI replies are marked as such. */
     fun chatMarkdown(): String = buildString {
         appendLine("# ${current.title}")

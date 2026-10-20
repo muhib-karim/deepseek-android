@@ -23,6 +23,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -140,6 +143,9 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     var viewing by remember { mutableStateOf<Artifact?>(null) }
     var pendingSave by remember { mutableStateOf<Artifact?>(null) }
+    /** "Saved to Downloads" with Open (official apps confirm a download; v1.0.0 saved silently). */
+    val snackbar = remember { SnackbarHostState() }
+    var shareCard by remember { mutableStateOf<File?>(null) }
     // Save as (and Download before Android 10): the system file picker with the file's own name and type, no storage permission.
     val saveDocument = rememberLauncherForActivityResult(CreateTextDocument()) { target ->
         val artifact = pendingSave
@@ -148,7 +154,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         if (target != null && artifact != null && file != null) scope.launch {
             try {
                 withContext(Dispatchers.IO) { ArtifactActions.copyTo(context, file, target) }
-                Toast.makeText(context, "Saved ${artifact.fileName}", Toast.LENGTH_SHORT).show()
+                snackbar.showSnackbar("Saved ${artifact.fileName}")
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { vm.notice("The file could not be saved.") }
         }
@@ -193,9 +199,12 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                 val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")
                 scope.launch {
                     try {
-                        if (withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }) {
-                            Toast.makeText(context, "Saved to Downloads/DeepSeek", Toast.LENGTH_SHORT).show()
-                        } else saveArtifactAs(artifact)
+                        val saved = withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }
+                        if (saved == null) saveArtifactAs(artifact)
+                        else if (snackbar.showSnackbar("Saved to Downloads", actionLabel = "Open", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+                            try { ArtifactActions.openSaved(context, saved, artifact.mimeType, artifact.fileName) }
+                            catch (_: Exception) { vm.notice("No app on this phone can open ${artifact.fileName}.") }
+                        }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { vm.notice("The file could not be saved.") }
                 }
@@ -409,6 +418,16 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         },
                         onLogout = { browser.stopForLogout(); vm.logout() }, onAttachment = ::pick, onRemoveAttachment = vm::removeAttachment,
                         onSend = ::requestSend,
+                        onCreateImage = { id ->
+                            vm.shareTurn(id)?.let { (question, answer) ->
+                                scope.launch {
+                                    try { shareCard = withContext(Dispatchers.Default) { ShareCard.render(context, question, answer) } }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (_: Exception) { vm.notice("The image could not be created.") }
+                                }
+                            }
+                        },
+                        onAddPhotos = vm::importShared,
                         onRetry = { vm.retryRequest()?.let { (think, search) -> requestSend(think, search) } },
                         onFeedback = vm::setFeedback, onHistoryRefresh = { vm.refreshHistory() },
                         loginContent = {
@@ -443,6 +462,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             }
             // Blocks touches to the chat underneath the full-screen pane.
             if (!wide && pane != null) Box(Modifier.fillMaxSize().pointerInput(Unit) {}) { workbenchPane(pane, state) }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = 104.dp).testTag("snackbar"))
         }
         if (browserGuide) AlertDialog(
             onDismissRequest = { browserGuide = false },
@@ -494,6 +514,25 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                 text = { Text("Your browser sent a DeepSeek session to this app. Continue only if you just used the helper bookmark.") },
                 confirmButton = { TextButton(onClick = { browserToken = null; useSession(token) }, modifier = Modifier.testTag("confirm-browser-session")) { Text("Sign in") } },
                 dismissButton = { TextButton(onClick = { browserToken = null; BrowserSessionInbox.clearStarted(context) }) { Text("Cancel") } },
+            )
+        }
+        shareCard?.let { file ->
+            val image = remember(file) { android.graphics.BitmapFactory.decodeFile(file.path)?.asImageBitmap() }
+            AlertDialog(
+                onDismissRequest = { shareCard = null },
+                title = { Text("Share image") },
+                text = {
+                    Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()).testTag("share-card-preview")) {
+                        image?.let { Image(it, "Image of this reply", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        shareCard = null
+                        try { ShareCard.share(context, file) } catch (_: Exception) { vm.notice("No app is available to share this image.") }
+                    }, modifier = Modifier.testTag("share-card-share")) { Text("Share") }
+                },
+                dismissButton = { TextButton(onClick = { shareCard = null }) { Text("Close") } },
             )
         }
         viewing?.let { artifact ->

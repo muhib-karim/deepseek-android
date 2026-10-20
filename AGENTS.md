@@ -16,7 +16,8 @@
 - Tests first; CI green before any merge or tag. Never force-push.
 - Run a secret scan (gitleaks) before every push. No secrets, tokens, signing keys, `local.properties` or machine paths in the repo.
 - Keep changes small and committed: one working step = one commit, so a killed session loses one step at most.
-- Preserve minSdk 26 and targetSdk 35. Install permission: INTERNET only; microphone is runtime only.
+- Preserve minSdk 26 and targetSdk 35. Install permission: INTERNET only; microphone and photo access (the attach panel's
+  recent-photos strip, v1.1.0) are runtime only and asked at the moment of use.
 - Anything that leaves the app or changes the device needs a per-action confirmation (see SECURITY.md).
 - Licence: MIT. Builds on deepseek-harness (MIT) with attribution. GPL/AGPL projects are ideas only; never copy their code. Original code and assets only.
 - No automatic account switching.

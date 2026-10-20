@@ -1,6 +1,7 @@
 package app.dsandroid.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -11,6 +12,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.dsandroid.data.Appearance
 import androidx.compose.ui.graphics.Color
@@ -22,17 +24,38 @@ import androidx.compose.ui.graphics.Color
  */
 val AccentBlue = Color(0xFF3D63F5)
 
+/**
+ * Every Material slot is set: dialogs, sheets, menus, switches and snackbars read the surface-container, secondary and
+ * inverse colours, whose Material defaults are lavender. Dialogs are white in light mode and dark grey in dark mode, as the
+ * official app draws them; no tonal tint is mixed in.
+ */
 internal val LightChatColors = lightColorScheme(
     primary = AccentBlue, onPrimary = Color.White, primaryContainer = Color(0xFFE8EEFF), onPrimaryContainer = Color(0xFF3154C7),
+    secondary = AccentBlue, onSecondary = Color.White, secondaryContainer = Color(0xFFE8EEFF), onSecondaryContainer = Color(0xFF3154C7),
+    tertiary = AccentBlue, onTertiary = Color.White, tertiaryContainer = Color(0xFFE8EEFF), onTertiaryContainer = Color(0xFF3154C7),
     background = Color.White, onBackground = Color(0xFF1A1A1A), surface = Color.White, onSurface = Color(0xFF1A1A1A),
-    surfaceVariant = Color(0xFFF5F6F8), onSurfaceVariant = Color(0xFF6E7178), outlineVariant = Color(0xFFE9EAED),
+    surfaceVariant = Color(0xFFF5F6F8), onSurfaceVariant = Color(0xFF6E7178), surfaceTint = Color.White,
+    outline = Color(0xFF8E9198), outlineVariant = Color(0xFFE9EAED),
+    inverseSurface = Color(0xFF2B2C30), inverseOnSurface = Color(0xFFF2F2F4), inversePrimary = Color(0xFF8FA8FF),
+    surfaceBright = Color.White, surfaceDim = Color(0xFFE9EAED), surfaceContainerLowest = Color.White, surfaceContainerLow = Color.White,
+    surfaceContainer = Color.White, surfaceContainerHigh = Color.White, surfaceContainerHighest = Color(0xFFF0F1F3),
 )
 
 internal val DarkChatColors = darkColorScheme(
     primary = Color(0xFF8FA8FF), onPrimary = Color(0xFF0E1F57), primaryContainer = Color(0xFF26304A), onPrimaryContainer = Color(0xFFD6E0FF),
+    secondary = Color(0xFF8FA8FF), onSecondary = Color(0xFF0E1F57), secondaryContainer = Color(0xFF26304A), onSecondaryContainer = Color(0xFFD6E0FF),
+    tertiary = Color(0xFF8FA8FF), onTertiary = Color(0xFF0E1F57), tertiaryContainer = Color(0xFF26304A), onTertiaryContainer = Color(0xFFD6E0FF),
     background = Color(0xFF161618), onBackground = Color(0xFFECECEF), surface = Color(0xFF161618), onSurface = Color(0xFFECECEF),
-    surfaceVariant = Color(0xFF232428), onSurfaceVariant = Color(0xFFA1A3AA), outlineVariant = Color(0xFF34363C),
+    surfaceVariant = Color(0xFF232428), onSurfaceVariant = Color(0xFFA1A3AA), surfaceTint = Color(0xFF161618),
+    outline = Color(0xFF7C7F87), outlineVariant = Color(0xFF34363C),
+    inverseSurface = Color(0xFFE6E6E9), inverseOnSurface = Color(0xFF1A1A1C), inversePrimary = AccentBlue,
+    surfaceBright = Color(0xFF2E3034), surfaceDim = Color(0xFF161618), surfaceContainerLowest = Color(0xFF111113),
+    surfaceContainerLow = Color(0xFF1E1F23), surfaceContainer = Color(0xFF232428), surfaceContainerHigh = Color(0xFF26272B),
+    surfaceContainerHighest = Color(0xFF2E3034),
 )
+
+/** Dialogs and sheets use the large shape: 20 dp corners, as the official app's. */
+internal val OfficialShapes = Shapes(extraLarge = RoundedCornerShape(20.dp))
 
 /** Tokens the official layout uses that Material's scheme has no slot for. */
 @Immutable
@@ -81,6 +104,6 @@ fun ChatTheme(appearance: Appearance = Appearance.SYSTEM, fontScale: Float = 1f,
     val density = LocalDensity.current
     CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * fontScale.coerceIn(0.85f, 1.3f)),
         LocalOfficialColors provides if (dark) DarkOfficialColors else LightOfficialColors) {
-        MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography, content = content)
+        MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography, shapes = OfficialShapes, content = content)
     }
 }

@@ -50,7 +50,7 @@ internal fun HistoryDrawer(
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp), color = muted)
+                AppIcon(Glyph.MAGNIFY, modifier = Modifier.size(16.dp), color = muted)
                 BasicTextField(query, onQuery, Modifier.weight(1f).testTag("history-search"), singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),

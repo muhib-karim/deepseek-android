@@ -53,6 +53,7 @@ import app.dsandroid.ui.DarkOfficialColors
 import app.dsandroid.ui.LightChatColors
 import app.dsandroid.ui.LightOfficialColors
 import app.dsandroid.ui.LocalOfficialColors
+import app.dsandroid.ui.OfficialShapes
 import app.dsandroid.ui.OfficialTypography
 import app.dsandroid.ui.scaled
 import app.dsandroid.ui.Glyph
@@ -202,7 +203,7 @@ fun AccountTheme(appearance: Appearance, textScale: Float = 1f, content: @Compos
     val dark = appearance == Appearance.DARK || (appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     CompositionLocalProvider(LocalOfficialColors provides if (dark) DarkOfficialColors else LightOfficialColors) {
         MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography.scaled(textScale.coerceIn(0.85f, 1.3f)),
-            content = content)
+            shapes = OfficialShapes, content = content)
     }
 }
 
@@ -237,6 +238,7 @@ fun DeepSeekShell(
     onAppLanguage: (String) -> Unit = {}, appLanguage: String = "", onDeleteAllChats: () -> Unit = {},
     onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {}, onTerms: (Boolean) -> Unit = {},
     onRetry: () -> Unit = {}, onFeedback: (String, String?) -> Unit = { _, _ -> }, onHistoryRefresh: () -> Unit = {},
+    onCreateImage: (String) -> Unit = {}, onAddPhotos: (List<android.net.Uri>) -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -258,6 +260,7 @@ fun DeepSeekShell(
     var editText by remember { mutableStateOf("") }
     var sources by remember { mutableStateOf<List<WebCitation>?>(null) }
     var shareSheet by remember { mutableStateOf(false) }
+    var shareReply by remember { mutableStateOf<AccountMessage?>(null) }
     val settingsActions = object : SettingsActions {
         override fun theme(value: Appearance) = onTheme(value)
         override fun textScale(value: Float) = onTextScale(value)
@@ -271,6 +274,8 @@ fun DeepSeekShell(
         override fun logout() = onLogout()
     }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
+    // The attach panel is inline under the composer; Back closes it first.
+    BackHandler(!drawer.isOpen && attachmentTray && state.page == AccountPage.CHAT) { attachmentTray = false }
     // Opening the drawer reads DeepSeek's chat list again (chats from other devices); the view model limits how often.
     LaunchedEffect(drawer.isOpen) { if (drawer.isOpen) onHistoryRefresh() }
     BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(parentPage(state.page, state.signedIn)) }
@@ -322,7 +327,8 @@ fun DeepSeekShell(
                             else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
                             else MessageList(state, Modifier.weight(1f).fillMaxWidth(), onRegenerate = onRegenerate,
                                 onEdit = { message -> editTarget = message; editText = message.prompt ?: message.text },
-                                onShareText = onShareText, onSources = { sources = it }, actions = actions, onFeedback = onFeedback)
+                                onShareText = { onShareText(shareableText(it)) }, onSources = { sources = it }, actions = actions, onFeedback = onFeedback,
+                                onOpenLink = onOpenLink, onShareReply = { shareReply = it })
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -332,7 +338,11 @@ fun DeepSeekShell(
                                 }
                             }
                             if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-                            ChatComposer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
+                            ChatComposer(state, onDraft, { think, search -> attachmentTray = false; onSend(think, search) }, onStop,
+                                { attachmentTray = !attachmentTray }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
+                            if (attachmentTray) AttachmentPanel(enabled = !state.busy && !state.importing,
+                                onPick = { label -> attachmentTray = false; onAttachment(label) },
+                                onAddPhotos = { uris -> attachmentTray = false; onAddPhotos(uris) })
                         }
                     }
                     AccountPage.SETTINGS -> SettingsPage(state, settingsActions, appLanguage, onNavigate, Modifier.weight(1f))
@@ -363,11 +373,13 @@ fun DeepSeekShell(
         }
     }
     }
-    if (attachmentTray) AttachmentSheet(enabled = !state.busy && !state.importing, onDismiss = { attachmentTray = false },
-        onPick = { label -> attachmentTray = false; onAttachment(label) })
     sources?.let { list -> SourcesSheet(list, onDismiss = { sources = null }, onOpen = onOpenLink) }
     if (shareSheet) ShareChatSheet(onDismiss = { shareSheet = false }, onShareText = { shareSheet = false; onShareChat() },
         onExportPdf = { shareSheet = false; onExportChatPdf() })
+    shareReply?.let { reply ->
+        ReplyShareSheet(onDismiss = { shareReply = null }, onText = { shareReply = null; onShareText(shareableText(reply.text)) },
+            onImage = { shareReply = null; onCreateImage(reply.id) }, onPdf = { shareReply = null; actions.exportPdf(reply.id) })
+    }
     state.chatFiles?.let { files ->
         ModalBottomSheet(onDismissRequest = actions::hideChatFiles) {
             Text("Files in this chat", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)

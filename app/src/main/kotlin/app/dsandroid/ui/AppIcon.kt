@@ -12,13 +12,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 enum class Glyph { MENU, PLUS, SEND, STOP, THINK, SEARCH, CAMERA, PHOTO, DOCUMENT, CLOSE, CHEVRON, TOOL, CHECK, SHIELD, ERROR, MIC, MORE, MUTE,
-    COPY, REGENERATE, SHARE, NEW_CHAT, GEAR, PUZZLE, FOLDER, EDIT, BACK, PIN, TRASH, EXPORT }
+    COPY, REGENERATE, SHARE, NEW_CHAT, GEAR, PUZZLE, FOLDER, EDIT, BACK, PIN, TRASH, EXPORT, MAGNIFY, VOICE, LIKE, DISLIKE }
 
 /** Original line icons; no external icon pack or brand artwork. */
 @Composable
@@ -44,8 +45,25 @@ fun AppIcon(glyph: Glyph, description: String? = null, modifier: Modifier = Modi
                     line(3f, 12f, 21f, 12f)
                 }
                 Glyph.THINK -> {
-                    drawCircle(color, 7f, Offset(12f, 9f), style = stroke)
-                    line(9f, 18f, 15f, 18f); line(10f, 21f, 14f, 21f); line(12f, 10f, 12f, 15f)
+                    // Two crossed orbits around a nucleus (an atom-like mark of our own).
+                    drawCircle(color, 1.7f, Offset(12f, 12f))
+                    rotate(45f, Offset(12f, 12f)) { drawOval(color, Offset(2.5f, 8.2f), Size(19f, 7.6f), style = stroke) }
+                    rotate(-45f, Offset(12f, 12f)) { drawOval(color, Offset(2.5f, 8.2f), Size(19f, 7.6f), style = stroke) }
+                }
+                Glyph.MAGNIFY -> { drawCircle(color, 6.5f, Offset(10.5f, 10.5f), style = stroke); line(15.3f, 15.3f, 20.5f, 20.5f) }
+                Glyph.VOICE -> {
+                    // A sound wave: a dot and two arcs spreading to the right.
+                    drawCircle(color, 1.6f, Offset(7.5f, 12f))
+                    drawArc(color, -50f, 100f, false, Offset(5.5f, 6.5f), Size(11f, 11f), style = stroke)
+                    drawArc(color, -50f, 100f, false, Offset(2.5f, 2.5f), Size(19f, 19f), style = stroke)
+                }
+                Glyph.LIKE, Glyph.DISLIKE -> scale(1f, if (glyph == Glyph.LIKE) 1f else -1f, Offset(12f, 12f)) {
+                    drawRoundRect(color, Offset(3f, 10f), Size(4f, 10f), CornerRadius(1f), style = stroke)
+                    val hand = Path().apply {
+                        moveTo(7f, 10.5f); lineTo(10.6f, 3.8f); quadraticTo(13.6f, 3.4f, 13.2f, 6.8f); lineTo(12.6f, 9.6f)
+                        lineTo(18.4f, 9.6f); quadraticTo(21f, 9.9f, 20.4f, 12.6f); lineTo(18.7f, 18.4f); quadraticTo(18.2f, 20f, 16.6f, 20f); lineTo(7f, 20f)
+                    }
+                    drawPath(hand, color, style = stroke)
                 }
                 Glyph.CAMERA -> {
                     drawRoundRect(color, Offset(3f, 6f), Size(18f, 14f), CornerRadius(3f), style = stroke)
