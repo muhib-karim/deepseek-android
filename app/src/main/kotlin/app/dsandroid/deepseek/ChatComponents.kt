@@ -166,7 +166,8 @@ private fun MessageItem(message: AccountMessage, working: Boolean, enabled: Bool
         message.artifacts.forEach { artifact ->
             ArtifactCard(artifact, actions.artifactFile(artifact), onOpen = { actions.openArtifact(artifact) },
                 onSave = { actions.saveArtifact(artifact) }, onShare = { actions.shareArtifact(artifact) },
-                onEdit = { actions.editArtifact(artifact) }.takeIf { EditorLanguage.forFileName(artifact.fileName) != null })
+                onEdit = { actions.editArtifact(artifact) }.takeIf { EditorLanguage.forFileName(artifact.fileName) != null },
+                onSaveAs = { actions.saveArtifactAs(artifact) })
         }
         if (!working && message.text.isNotBlank()) Row(Modifier.offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
             val muted = MaterialTheme.colorScheme.onSurfaceVariant

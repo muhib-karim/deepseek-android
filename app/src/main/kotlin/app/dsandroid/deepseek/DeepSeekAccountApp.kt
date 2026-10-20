@@ -135,7 +135,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     var viewing by remember { mutableStateOf<Artifact?>(null) }
     var pendingSave by remember { mutableStateOf<Artifact?>(null) }
-    val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { target ->
+    // Save as (and Download before Android 10): the system file picker with the file's own name and type, no storage permission.
+    val saveDocument = rememberLauncherForActivityResult(CreateTextDocument()) { target ->
         val artifact = pendingSave
         pendingSave = null
         val file = artifact?.let(vm::artifactFile)
@@ -189,13 +190,16 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                     try {
                         if (withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }) {
                             Toast.makeText(context, "Saved to Downloads/DeepSeek", Toast.LENGTH_SHORT).show()
-                        } else {
-                            pendingSave = artifact
-                            saveDocument.launch(artifact.fileName)
-                        }
+                        } else saveArtifactAs(artifact)
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { vm.notice("The file could not be saved.") }
                 }
+            }
+            override fun saveArtifactAs(artifact: Artifact) {
+                if (vm.artifactFile(artifact) == null) return vm.notice("This file is no longer available.")
+                pendingSave = artifact
+                try { saveDocument.launch(CreateTextDocument.Request(artifact.fileName, artifact.mimeType)) }
+                catch (_: Exception) { pendingSave = null; vm.notice("No file picker is available.") }
             }
             override fun shareArtifact(artifact: Artifact) {
                 val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")

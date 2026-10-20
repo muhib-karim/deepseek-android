@@ -211,9 +211,13 @@ private fun size(bytes: Long) = when {
     else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
 }
 
-/** A generated file: preview (PDF first page, image thumbnail or text), then Open, Edit (text files), Save and Share. */
+/**
+ * A generated file: preview (PDF first page, image thumbnail or text), then Open, Edit (text files), Download (to
+ * Downloads/DeepSeek, or the system file picker before Android 10), Save as (the system file picker) and Share.
+ */
 @Composable
-fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit, onEdit: (() -> Unit)? = null) {
+fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit, onEdit: (() -> Unit)? = null,
+    onSaveAs: (() -> Unit)? = null) {
     val previewKey = file?.lastModified()
     var preview by remember(artifact.path, previewKey) { mutableStateOf<CardPreview?>(null) }
     LaunchedEffect(artifact.path, previewKey) {
@@ -247,10 +251,12 @@ fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: ()
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f), thickness = 0.5.dp)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            // Scrolls sideways on narrow screens or large text, so every action stays reachable.
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
                 TextButton(onClick = onOpen, modifier = Modifier.semantics { contentDescription = "Open ${artifact.fileName}" }) { Text("Open") }
                 if (onEdit != null) TextButton(onClick = onEdit, modifier = Modifier.semantics { contentDescription = "Edit ${artifact.fileName}" }) { Text("Edit") }
-                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Save") }
+                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Download") }
+                if (onSaveAs != null) TextButton(onClick = onSaveAs, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} as" }) { Text("Save as") }
                 TextButton(onClick = onShare, modifier = Modifier.semantics { contentDescription = "Share ${artifact.fileName}" }) { Text("Share") }
             }
         }

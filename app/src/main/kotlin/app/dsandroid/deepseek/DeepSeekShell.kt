@@ -92,6 +92,7 @@ interface AgentActions {
     fun openArtifact(artifact: Artifact) {}
     fun saveArtifact(artifact: Artifact) {}
     fun shareArtifact(artifact: Artifact) {}
+    fun saveArtifactAs(artifact: Artifact) {}
     fun artifactFile(artifact: Artifact): File? = null
     fun answerTool(allow: Boolean) {}
     fun installSkillFromUrl(url: String) {}
