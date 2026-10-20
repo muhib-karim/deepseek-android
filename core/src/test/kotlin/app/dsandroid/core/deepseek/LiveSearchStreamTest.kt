@@ -64,7 +64,7 @@ class LiveSearchStreamTest {
     @Test fun titleAndSessionTimeAreReadEvenAfterTheReplyFinished() {
         val reply = replay("think_search.sse")
         assertEquals("NASA spacewalk headline", reply.title)
-        assertEquals(1_792_530_214_874L, reply.sessionUpdatedAt)
+        assertEquals(1_792_530_214_875L, reply.sessionUpdatedAt)
     }
 
     @Test fun searchOnlyCitationsKeepTheResultNumbersTheServiceGave() {

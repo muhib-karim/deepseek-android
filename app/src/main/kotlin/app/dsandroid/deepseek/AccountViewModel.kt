@@ -570,7 +570,7 @@ class AccountViewModel @JvmOverloads constructor(
                 val remoteId = current.sessionId ?: client.createSession(credentials).also { current = current.copy(sessionId = it) }
                 val refs = user.refFileIds + files.map { file ->
                     val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
-                    client.uploadFile(credentials, file.file, file.name, mime)
+                    client.uploadFile(credentials, file.file, file.name, mime, powSolver ?: solve).id
                 }
                 val sent = user.copy(refFileIds = refs)
                 current = current.copy(messages = prefix + sent + WebMessage(replyId, false, "", revisionOf = user.revisionOf))
@@ -842,7 +842,7 @@ class AccountViewModel @JvmOverloads constructor(
                 val remoteId = current.sessionId ?: client.createSession(credentials).also { current = current.copy(sessionId = it) }
                 val refs = user.refFileIds + files.map { file ->
                     val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
-                    client.uploadFile(credentials, file.file, file.name, mime)
+                    client.uploadFile(credentials, file.file, file.name, mime, powSolver ?: solve).id
                 }
                 sent = user.copy(refFileIds = refs)
                 publish()

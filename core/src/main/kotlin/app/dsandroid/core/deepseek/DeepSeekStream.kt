@@ -113,7 +113,7 @@ class DeepSeekStream {
         if (!finished) checkCodes(json)
         when (name) {
             "update_session" -> (json["updated_at"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
-                ?.takeIf { it > 0 && it < 1e11 }?.let { sessionUpdatedAt = (it * 1000).toLong() }
+                ?.takeIf { it > 0 && it < 1e11 }?.let { sessionUpdatedAt = Math.round(it * 1000) }
             "title" -> (json["content"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
                 ?.takeIf { it.isNotEmpty() }?.let { title = it.take(100) }
         }
