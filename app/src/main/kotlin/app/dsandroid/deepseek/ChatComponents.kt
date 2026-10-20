@@ -46,7 +46,8 @@ import kotlin.math.roundToInt
 @Composable
 internal fun ChatTopBar(state: AccountUiState, onMenu: () -> Unit, onNew: () -> Unit, onShare: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp)) {
-        IconButton(onClick = onMenu, modifier = Modifier.align(Alignment.CenterStart)) { AppIcon(Glyph.MENU, "Open navigation", Modifier.size(24.dp)) }
+        // 48 dp buttons: Material's 40 dp icon button only reserves the extra space outside its semantics bounds.
+        IconButton(onClick = onMenu, modifier = Modifier.align(Alignment.CenterStart).size(48.dp)) { AppIcon(Glyph.MENU, "Open navigation", Modifier.size(24.dp)) }
         Column(Modifier.align(Alignment.Center).padding(horizontal = if (onShare != null) 104.dp else 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(state.title.ifBlank { "New chat" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // With several accounts, the one in use is always visible; it changes only from Settings > Accounts.
@@ -56,8 +57,8 @@ internal fun ChatTopBar(state: AccountUiState, onMenu: () -> Unit, onNew: () -> 
             }
         }
         Row(Modifier.align(Alignment.CenterEnd)) {
-            if (onShare != null) IconButton(onClick = onShare, enabled = !state.busy) { AppIcon(Glyph.SHARE, "Share chat", Modifier.size(22.dp)) }
-            IconButton(onClick = onNew, enabled = !state.busy) { AppIcon(Glyph.NEW_CHAT, "New Chat", Modifier.size(24.dp)) }
+            if (onShare != null) IconButton(onClick = onShare, enabled = !state.busy, modifier = Modifier.size(48.dp)) { AppIcon(Glyph.SHARE, "Share chat", Modifier.size(22.dp)) }
+            IconButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.size(48.dp)) { AppIcon(Glyph.NEW_CHAT, "New Chat", Modifier.size(24.dp)) }
         }
     }
 }
