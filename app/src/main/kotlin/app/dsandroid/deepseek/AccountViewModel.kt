@@ -529,9 +529,12 @@ class AccountViewModel @JvmOverloads constructor(
                 if (removed.isNotEmpty()) withContext(Dispatchers.IO) {
                     removed.forEach { File(agentWorkspace.root, chatDir(it.id)).deleteRecursively(); workbench.deleteChat(it.id) }
                 }
+                // The open chat takes only what the list owns (title, pin, DeepSeek's time); its messages and parent stay as
+                // loaded, unless DeepSeek no longer has it (deleted on another device), which makes it read-only.
                 chats.firstOrNull { it.id == current.id }?.let { listed ->
-                    if (!state.value.busy) current = current.copy(title = listed.title, pinned = listed.pinned, sessionId = listed.sessionId,
-                        parentId = listed.parentId, blocked = listed.blocked, remoteUpdatedAt = listed.remoteUpdatedAt)
+                    if (!state.value.busy) current = if (listed.sessionId == null && current.sessionId != null)
+                        current.copy(sessionId = null, parentId = null, blocked = true, pinned = false)
+                    else current.copy(title = listed.title, pinned = listed.pinned, remoteUpdatedAt = listed.remoteUpdatedAt)
                 }
                 mutable.update { it.copy(history = summaries(), title = current.title, requiresNewChat = current.blocked) }
             } catch (cancelled: CancellationException) { throw cancelled }
