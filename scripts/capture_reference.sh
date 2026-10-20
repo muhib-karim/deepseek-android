@@ -9,11 +9,16 @@ if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
 fi
 APKS="${REFERENCE_APK_DIR:?verified APKs are staged by fetch_verify_reference.sh}"
 OUT=reference-output
-mkdir -p "$OUT/raw" "$OUT/device"
+mkdir -p "$OUT/raw" "$OUT/device/diagnostics"
 
 adb wait-for-device
 adb shell getprop ro.build.version.sdk > "$OUT/device/sdk.txt"
 adb shell getprop ro.product.cpu.abilist > "$OUT/device/abilist.txt"
+# ARM code runs through the image's native bridge (binary translation); record which one.
+{
+  echo "native_bridge=$(adb shell getprop ro.dalvik.vm.native.bridge | tr -d '\r')"
+  echo "native_bridge_exec=$(adb shell getprop ro.enable.native.bridge.exec | tr -d '\r')"
+} > "$OUT/device/native-bridge.txt"
 adb shell wm size 1080x2200
 adb shell wm density 440
 adb shell settings put system font_scale 1.0
@@ -21,6 +26,7 @@ adb shell settings put secure show_ime_with_hard_keyboard 1
 {
   echo "sdk=$(cat "$OUT/device/sdk.txt")"
   echo "abilist=$(cat "$OUT/device/abilist.txt")"
+  echo "reference_abi=${REFERENCE_ABI:-arm64-v8a}"
   echo "viewport=1080x2200@440dpi font_scale=1.0"
 } > "$OUT/device/settings.txt"
 
@@ -29,10 +35,13 @@ if ! adb install-multiple -r -g "$APKS"/*.apk > "$OUT/device/install.txt" 2>&1; 
   echo 'The official APK could not be installed on this emulator (see device/install.txt and device/abilist.txt).' >&2
   exit 1
 fi
-adb shell dumpsys package com.deepseek.chat | grep -E 'versionCode|versionName|primaryCpuAbi' > "$OUT/device/package.txt" || true
+adb shell dumpsys package com.deepseek.chat | grep -E 'versionCode|versionName|primaryCpuAbi|secondaryCpuAbi' > "$OUT/device/package.txt" || true
+adb logcat -c || true
 
 version="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%s (%s)" % (d["version_name"], d["version_code"]))' "$OUT/source/verification.json")"
-python3 -I e2e/reference/driver.py --out "$OUT/raw" --version "$version"
+python3 -I e2e/reference/driver.py --out "$OUT/raw" --version "$version" --diagnostics "$OUT/device/diagnostics"
 status=$?
+# Text only, for the verification artifact: what the app logged during the run (a fresh emulator with no account).
+adb logcat -d -t 2000 -b main -b system -b crash > "$OUT/device/diagnostics/logcat-run.txt" 2>&1 || true
 adb shell cmd uimode night no || true
 exit $status

@@ -10,9 +10,14 @@ on:
       version_code:
         description: 'versionCode to fetch (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
         default: '282'
+      abi:
+        description: 'Official build to install (arm64-v8a needs API 32+; armeabi-v7a runs through 32-bit ARM translation)'
+        type: choice
+        options: [arm64-v8a, armeabi-v7a]
+        default: arm64-v8a
       api_level:
-        description: 'Emulator API level (x86_64 Google APIs image with ARM translation; the app needs API 29+)'
-        default: '30'
+        description: 'Emulator API level (x86_64 Google APIs image with ARM translation)'
+        default: '34'
       require_complete:
         description: 'Fail when signed-in screens are missing (needs the reference-account secrets)'
         type: boolean
@@ -37,6 +42,7 @@ jobs:
       - name: Fetch and verify the official APK (nothing is installed if this fails)
         env:
           REFERENCE_VERSION_CODE: ${{ inputs.version_code }}
+          REFERENCE_ABI: ${{ inputs.abi }}
         run: bash scripts/fetch_verify_reference.sh
       - name: Enable KVM access
         run: |
@@ -53,21 +59,26 @@ jobs:
           disable-animations: true
           script: bash scripts/capture_reference.sh
         env:
+          REFERENCE_ABI: ${{ inputs.abi }}
           # Optional dedicated test account; without it only signed-out screens are captured and the run is marked incomplete.
           DS_REF_EMAIL: ${{ secrets.DEEPSEEK_REFERENCE_EMAIL }}
           DS_REF_PASSWORD: ${{ secrets.DEEPSEEK_REFERENCE_PASSWORD }}
       - name: Check captures and keep only sanitized files
         id: check
         if: always()
-        run: python3 -I scripts/check_reference.py reference-output ${{ inputs.require_complete && '--require-complete' || '' }}
-      - name: Upload the sanitized reference
-        if: always() && steps.check.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          python3 -I scripts/check_reference.py reference-output ${{ inputs.require_complete && '--require-complete' || '' }}
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - name: Upload the sanitized reference (also when incomplete, with diagnostic screenshots)
+        if: always() && steps.check.outputs.status != '' && steps.check.outputs.status != '2'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deepseek-official-reference
           path: reference-output/sanitized/
           if-no-files-found: error
-      - name: Upload verification reports (no screenshots)
+      - name: Upload verification reports and text diagnostics (no screenshots)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -76,3 +87,8 @@ jobs:
             reference-output/source/
             reference-output/device/
           if-no-files-found: warn
+      - name: Fail when the reference is unsafe or incomplete
+        if: always() && steps.check.outputs.status != '0'
+        run: |
+          echo "check_reference.py exit status: '${{ steps.check.outputs.status }}' (2 unsafe, 1 incomplete; see the step summary)" >&2
+          exit 1

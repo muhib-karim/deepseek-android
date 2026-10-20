@@ -17,11 +17,18 @@ Every value carries a source tag:
 
 The reference workflow ([.github/workflows/reference.yml](../../.github/workflows/reference.yml)) installs the verified APK
 on an emulator at the same viewport as our capture tests (1080 x 2200 px, 440 dpi = 392.7 dp wide, font scale 1.0) and
-uploads the screens listed below as the `deepseek-official-reference` artifact. Signed-out screens need nothing else;
-signed-in screens need a dedicated test account in the `DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD`
-repository secrets. **Status (2026-10-20): the workflow has not run yet**, so every [E] value below is still an estimate
-and no official capture is committed. When a run is reviewed, measured values replace [E] here and sanitized captures go
-under [captures/](captures/).
+uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the arm64-v8a
+build on an API 34 x86_64 Google APIs image (ARM translation); the armeabi-v7a build (API 29+) remains selectable.
+Signed-out screens need nothing else; signed-in screens need a dedicated test account in the
+`DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD` repository secrets.
+
+**Status (2026-10-20):** the first dispatch (run 39436094511: API 30, armeabi-v7a build) verified and installed the
+app, but the driver never recognised the sign-in screen and saved no diagnostics, so nothing was captured. The driver
+now waits up to 90 s on the first launch, accepts first-launch consent sheets, matches text and content descriptions
+case-insensitively, keeps screenshots of whatever is on screen, and saves the hierarchy, resumed activity, process
+state and logcat when a required screen does not appear. Until a dispatch captures the screens, every [E] value below
+is an estimate and no official capture is committed. When a run is reviewed, measured values replace [E] here and
+sanitized captures go under [captures/](captures/).
 
 ## Global tokens
 
