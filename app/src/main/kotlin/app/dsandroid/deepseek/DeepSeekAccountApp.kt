@@ -275,6 +275,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             var blankChecked = false
             while (true) {
                 delay(1000)
+                browser.probePage()
                 // A page that has not loaded, or loaded blank, after 20 seconds gets a notice pointing to the browser route. The
                 // person chose this route, so nothing opens on top of a page that may only be slow (DeepSeek's security check).
                 if (!blankChecked && System.currentTimeMillis() - opened > 20_000) {
@@ -399,7 +400,18 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                             else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
                             else vm.send(think, search, browser::solve)
                         },
-                        loginContent = { AndroidView(factory = { browser.view }, modifier = Modifier.fillMaxSize().testTag("login-webview")) },
+                        loginContent = {
+                            Column(Modifier.fillMaxSize()) {
+                                val page = browser.pageState
+                                Text(when {
+                                    !page.loaded -> "Loading the sign-in page…"
+                                    page.textLength == 0 -> "The sign-in page has loaded but shows no text yet."
+                                    else -> "Sign-in page ready: ${page.title.ifEmpty { "DeepSeek" }} (${page.textLength} characters)"
+                                }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp).testTag("login-page-state"),
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AndroidView(factory = { browser.view }, modifier = Modifier.weight(1f).fillMaxWidth().testTag("login-webview"))
+                            }
+                        },
                         actions = agentActions, accountActions = accountActions,
                         heldShare = sharedInput != null,
                         onUseApiKey = { key -> vm.useApiKey(key) { apiFallback = true } }, onOpenLink = ::openLink, onDismissNotice = vm::dismissNotice,

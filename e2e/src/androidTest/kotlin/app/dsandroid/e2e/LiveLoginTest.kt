@@ -27,14 +27,19 @@ class LiveLoginTest {
         e2e.step("signed-out")
 
         e2e.tap(phoneEmail, "Log in with phone or email")
-        e2e.waitFor(E2eDriver.res("login-webview"), "the in-app sign-in page", 30_000)
-        // The page (or DeepSeek's security check in front of it) must show text; a page that stays blank is the failure this
-        // guards against. A slow page may first get the app's "isn't showing" notice; it still has to render within 90 s.
-        val pageText = Pattern.compile("(?i).*(log ?in|sign ?in|password|email|phone|verify|security).*")
+        // A Compose test tag does not name the embedded WebView, so the page is found by its class.
+        e2e.waitFor(By.clazz("android.webkit.WebView"), "the in-app sign-in page", 30_000)
+        // The page (or DeepSeek's security check, or its cookie banner) must show text; a page that stays blank is the failure
+        // this guards against. WebView content is not always in the accessibility tree, so the app reports the page's title
+        // and text length in the "login-page-state" line. A slow page may first get the app's notice; it has 90 s to render.
+        val ready = Pattern.compile("Sign-in page ready: .+ \\((\\d+) characters\\)")
+        var state = ""
         e2e.waitUntil("text on DeepSeek's sign-in page", 90_000) {
-            e2e.device.findObjects(By.clazz("android.webkit.WebView")).any { webView -> hasText(webView, pageText) }
+            state = e2e.device.findObject(E2eDriver.res("login-page-state"))?.text.orEmpty()
+            ready.matcher(state).matches() || e2e.device.findObjects(By.clazz("android.webkit.WebView")).any { hasText(it, PAGE_TEXT) }
         }
         e2e.step("in-app-sign-in-page")
+        println("E2E login page state: $state")
 
         e2e.device.pressBack()
         e2e.tap(google, "Continue with Google")
@@ -55,6 +60,10 @@ class LiveLoginTest {
         e2e.waitFor(google, "still signed out after the browser", 20_000)
         e2e.assertAbsent(E2eDriver.res("account-composer").enabled(true), "a usable composer while signed out")
         e2e.step("back-signed-out")
+    }
+
+    private companion object {
+        val PAGE_TEXT: Pattern = Pattern.compile("(?i).*(log ?in|sign ?in|password|email|phone|verify|security).*")
     }
 
     private fun chooseBrowserIfAsked() {
