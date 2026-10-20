@@ -133,7 +133,9 @@ assumed by this scaffold.
   JavaScript interface. A trusted page validates and caps the result before native
   polling. Code is limited to 100,000 characters, total stdout/stderr/value to
   16,000 characters, and execution (including runtime startup) to 15 seconds.
-  Stop, timeout and renderer failure dispose the view. CSP, request interception
+  Stop, timeout and renderer failure dispose the view. The code page has the reserved
+  origin `https://sandbox.invalid` (never resolved: every request is intercepted, and
+  only the cached runtime files are answered), so its blob worker is same-origin. CSP, request interception
   and disabled worker APIs prevent app file/device access and outbound networking.
   WebView does not expose a hard per-worker heap quota: hostile allocations can
   still exhaust the renderer; this boundary needs adversarial device testing.

@@ -17,6 +17,13 @@ class CodeSandboxDocumentTest {
         assertEquals(attack, Json.parseToJsonElement(encoded).jsonPrimitive.content)
     }
 
+    @Test fun thePollFunctionExistsBeforeTheWorkerStarts() {
+        val document = CodeSandboxDocument.javascript("return 1", "pollKey123")
+        assertTrue(document.indexOf("\"pollKey123\"") < document.indexOf("new Worker("))
+        assertTrue(document.contains("The sandbox worker could not start"))
+        assertTrue(CodeSandboxDocument.BASE_URL.startsWith("https://") && CodeSandboxDocument.BASE_URL.contains(".invalid/"))
+    }
+
     @Test fun rejectsCallerControlledPollExpressions() {
         assertThrows(IllegalArgumentException::class.java) {
             CodeSandboxDocument.javascript("return 1", "x);alert(1);//")

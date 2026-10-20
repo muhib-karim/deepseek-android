@@ -4,7 +4,11 @@ import kotlinx.serialization.json.*
 
 /** evaluateJavascript returns a JSON string containing our result JSON, or null while running. */
 object CodeResultParser {
+    /** The page started and its worker is still running (the poll function answers ''). */
+    fun isRunning(envelope: String): Boolean = envelope == "\"\""
+
     fun parse(envelope: String): CodeExecution? {
+        if (isRunning(envelope)) return null
         if (envelope == "null") return null
         return runCatching {
             require(envelope.length <= CodeLimits.MAX_RESULT_JSON_CHARS * 6 + 2)

@@ -14,6 +14,13 @@ class CodeResultParserTest {
         assertNull(CodeResultParser.parse("null"))
     }
 
+    @Test fun aRunningPageIsNeitherAResultNorAFailure() {
+        assertTrue(CodeResultParser.isRunning("\"\""))
+        assertNull(CodeResultParser.parse("\"\""))
+        assertFalse(CodeResultParser.isRunning("null"))
+        assertNull(CodeResultParser.parse("null"))
+    }
+
     @Test fun malformedOrOversizedResultsFailClosed() {
         for (value in listOf("{}", "\"not json\"", "x".repeat(700_000),
             JsonPrimitive("""{"stdout":1,"stderr":"","hasValue":false,"failed":false}""").toString())) {

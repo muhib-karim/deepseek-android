@@ -4,6 +4,13 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** A trusted bootstrap only: generated code is a string consumed inside a dedicated worker. */
 object CodeSandboxDocument {
+    /**
+     * The code page's origin. A real (reserved, never resolved) https origin, so the blob worker is same-origin with its
+     * page; every request the page or worker makes is intercepted by the Android adapter and only cached runtime files
+     * are ever answered.
+     */
+    const val BASE_URL = "https://sandbox.invalid/"
+
     fun javascriptString(text: String): String = JsonPrimitive(text).toString()
         .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
         .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -87,10 +94,18 @@ object CodeSandboxDocument {
             (() => {
               'use strict';
               let result = null;
-              const workerUrl = URL.createObjectURL(new Blob([${javascriptString(source)}], {type:'text/javascript'}));
-              const worker = new Worker(workerUrl);
-              URL.revokeObjectURL(workerUrl);
+              // Defined first: '' while the worker runs, then the result. A page that never gets here reads as not started.
+              Object.defineProperty(window,${javascriptString(pollKey)},{value:() => result === null ? '' : result});
               const cap = ${CodeLimits.MAX_OUTPUT_CHARS};
+              const fail = message => {
+                if (result === null) result = JSON.stringify({stdout:'',stderr:String(message).slice(0,cap),value:null,hasValue:false,truncated:false,failed:true});
+              };
+              let worker;
+              try {
+                const workerUrl = URL.createObjectURL(new Blob([${javascriptString(source)}], {type:'text/javascript'}));
+                worker = new Worker(workerUrl);
+                URL.revokeObjectURL(workerUrl);
+              } catch (e) { fail('The sandbox worker could not start: ' + e); return; }
               const finish = data => {
                 if (result !== null) return;
                 worker.terminate();
@@ -105,8 +120,7 @@ object CodeSandboxDocument {
                 if (data && typeof data === 'object' && typeof data.stdout === 'string' &&
                     typeof data.stderr === 'string' && typeof data.failed === 'boolean') finish(data);
               };
-              worker.onerror = () => finish({stdout:'',stderr:'Worker execution failed',failed:true});
-              Object.defineProperty(window,${javascriptString(pollKey)},{value:() => result});
+              worker.onerror = event => finish({stdout:'',stderr:'Worker execution failed' + (event && event.message ? ': ' + event.message : ''),failed:true});
             })();
             </script></body></html>""".trimIndent()
     }
