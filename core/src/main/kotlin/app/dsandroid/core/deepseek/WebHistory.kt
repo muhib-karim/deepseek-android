@@ -27,10 +27,13 @@ data class WebMessage(
     val artifacts: List<Artifact> = emptyList(),
     val codeRuns: List<TurnStep.ToolCall> = emptyList(),
     val revisionOf: String? = null,
+    val thinkingSeconds: Double? = null,
+    val citations: List<WebCitation> = emptyList(),
 )
+/** [updatedAt] (epoch milliseconds, 0 in history from before v1.0.0) orders the drawer's date groups; [pinned] is local only. */
 @Serializable
 data class WebChat(val id: String, val title: String, val sessionId: String? = null, val parentId: Long? = null,
-    val messages: List<WebMessage> = emptyList(), val blocked: Boolean = false)
+    val messages: List<WebMessage> = emptyList(), val blocked: Boolean = false, val updatedAt: Long = 0, val pinned: Boolean = false)
 
 /** Private local history only. No credentials, cookies, headers, or captured web documents. */
 class WebHistory(private val file: File) {

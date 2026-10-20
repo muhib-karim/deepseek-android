@@ -5,18 +5,27 @@ import kotlinx.serialization.json.*
 data class WebReply(
     val thinking: String = "", val response: String = "", val responseMessageId: Long? = null,
     val finished: Boolean = false, val requestMessageId: Long? = null,
+    /** Seconds the service reports for its thinking fragments ("Thought for N seconds"); null when it reports none. */
+    val thinkingSeconds: Double? = null,
+    /** Pages a Search turn read (https only, at most [DeepSeekStream.MAX_CITATIONS]), in the order the service listed them. */
+    val citations: List<WebCitation> = emptyList(),
 )
+
+/** One page a Search turn read: shown as "Read N web pages" with its title and site. */
+@kotlinx.serialization.Serializable
+data class WebCitation(val title: String, val url: String)
 
 /** Independently implemented reducer for the web service's SSE fragment patches. */
 class DeepSeekStream {
-    private companion object {
-        val METADATA_EVENTS = setOf("update_session", "title", "close")
-        val SHOWN = setOf("THINK", "RESPONSE")
-        val FRAGMENT_TYPE = Regex("[A-Z][A-Z_]{0,31}")
-        val FRAGMENT_CONTENT = Regex("response/fragments/(-1|[0-9]+)/content")
-        val FRAGMENT_FIELD = Regex("response/fragments/(-1|[0-9]+)(/[a-z_]{1,40})?")
+    companion object {
+        const val MAX_CITATIONS = 30
+        private val METADATA_EVENTS = setOf("update_session", "title", "close")
+        private val SHOWN = setOf("THINK", "RESPONSE")
+        private val FRAGMENT_TYPE = Regex("[A-Z][A-Z_]{0,31}")
+        private val FRAGMENT_CONTENT = Regex("response/fragments/(-1|[0-9]+)/content")
+        private val FRAGMENT_FIELD = Regex("response/fragments/(-1|[0-9]+)(/[a-z_]{1,40})?")
     }
-    private data class Fragment(val type: String, var text: String)
+    private data class Fragment(val type: String, var text: String, var seconds: Double? = null, var results: List<WebCitation> = emptyList())
     private val framing = WebSseFraming()
     private val fragments = mutableListOf<Fragment>()
     private var lastPath = ""
@@ -36,6 +45,8 @@ class DeepSeekStream {
     private fun snapshot() = WebReply(
         fragments.filter { it.type == "THINK" }.joinToString("") { it.text },
         fragments.filter { it.type == "RESPONSE" }.joinToString("") { it.text }, messageId, finished, requestId,
+        fragments.filter { it.type == "THINK" }.mapNotNull { it.seconds }.takeIf { it.isNotEmpty() }?.sum(),
+        fragments.flatMap { it.results }.distinctBy { it.url }.take(MAX_CITATIONS),
     )
     private fun consume(event: WebSseEvent) {
         if (finished) return
@@ -93,7 +104,7 @@ class DeepSeekStream {
                 fragment.text = if (operation == "APPEND") fragment.text + text(value) else text(value)
             }
             // Per-fragment metadata on the live service: search results, step status, think timings.
-            path.matches(FRAGMENT_FIELD) -> Unit
+            path.matches(FRAGMENT_FIELD) -> fragmentField(path, value)
             path.isEmpty() || path.contains("content") || path.contains("fragments") -> throw EndpointChanged()
             // Token counts, search metadata and server timings do not alter displayed text.
         }
@@ -126,8 +137,29 @@ class DeepSeekStream {
         val type = value["type"]?.let(::text) ?: throw EndpointChanged()
         // SEARCH and other tool fragments keep their slot so "-1" stays aligned; only THINK and RESPONSE are shown.
         if (!type.matches(FRAGMENT_TYPE)) throw EndpointChanged()
-        fragments += Fragment(type, value["content"]?.let { if (type in SHOWN) text(it) else it.toString() }.orEmpty())
+        fragments += Fragment(type, value["content"]?.let { if (type in SHOWN) text(it) else it.toString() }.orEmpty(),
+            seconds(value["elapsed_secs"]), citations(value["results"]))
     }
+    /** Think timings and search results arrive as fields of a fragment; nothing else there changes what is shown. */
+    private fun fragmentField(path: String, value: JsonElement) {
+        val parts = path.split('/')
+        if (parts.size != 4) return
+        val index = parts[2].toInt().let { if (it == -1) fragments.lastIndex else it }
+        val fragment = fragments.getOrNull(index) ?: return
+        when (parts[3]) {
+            "elapsed_secs" -> seconds(value)?.let { fragment.seconds = it }
+            "results" -> fragment.results = (fragment.results + citations(value)).distinctBy { it.url }.take(MAX_CITATIONS)
+        }
+    }
+    private fun seconds(value: JsonElement?): Double? =
+        (value as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it >= 0 && it < 86_400 }
+    private fun citations(value: JsonElement?): List<WebCitation> = (value as? JsonArray).orEmpty().mapNotNull { item ->
+        val result = item as? JsonObject ?: return@mapNotNull null
+        val url = (result["url"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?.takeIf { it.startsWith("https://") && it.length <= 2048 && it.none(Char::isWhitespace) } ?: return@mapNotNull null
+        val title = (result["title"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.take(200).orEmpty()
+        WebCitation(title.ifEmpty { url.substringAfter("://").substringBefore('/') }, url)
+    }.take(MAX_CITATIONS)
     private fun legacyDelta(value: JsonObject) {
         value["request_message_id"]?.let { requestId = id(it) }
         value["response_message_id"]?.let { messageId = id(it) }
