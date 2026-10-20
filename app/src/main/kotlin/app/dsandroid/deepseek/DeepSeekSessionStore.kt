@@ -43,8 +43,8 @@ class DeepSeekSessionStore(context: Context) {
     }
     fun remove(slot: String) { check(preferences.edit().remove(key(slot)).commit()) { "Could not clear the saved DeepSeek session." } }
 
-    /** Null when no account list was saved yet (an install from before v0.7.0). */
-    fun registry(): AccountRegistry? = preferences.getString("accounts", null)?.let { json.decodeFromString<AccountRegistry>(it) }
+    /** Null when no account list was saved yet (an install from before v0.7.0) or it cannot be read; the caller rebuilds it. */
+    fun registry(): AccountRegistry? = preferences.getString("accounts", null)?.let { runCatching { json.decodeFromString<AccountRegistry>(it) }.getOrNull() }
     fun saveRegistry(registry: AccountRegistry) {
         check(preferences.edit().putString("accounts", json.encodeToString(registry)).commit()) { "Could not securely save the account list." }
     }
