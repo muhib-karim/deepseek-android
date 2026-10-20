@@ -89,6 +89,8 @@ for file in $(adb shell 'ls /sdcard/e2e-*.mp4 2>/dev/null' | tr -d '\r'); do
 done
 adb pull /sdcard/Android/data/app.dsandroid.e2e/files/e2e-steps/. "$out/steps/" > /dev/null 2>&1 || true
 adb logcat -d -b crash > "$out/logs/crash.txt" 2>&1 || true
+adb logcat -d -t 3000 -b main -b system > "$out/logs/logcat-tail.txt" 2>&1 || true
+adb shell dumpsys activity activities | grep -E 'ResumedActivity|mFocusedApp' > "$out/logs/activities.txt" 2>&1 || true
 [[ -n "$fixture_pid" ]] && kill "$fixture_pid" 2>/dev/null
 
 python3 -I scripts/instrumentation_to_junit.py "$out/instrumentation.txt" "$out/junit.xml"

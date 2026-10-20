@@ -27,13 +27,13 @@ class LiveLoginTest {
         e2e.step("signed-out")
 
         e2e.tap(phoneEmail, "Log in with phone or email")
-        e2e.waitFor(E2eDriver.res("login-webview"), "the in-app sign-in page", 15_000)
-        // DeepSeek's page (or its security check) has visible text; a blank page is the failure this guards against.
+        e2e.waitFor(E2eDriver.res("login-webview"), "the in-app sign-in page", 30_000)
+        // The page (or DeepSeek's security check in front of it) must show text; a page that stays blank is the failure this
+        // guards against. A slow page may first get the app's "isn't showing" notice; it still has to render within 90 s.
         val pageText = Pattern.compile("(?i).*(log ?in|sign ?in|password|email|phone|verify|security).*")
-        e2e.waitUntil("text on DeepSeek's sign-in page", 60_000) {
+        e2e.waitUntil("text on DeepSeek's sign-in page", 90_000) {
             e2e.device.findObjects(By.clazz("android.webkit.WebView")).any { webView -> hasText(webView, pageText) }
         }
-        e2e.assertAbsent(By.textContains("isn't showing in this app"), "blank-page notice")
         e2e.step("in-app-sign-in-page")
 
         e2e.device.pressBack()

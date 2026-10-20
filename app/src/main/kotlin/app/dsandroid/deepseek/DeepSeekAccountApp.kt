@@ -273,10 +273,11 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             var blankChecked = false
             while (true) {
                 delay(1000)
-                // A page that has not loaded, or loaded blank, after 10 seconds falls back to the browser route on its own.
-                if (!blankChecked && System.currentTimeMillis() - opened > 10_000) {
+                // A page that has not loaded, or loaded blank, after 20 seconds gets a notice pointing to the browser route. The
+                // person chose this route, so nothing opens on top of a page that may only be slow (DeepSeek's security check).
+                if (!blankChecked && System.currentTimeMillis() - opened > 20_000) {
                     blankChecked = true
-                    if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) { vm.notice(DeepSeekWebView.BLANK_NOTICE); browserGuide = true }
+                    if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) vm.notice(DeepSeekWebView.BLANK_NOTICE)
                 }
                 val token = browser.captureSession() ?: continue
                 // Keep the sign-in page open until DeepSeek confirms the session (and a new account has answered its date-of-birth prompt).

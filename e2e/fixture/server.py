@@ -399,6 +399,16 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(200, data, mime, {"Access-Control-Allow-Origin": "*"})
 
 
+class FixtureServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        """System traffic the emulator sends to hosts the fixture does not serve fails its TLS handshake: one line, no traceback."""
+        import sys
+        error = sys.exc_info()[1]
+        print(f"connection error: {type(error).__name__}: {str(error)[:120]}", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description="E2E fixture server")
     parser.add_argument("--cert", required=True)
@@ -407,8 +417,7 @@ def main():
     parser.add_argument("--log", required=True)
     parser.add_argument("--pyodide-dir", default="")
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    server.daemon_threads = True
+    server = FixtureServer(("127.0.0.1", args.port), Handler)
     server.state = State(args.log)
     server.pyodide_dir = args.pyodide_dir
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

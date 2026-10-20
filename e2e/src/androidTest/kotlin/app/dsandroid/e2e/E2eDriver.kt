@@ -8,6 +8,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.io.File
+import java.util.regex.Pattern
 
 /** Values shared with e2e/fixture/server.py. */
 object Fixture {
@@ -43,10 +44,36 @@ class E2eDriver(journey: String) {
         launch()
     }
 
+    /** Opens the app from its launcher entry; one retry, and diagnostics when it does not appear (slow cold start, ANR, crash). */
     fun launch() {
-        shell("am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ${Fixture.APP}/.MainActivity")
-        check(device.wait(Until.hasObject(By.pkg(Fixture.APP).depth(0)), 30_000)) { "The app did not open" }
-        device.waitForIdle()
+        repeat(2) { attempt ->
+            shell("am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ${Fixture.APP}/.MainActivity")
+            val end = SystemClock.uptimeMillis() + 60_000
+            while (SystemClock.uptimeMillis() < end) {
+                if (device.hasObject(By.pkg(Fixture.APP))) { device.waitForIdle(); return }
+                // A slow first start can raise "isn't responding" for the app or the system UI: wait, never close.
+                device.findObject(By.text(Pattern.compile("(?i)wait")).pkg("android"))?.click()
+                SystemClock.sleep(500)
+            }
+            launchDiagnostics("launch-attempt-${attempt + 1}")
+        }
+        throw AssertionError("The app did not open after two launches (diagnostics saved)")
+    }
+
+    /** Text diagnostics next to the step screenshots: crash log, resumed activity, focus, process. */
+    fun launchDiagnostics(label: String) {
+        val activities = shell("dumpsys activity activities").lines().filter { "ResumedActivity" in it || "mFocusedApp" in it }.joinToString("\n")
+        val focus = shell("dumpsys window").lines().filter { "mCurrentFocus" in it || "mFocusedApp" in it }.joinToString("\n")
+        val text = buildString {
+            appendLine("pidof ${Fixture.APP}: ${shell("pidof ${Fixture.APP}").trim().ifEmpty { "(not running)" }}")
+            appendLine("current package: ${device.currentPackageName}")
+            appendLine("--- resumed activity"); appendLine(activities.trim())
+            appendLine("--- window focus"); appendLine(focus.trim())
+            appendLine("--- logcat crash buffer"); appendLine(shell("logcat -d -b crash").trim())
+            appendLine("--- logcat (last 300 lines)"); appendLine(shell("logcat -d -t 300").trim())
+        }
+        File(steps, "${label.lowercase()}-diagnostics.txt").writeText(text)
+        step(label)
     }
 
     fun restart() {
