@@ -186,6 +186,23 @@ Row **64** is **partial**: install and checksum verification documentation is do
 real screenshots of each major screen remain pending the emulator run. Version
 metadata remains unchanged. See BUILD_NOTES for validation and packaging follow-up.
 
+## v0.7.0 plan: Workbench
+
+The three Phase 2 roadmap items that were still missing (issues #20, #21, #22). They extend rows 13, 14
+and 45 for the account-mode app; the API-key client keeps its v0.2 canvas.
+
+| # | Item | Release |
+|---|---|---|
+| 65 | Artifacts panel for HTML, SVG and Markdown from answers or agent files: full screen on phones, side by side at 840 dp and wider; sandboxed HTML preview with opt-in network; edit and Run; "Ask DeepSeek to change this" makes v2, v3, ... with a version picker and "+N -M lines" | v0.7.0 |
+| 66 | In-app code editor for kt, py, js, ts, html, css, json, md, csv, sh, sql, xml, yaml and txt: original tokenizer highlighting, line numbers, undo/redo, find, Save, Save as (Storage Access Framework), Share, Run for Python | v0.7.0 |
+| 67 | Account manager: DeepSeek accounts and API-key profiles with sign-in type, balance (GET /user/balance for API keys) and when it was read; one-tap manual switching, separate credentials and chats per account; never automatic, "Switch account" on quota and rate errors only opens the list ([ACCOUNTS.md](ACCOUNTS.md)) | v0.7.0 |
+
+## v0.7.0 delivery status
+
+Rows **65-67**: implemented with JVM, app unit and emulator tests on branch `feature/workbench-070`.
+Nothing has been compiled or run yet (the project builds only on GitHub Actions); every test row in
+[RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) is PENDING CI, so this is not a release claim.
+
 ## Not planned
 
 - Image and video generation: DeepSeek has no image model. Drawings come out as SVG/HTML artifacts instead (row 13).
@@ -202,4 +219,5 @@ metadata remains unchanged. See BUILD_NOTES for validation and packaging follow-
 | v0.4.0 (released, hardening) | 7 |
 | v0.5.0 / v0.5.1 (released) | account mode, see [ACCOUNT_CLIENT_050.md](ACCOUNT_CLIENT_050.md) |
 | v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
+| v0.7.0 (in development, PENDING CI) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
 | **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |

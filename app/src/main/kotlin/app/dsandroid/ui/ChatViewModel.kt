@@ -74,6 +74,8 @@ data class ChatUiState(
     val running: Boolean = false,
     val confirmation: Confirmation? = null,
     val error: String? = null,
+    /** The error is a quota or rate error: the card offers "Switch account", which only opens the account list. */
+    val errorOffersAccountSwitch: Boolean = false,
     val signingIn: Boolean = false,
     val signInMessage: String? = null,
     val saving: Boolean = false,
@@ -108,7 +110,9 @@ data class ChatUiState(
     val subAgents: List<SubAgentProgress> = emptyList(),
 )
 
-class ChatViewModel @JvmOverloads constructor(application: Application, private val backend: LlmClient? = null) : AndroidViewModel(application) {
+/** [historyDir] scopes saved chats to one API-key profile ("conversations-<profile id>"); the default folder predates v0.7.0. */
+class ChatViewModel @JvmOverloads constructor(application: Application, private val backend: LlmClient? = null,
+    historyDir: String = "conversations") : AndroidViewModel(application) {
     private val mutableState = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = mutableState.asStateFlow()
     private val mutableSettings = MutableStateFlow(AppSettings())
@@ -129,7 +133,8 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
     private val upkeepStore = MemoryUpkeepStore(File(application.filesDir, "memory-upkeep"), memoryStore)
     private val projectStore = ProjectStore(File(application.filesDir, "projects"))
     private val diagnosticStore = app.dsandroid.core.diagnostics.DiagnosticStore(File(application.filesDir, "diagnostics"))
-    private val historyStore = ConversationStore(File(application.filesDir, "conversations"))
+    private val historyStore = ConversationStore(File(application.filesDir,
+        historyDir.also { require(it.matches(Regex("conversations(-[A-Za-z0-9_-]{1,100})?"))) { "Invalid history folder" } }))
     private val diskWrites = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private val session = SessionAuthMachine()
     private var credentialRevision = 0L
@@ -508,7 +513,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
                     mutableState.update { it.copy(needsSignIn = true, resumable = true, waitingForNetwork = false,
                         retrySeconds = null, error = null) }
                 }
-                is AgentEvent.Error -> showError(localizeError(event.message))
+                is AgentEvent.Error -> showProviderError(event.message)
                 AgentEvent.Done -> {
                     conversation.pendingRunId = null
                     proposeMemory(conversation, config, llm)
@@ -1078,10 +1083,17 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
         }
     }
     fun showError(message: String) {
-        mutableState.update { it.copy(error = message) }
+        mutableState.update { it.copy(error = message, errorOffersAccountSwitch = false) }
         recordDiagnostic(app.dsandroid.core.diagnostics.DiagnosticKind.ERROR, message)
     }
-    fun dismissError() { mutableState.update { it.copy(error = null) } }
+    /** Quota and rate errors keep this account; the card offers "Switch account", which only opens the list (docs/ACCOUNTS.md). */
+    private fun showProviderError(message: String) {
+        val failure = app.dsandroid.core.accounts.AccountFailurePolicy.fromProviderMessage(message)
+        showError(localizeError(message))
+        mutableState.update { it.copy(errorOffersAccountSwitch = failure == app.dsandroid.core.accounts.AccountFailure.QUOTA ||
+            failure == app.dsandroid.core.accounts.AccountFailure.RATE_LIMIT) }
+    }
+    fun dismissError() { mutableState.update { it.copy(error = null, errorOffersAccountSwitch = false) } }
     private fun localizeError(message: String): String {
         val resource = when (message) {
             "Tools are unavailable in Chat mode" -> R.string.error_chat_tools

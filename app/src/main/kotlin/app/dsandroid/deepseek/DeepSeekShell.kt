@@ -38,20 +38,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.data.Appearance
 import app.dsandroid.ui.AppIcon
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.MarkdownText
+import app.dsandroid.workbench.WorkbenchPane
 import java.io.File
 import kotlinx.coroutines.launch
 
-enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS }
+enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS, ACCOUNTS }
 data class AccountMessage(
     val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null,
     val steps: List<TurnStep> = emptyList(), val artifacts: List<Artifact> = emptyList(), val codeRuns: List<TurnStep.ToolCall> = emptyList(),
+    val revisionOf: String? = null,
 )
+/** One row of Settings > Accounts: no credential, only what the list shows. */
+data class AccountRow(val id: String, val label: String, val type: AccountType, val active: Boolean, val signedIn: Boolean,
+    val balance: String, val lastRead: String?)
+/** A file in the current chat's folder; [path] is workspace-relative. */
+data class ChatFileRow(val path: String, val name: String, val bytes: Long)
 /** A tool call waiting for the user's per-action approval (network, downloads). */
 data class AgentConfirmation(val tool: String, val summary: String)
 data class SkillRow(val name: String, val description: String, val version: String, val builtIn: Boolean, val enabled: Boolean, val tools: Int)
@@ -76,7 +85,24 @@ interface AgentActions {
     fun installPackages(specs: String) {}
     fun answerPackageInstall(allow: Boolean) {}
     fun removePackage(name: String) {}
+    fun previewCode(messageId: String, revisionOf: String?, language: String, code: String) {}
+    fun editCode(language: String, code: String) {}
+    fun editArtifact(artifact: Artifact) {}
+    fun openChatFiles() {}
+    fun openChatFile(row: ChatFileRow) {}
+    fun hideChatFiles() {}
     object None : AgentActions
+}
+
+/** Settings > Accounts callbacks. Only [switchTo] changes the account in use; the defaults keep fixtures inert. */
+interface AccountActions {
+    fun switchTo(id: String) {}
+    fun addDeepSeekAccount() {}
+    fun addApiKeyProfile(label: String, key: String) {}
+    fun remove(id: String) {}
+    fun rename(id: String, label: String) {}
+    fun refreshBalances(id: String?) {}
+    object None : AccountActions
 }
 data class AccountHistory(val id: String, val title: String)
 data class AccountUiState(
@@ -104,6 +130,18 @@ data class AccountUiState(
     val pendingSkill: SkillPreview? = null,
     val pendingPackages: List<String> = emptyList(),
     val toolsetBusy: Boolean = false,
+    val accounts: List<AccountRow> = emptyList(),
+    /** A quota or rate error is shown; the banner offers "Switch account", which only opens the list. */
+    val offerSwitchAccount: Boolean = false,
+    val balanceBusy: Boolean = false,
+    val pane: WorkbenchPane? = null,
+    val editorOutput: String? = null,
+    val editorBusy: Boolean = false,
+    /** The user's text size from Settings (0.85-1.3) on top of system font scaling. */
+    val textScale: Float = 1f,
+    val chatFiles: List<ChatFileRow>? = null,
+    /** The API-key profile the API settings currently use (its chats are scoped to it); null for none. */
+    val apiKeyProfile: String? = null,
 )
 
 /** Light measurements follow ui-spec.md; the dark palette is an original interpretation. */
@@ -141,7 +179,7 @@ fun DeepSeekShell(
     onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
-    actions: AgentActions = AgentActions.None,
+    actions: AgentActions = AgentActions.None, accountActions: AccountActions = AccountActions.None,
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -178,6 +216,8 @@ fun DeepSeekShell(
                     }
                 }
                 HorizontalDivider()
+                NavigationDrawerItem(label = { Text("Files in this chat") }, selected = false, icon = { AppIcon(Glyph.DOCUMENT) },
+                    onClick = { actions.openChatFiles(); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp).testTag("chat-files"))
                 NavigationDrawerItem(label = { Text("Skills") }, selected = false, icon = { AppIcon(Glyph.TOOL) },
                     onClick = { onNavigate(AccountPage.SKILLS); scope.launch { drawer.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(label = { Text("Settings") }, selected = false,
@@ -188,20 +228,32 @@ fun DeepSeekShell(
                 Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                     if (state.page == AccountPage.CHAT) {
                         IconButton(onClick = { scope.launch { drawer.open() } }, modifier = Modifier.align(Alignment.CenterStart).size(48.dp)) { AppIcon(Glyph.MENU, "Open navigation") }
-                        Text(state.title.ifBlank { "New Chat" }, Modifier.align(Alignment.Center).padding(horizontal = 64.dp),
-                            fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Column(Modifier.align(Alignment.Center).padding(horizontal = 64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(state.title.ifBlank { "New Chat" }, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // With several accounts, the one in use is always visible; it changes only from Settings > Accounts.
+                            if (state.accounts.size > 1) state.accounts.firstOrNull { it.active }?.let { active ->
+                                Text(active.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("active-account"))
+                            }
+                        }
                         IconButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterEnd).size(48.dp)) {
                             OutlinedCircle { AppIcon(Glyph.PLUS, "New Chat", Modifier.size(14.dp)) }
                         }
                     } else {
                         TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
-                        Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
+                        Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
                             textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                     }
                 }
                 state.error?.let { error ->
                     Text(error, Modifier.fillMaxWidth().heightIn(max = 96.dp).background(MaterialTheme.colorScheme.errorContainer).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account-error"),
                         color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                    // Quota and rate errors never change the account; this only opens the list so the user can choose.
+                    if (state.offerSwitchAccount) Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer)) {
+                        TextButton(onClick = { onNavigate(AccountPage.ACCOUNTS) }, enabled = !state.busy, modifier = Modifier.padding(horizontal = 4.dp).testTag("switch-account")) {
+                            Text("Switch account")
+                        }
+                    }
                 }
                 when (state.page) {
                     AccountPage.CHAT -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -249,6 +301,14 @@ fun DeepSeekShell(
                             OutlinedButton(onClick = { logoutDialog = true }, enabled = !state.busy) { Text(if (state.logoutPending) "Retry logout" else "Log out") }
                         } else Button(onClick = onLogin) { Text("Log in with DeepSeek") }
                         HorizontalDivider()
+                        Text("Accounts", style = MaterialTheme.typography.titleMedium)
+                        val inUse = state.accounts.firstOrNull { it.active }
+                        Text(if (inUse == null) "No account in use. Sign in, or choose one of your accounts." else "In use: ${inUse.label} (${inUse.type.label})",
+                            style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { onNavigate(AccountPage.ACCOUNTS) }, enabled = !state.busy, modifier = Modifier.testTag("manage-accounts")) {
+                            Text("Manage accounts (${state.accounts.size})")
+                        }
+                        HorizontalDivider()
                         Text("Theme", style = MaterialTheme.typography.titleMedium)
                         Appearance.entries.forEach { appearance ->
                             Row(Modifier.fillMaxWidth().clickable { onTheme(appearance) }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -270,7 +330,7 @@ fun DeepSeekShell(
                         Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.", style = MaterialTheme.typography.bodySmall)
                         HorizontalDivider()
                         Text("About", style = MaterialTheme.typography.titleMedium)
-                        Text("DeepSeek Android \u00B7 0.6.0\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
+                        Text("DeepSeek Android \u00B7 ${app.dsandroid.BuildConfig.VERSION_NAME}\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
                         Text("Light layout follows the measured reference. Dark colors and the abstract mark are original interpretations. Web login and chat use an unofficial protocol that may change.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider()
                         Text("Agent", style = MaterialTheme.typography.titleMedium)
@@ -278,6 +338,7 @@ fun DeepSeekShell(
                         TextButton(onClick = { onNavigate(AccountPage.SKILLS) }, enabled = !state.busy) { Text("Skills and Python toolsets") }
                     }
                     AccountPage.SKILLS -> SkillsPage(state, actions, Modifier.weight(1f))
+                    AccountPage.ACCOUNTS -> AccountsPage(state, accountActions, Modifier.weight(1f))
                     AccountPage.LOGIN -> {
                         Text(DeepSeekWebView.SSO_NOTICE, Modifier.heightIn(max = 104.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -300,6 +361,26 @@ fun DeepSeekShell(
                     Column(Modifier.padding(12.dp).heightIn(min = 64.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { AppIcon(icon); Text(label, textAlign = TextAlign.Center) }
                 }
             }
+        }
+    }
+    state.chatFiles?.let { files ->
+        ModalBottomSheet(onDismissRequest = actions::hideChatFiles) {
+            Text("Files in this chat", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)
+            Text("Text files open in the editor; HTML, SVG and Markdown open in the artifacts panel.", Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (files.isEmpty()) Text("No files yet. Files the agent makes and files you save from the editor appear here.",
+                Modifier.padding(horizontal = 24.dp, vertical = 12.dp), style = MaterialTheme.typography.bodySmall)
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                items(files, key = { it.path }) { file ->
+                    Row(Modifier.fillMaxWidth().clickable { actions.openChatFile(file) }.heightIn(min = 48.dp).padding(horizontal = 24.dp, vertical = 10.dp)
+                        .testTag("chat-file-${file.name}"), verticalAlignment = Alignment.CenterVertically) {
+                        Text(file.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (file.bytes < 1024) "${file.bytes} B" else "${(file.bytes + 1023) / 1024} KB", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.navigationBarsPadding().height(16.dp))
         }
     }
     renameTarget?.let { chat ->
@@ -441,7 +522,12 @@ private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean,
         } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val onRun: (String) -> Unit = { code -> actions.runCode(message.id, code) }
             val runCode = onRun.takeIf { enabled }
-            if (message.steps.isNotEmpty()) AgentTimeline(message.id, message.steps, working, runCode)
+            // Finished code blocks open in the artifacts panel (HTML, SVG, Markdown) or in the editor (other languages).
+            val onPreview: (String, String) -> Unit = { language, code -> actions.previewCode(message.id, message.revisionOf, language, code) }
+            val onEdit: (String, String) -> Unit = { language, code -> actions.editCode(language, code) }
+            val preview = onPreview.takeIf { !working }
+            val edit = onEdit.takeIf { !working }
+            if (message.steps.isNotEmpty()) AgentTimeline(message.id, message.steps, working, runCode, preview, edit)
             else {
                 var expanded by rememberSaveable(message.id) { mutableStateOf(false) }
                 if (message.thinking.isNotBlank()) {
@@ -451,13 +537,14 @@ private fun Message(message: AccountMessage, working: Boolean, enabled: Boolean,
                     }
                     if (expanded) Text(message.thinking, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
-                if (message.text.isNotBlank()) MarkdownText(message.text, onRunCode = runCode)
+                if (message.text.isNotBlank()) MarkdownText(message.text, onRunCode = runCode, onPreviewCode = preview, onEditCode = edit)
                 else if (working) Text("Connecting…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             message.codeRuns.forEach { ToolStepRow(it) }
             message.artifacts.forEach { artifact ->
                 ArtifactCard(artifact, actions.artifactFile(artifact), onOpen = { actions.openArtifact(artifact) },
-                    onSave = { actions.saveArtifact(artifact) }, onShare = { actions.shareArtifact(artifact) })
+                    onSave = { actions.saveArtifact(artifact) }, onShare = { actions.shareArtifact(artifact) },
+                    onEdit = { actions.editArtifact(artifact) }.takeIf { EditorLanguage.forFileName(artifact.fileName) != null })
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

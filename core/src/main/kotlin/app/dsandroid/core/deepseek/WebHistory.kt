@@ -13,7 +13,8 @@ import kotlinx.serialization.json.Json
 /**
  * [agent] marks a user turn sent in agent mode. Assistant turns from agent mode keep their timeline in
  * [steps] (reasoning, tool calls, answers) and generated files in [artifacts]; [codeRuns] holds Run-button
- * executions of code blocks. All default to empty, so older history files still load.
+ * executions of code blocks. [revisionOf] links an "Ask DeepSeek to change this" request and its reply to the
+ * workbench artifact they revise. All default to empty, so older history files still load.
  */
 @Serializable
 data class WebMessage(
@@ -25,6 +26,7 @@ data class WebMessage(
     val steps: List<TurnStep> = emptyList(),
     val artifacts: List<Artifact> = emptyList(),
     val codeRuns: List<TurnStep.ToolCall> = emptyList(),
+    val revisionOf: String? = null,
 )
 @Serializable
 data class WebChat(val id: String, val title: String, val sessionId: String? = null, val parentId: Long? = null,

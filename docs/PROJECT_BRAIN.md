@@ -1,16 +1,18 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-v0.6.0 "Agent": one AgentLoop + ToolRegistry with two backends (native tool_calls on the API-key client; fenced ```tool JSON protocol on account-mode web chat), on-device Python (Chaquopy), PDF/DOCX/CSV files with artifact cards, installable skills. CI validates.
+v0.7.0 "Workbench" (branch feature/workbench-070; issues #20 artifacts panel, #21 editor, #22 account manager): artifacts panel with live preview, edit-and-rerun, versions and "Ask DeepSeek to change this"; in-app code editor (tokenizer in :core, undo/redo, find, SAF Save As, Run for Python); account manager listing DeepSeek web accounts and API-key profiles with balance, manual one-tap switching only. CI validates (no local Gradle).
 
 ## Status
+- v0.7.0 "Workbench" implemented on feature/workbench-070 (not pushed; nothing compiled or run locally): :core workbench/editor/accounts with JVM tests, :app artifacts panel, code editor, account manager, SyntaxPaletteTest, emulator WorkbenchTest + AccountManagerTest, versionCode 8 / 0.7.0, docs (README badges + section, RELEASE_NOTES_070 all PENDING CI, ACCOUNTS.md, FEATURE_MATRIX 65-67, PLAN Phase 2).
 - v0.6.0 "Agent" released 2026-10-18 (PR #18, merge 63897c9; tag v0.6.0; versionCode 7). Signed release APK, debug APK and SHA256SUMS.txt on the release.
 - :core: ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PdfLayoutEngine + DocumentModel (images, tables, lists, page breaks), DocxWriter/CsvWriter, write/read/present/write_file, run_python/pip_install + WheelInstaller, skills. JVM tests written for all.
 - :app: Chaquopy 17.1.0 / Python 3.13 (numpy, matplotlib) in a :python worker process, account-mode agent UI (toggle, tool rows, artifact cards, Export PDF, Run, Skills page, approvals), API-mode agent tools, built-in skills, emulator tests AgentModeTest + PythonRuntimeTest. CI workflows install Python 3.13.
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-v0.7.0: see the open milestone issues on GitHub (editor + artifacts panel with edit-and-rerun, account manager with manual switching, share target). Release-build Chaquopy pip now retries (PyPI timeouts broke the first v0.6.0 release run).
+Push feature/workbench-070 (owner), open the PR, run CI and the emulator workflow; fix any compile, lint or test failures; then record results in docs/RELEASE_NOTES_070.md (pass/fail table), FEATURE_MATRIX v0.7.0 status and the README v0.7.0 status line before tagging v0.7.0.
+Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>, workbench/<id>. One active id across both kinds; API-key profiles stay in SettingsStore.accounts (Settings key = profile "api-key"); API chats in conversations[-<profile>]. See docs/ACCOUNTS.md.
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -19,6 +21,8 @@ v0.7.0: see the open milestone issues on GitHub (editor + artifacts panel with e
 - Never run Gradle locally; CI is the build.
 
 ## Gotchas
+- Only AccountRegistry.switchTo (a tap in Settings > Accounts) may change the active account; failures go through AccountFailurePolicy (docs/ACCOUNTS.md).
+- Tags inside clickable (merged) rows need useUnmergedTree = true in Compose tests.
 - Resume must retain source numbering and mode, and never replay completed tools.
 - Only current-turn reasoning belongs in follow-up tool requests; omit older reasoning.
 
@@ -47,3 +51,4 @@ v0.7.0: see the open milestone issues on GitHub (editor + artifacts panel with e
 - v0.5.0 released: account mode merged; CI and 54 emulator tests green (light and dark); version 0.5.0 (versionCode 5); debug APK, signed release APK and SHA256SUMS.txt on the v0.5.0 GitHub release. Open: live app-originated completion on a device.
 - 2026-10-18 Claude Code (Opus 5.5): v0.6.0 Agent implemented (core protocol/loop/PDF/writers/Python/skills, Chaquopy worker, account-mode agent UI, API wiring, emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.
 - 2026-10-20 maintainer: README/PROJECT_BRAIN updated to the released v0.6.0 state; Chaquopy pip given --timeout/--retries for release builds.
+- 2026-10-20 11:09Z Claude Code (Opus 5.5): v0.7.0 Workbench implemented (artifacts panel, editor, account manager, core + emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.

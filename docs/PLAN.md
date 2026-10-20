@@ -153,10 +153,10 @@ Checkboxes above mean implementation is in the tree; they do not claim executed 
 - [ ] Provider-side account deletion, global logout, account email/binding details, shared links and voice catalogs need supported APIs. Local data/account screens explicitly describe local-only behavior.
 
 ### Phase 2 — differentiators
-- [ ] Artifacts panel: live HTML / SVG / Markdown preview with edit-and-rerun
+- [x] Artifacts panel: live HTML / SVG / Markdown preview with edit-and-rerun (v0.7.0, #20: account mode; versions, "Ask DeepSeek to change this", side by side at 840 dp; CI pending)
 - [ ] Save As to any folder through the Storage Access Framework
-- [ ] In-app editor with syntax highlighting, Save As and share
-- [ ] Account manager: several accounts listed with each one's quota; the user switches manually. NO automatic switching or rotation.
+- [x] In-app editor with syntax highlighting, Save As and share (v0.7.0, #21: original :core tokenizer, undo/redo, find, Save As via SAF, Run for Python; CI pending)
+- [x] Account manager: several accounts listed with each one's quota; the user switches manually. NO automatic switching or rotation. (v0.7.0, #22: balance for API keys, "not available" for web sign-ins; docs/ACCOUNTS.md; CI pending)
 - [ ] Deep research: multi-step browsing into a report with inline clickable citations
 - [ ] Vision: charts, diagrams, camera input; SVG and chart generation (item 11)
 - [ ] Text-to-speech with sentence highlighting
