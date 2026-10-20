@@ -101,7 +101,14 @@ class AgentJourneyTest {
         }
         e2e.device.wait(Until.hasObject(By.desc("Stop response")), 3_000)
         e2e.waitGone(By.desc("Stop response"), "the $tool turn", 120_000)
-        e2e.waitFor(By.text(if (ok) "Done: $tool succeeded." else "Noted: $tool was not run."), "the $tool result", 30_000)
+        val result = By.text(if (ok) "Done: $tool succeeded." else "Noted: $tool was not run.")
+        // A tall file card can push the closing line below the screen: scroll the chat down while waiting for it.
+        val deadline = System.currentTimeMillis() + 30_000
+        while (e2e.find(result) == null && System.currentTimeMillis() < deadline) {
+            e2e.find(E2eDriver.res("message-list"))?.scroll(Direction.DOWN, 0.8f)
+            e2e.device.wait(Until.hasObject(result), 1_000)
+        }
+        e2e.waitFor(result, "the $tool result", 2_000)
         e2e.step(step)
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -98,8 +99,15 @@ internal fun EmptyChat(modifier: Modifier = Modifier) {
 internal fun MessageList(state: AccountUiState, modifier: Modifier, onRegenerate: () -> Unit, onEdit: (AccountMessage) -> Unit,
     onShareText: (String) -> Unit, onSources: (List<WebCitation>) -> Unit, actions: AgentActions) {
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(state.messages.lastOrNull()?.text, state.messages.lastOrNull()?.thinking) {
-        if (state.busy && state.messages.isNotEmpty()) list.scrollToItem(state.messages.lastIndex)
+    // Follow the reply to its end (tool steps and file cards make the last item taller than the screen), and once more
+    // when the turn finishes, so the final answer and its files are in view.
+    var followedTurn by remember { mutableStateOf(false) }
+    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text, state.messages.lastOrNull()?.thinking, state.busy) {
+        if (state.messages.isNotEmpty() && (state.busy || followedTurn)) {
+            list.scrollToItem(state.messages.lastIndex)
+            list.scrollBy(100_000f)
+        }
+        followedTurn = state.busy
     }
     LazyColumn(modifier.testTag("message-list"), state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)) {
