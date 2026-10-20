@@ -1,5 +1,8 @@
 name: APK release
 
+# v1.0.0 and later: a tag builds and tests the release, signs it with the project key (required), runs the full Release E2E
+# suite on those exact signed bytes, and only then publishes that APK with its checksum. No debug or unsigned APK is
+# published.
 on:
   push:
     tags: ['v*']
@@ -31,7 +34,7 @@ jobs:
         run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
       - name: Check merged release permissions
         run: python3 scripts/check_release_manifest.py
-      - name: Build signed release when configured
+      - name: Build the signed release (signing secrets required)
         env:
           DSA_KEYSTORE_BASE64: ${{ secrets.DSA_KEYSTORE_BASE64 }}
           DSA_KEYSTORE_PASSWORD: ${{ secrets.DSA_KEYSTORE_PASSWORD }}
@@ -39,8 +42,10 @@ jobs:
           DSA_KEY_PASSWORD: ${{ secrets.DSA_KEY_PASSWORD }}
         shell: bash
         run: |
-          if [[ -z "$DSA_KEYSTORE_BASE64" ]]; then exit 0; fi
-          [[ -n "$DSA_KEYSTORE_PASSWORD" && -n "$DSA_KEY_ALIAS" && -n "$DSA_KEY_PASSWORD" ]] || exit 1
+          if [[ -z "$DSA_KEYSTORE_BASE64" || -z "$DSA_KEYSTORE_PASSWORD" || -z "$DSA_KEY_ALIAS" || -z "$DSA_KEY_PASSWORD" ]]; then
+            echo "::error::Release signing secrets are missing; a release is never published unsigned."
+            exit 1
+          fi
           umask 077
           export DSA_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/dsa-signing.XXXXXX")"
           trap 'rm -f "$DSA_KEYSTORE_PATH"' EXIT
@@ -48,17 +53,26 @@ jobs:
           gradle --no-daemon --no-configuration-cache :app:assembleRelease
           mkdir -p signed
           cp app/build/outputs/apk/release/app-release.apk signed/app-release.apk
-      - name: Name release APKs and generate checksums
+      - name: Check the signed APK (package, version from the tag, SDK levels, permissions, ABIs, not debuggable)
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
         run: |
           [[ "$RELEASE_TAG" =~ ^v[0-9A-Za-z._-]+$ ]] || exit 1
+          python3 scripts/check_release_apk.py signed/app-release.apk --version-name "${RELEASE_TAG#v}" --json signed/release-apk-check.json
+      - name: Upload the signed APK for the Release E2E run
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-apk-under-test
+          path: signed/app-release.apk
+          if-no-files-found: error
+      - name: Name the release APK and generate its checksum
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk "release/deepseek-android-${RELEASE_TAG}-debug.apk"
-          if [[ -f signed/app-release.apk ]]; then
-            cp signed/app-release.apk "release/deepseek-android-${RELEASE_TAG}-release.apk"
-          fi
+          cp signed/app-release.apk "release/deepseek-android-${RELEASE_TAG}-release.apk"
           cd release
           sha256sum ./*.apk > SHA256SUMS.txt
       - name: Upload validated APK
@@ -80,8 +94,14 @@ jobs:
             app/build/test-results/
             app/build/reports/lint-results-*
           if-no-files-found: ignore
-  release:
+  e2e:
     needs: validate
+    # The full suite (all journeys, tool coverage) on the exact signed APK that would be published.
+    uses: ./.github/workflows/release-e2e.yml
+    with:
+      apk-artifact: release-apk-under-test
+  release:
+    needs: [validate, e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -104,8 +124,7 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
-            DeepSeek Android (Unofficial). Debug builds are debug-key signed, not audited.
-            A signed, minified release APK is included only when CI signing secrets are configured.
-            Verify downloads with sha256sum -c SHA256SUMS.txt.
-            Not intended for Play distribution. CI debug keys can differ between runs;
-            replacing an existing installation may require uninstalling it first.
+            DeepSeek Android (Unofficial). The APK is the signed, minified release build that passed the unit tests, lint
+            and the Release E2E suite in this tag's workflow run (mocked backend plus the live login-page check).
+            Verify the download with sha256sum -c SHA256SUMS.txt.
+            Not intended for Play distribution. Installs signed with an earlier debug key must be uninstalled first.

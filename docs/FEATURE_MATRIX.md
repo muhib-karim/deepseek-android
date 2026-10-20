@@ -197,6 +197,22 @@ and 45 for the account-mode app; the API-key client keeps its v0.2 canvas.
 | 66 | In-app code editor for kt, py, js, ts, html, css, json, md, csv, sh, sql, xml, yaml and txt: original tokenizer highlighting, line numbers, undo/redo, find, Save, Save as (Storage Access Framework), Share, Run for Python | v0.7.0 |
 | 67 | Account manager: DeepSeek accounts and API-key profiles with sign-in type, balance (GET /user/balance for API keys) and when it was read; one-tap manual switching, separate credentials and chats per account; never automatic, "Switch account" on quota and rate errors only opens the list ([ACCOUNTS.md](ACCOUNTS.md)) | v0.7.0 |
 
+## v1.0.0 plan: official interface and plugins
+
+[PLAN_v1.md](PLAN_v1.md), slices S1-S10. Implemented on feature/v1.0.0; nothing was compiled locally, and the
+results come from CI (see [RELEASE_NOTES_100.md](RELEASE_NOTES_100.md)).
+
+| # | Item | Release |
+|---|---|---|
+| 68 | Official reference workflow: verified official APK (signer pinned to DeepSeek's assetlinks.json), emulator capture of every reachable screen in both themes, [SCREEN_SPEC.md](reference/SCREEN_SPEC.md) | v1.0.0 |
+| 69 | Official-style interface: welcome screen with DeepSeek's terms box, top bar, drawer with content search and date groups, message rows (Thought for N seconds, Read N web pages), composer, attach sheet, settings, account settings, data controls, share; light and dark | v1.0.0 |
+| 70 | Full sign-in gate: no chat, drawer, files or tools until DeepSeek confirms the session (`users/current`) | v1.0.0 |
+| 71 | Plugins & tools: one switch per tool for both routes, aliases, approvals; switched-off tools leave the prompt and are refused; remote MCP tools in account mode ([TOOLS.md](TOOLS.md)) | v1.0.0 |
+| 72 | Account agent makes Excel, PowerPoint, charts, PNG and ZIP files and searches the web; files stay in their chat's folder | v1.0.0 |
+| 73 | Code sandbox (JavaScript, WASM Python with SHA-256-pinned runtime) on both routes; native Python and skill functions as trusted execution, off by default, asking every run | v1.0.0 |
+| 74 | File cards: Open, Edit, Download, Save as, Share with the file's own name and type | v1.0.0 |
+| 75 | Release E2E suite on the signed release APK: video, step screenshots, required tool coverage; releases are published only after it passes ([EVIDENCE_v1.md](EVIDENCE_v1.md)) | v1.0.0 |
+
 ## v0.7.0 delivery status
 
 Rows **65-67**: released in v0.7.0 (2026-10-20, PR #23). CI green (JVM and app unit tests, lint, debug and
@@ -220,4 +236,5 @@ release builds) and 68/68 emulator tests; see [RELEASE_NOTES_070.md](RELEASE_NOT
 | v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
 | v0.7.0 (released) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
 | v0.7.1 (released) | sign-in fix, see [RELEASE_NOTES_071.md](RELEASE_NOTES_071.md) |
+| v1.0.0 (pending CI) | 8 (rows 68-75), see [RELEASE_NOTES_100.md](RELEASE_NOTES_100.md) |
 | **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |
