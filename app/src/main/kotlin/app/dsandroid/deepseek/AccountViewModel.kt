@@ -1166,7 +1166,7 @@ class AccountViewModel @JvmOverloads constructor(
                     val stored = bench.load(id)?.takeIf { it.chatId == chatId } ?: throw IllegalStateException("Missing artifact")
                     val edited = stored.withVersion(source, VersionOrigin.EDIT, System.currentTimeMillis())
                     if (edited != stored) bench.save(edited)
-                    edited to if (edited != stored) edited.latest.number else baseVersion
+                    edited to (if (edited != stored) edited.latest.number else baseVersion)
                 }
                 val prompt = ArtifactRevision.prompt(artifact, base, source, instruction)
                 val display = ArtifactRevision.display(artifact, base, instruction)

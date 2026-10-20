@@ -37,7 +37,7 @@ object SyntaxTokenizer {
 }
 
 private object Keywords {
-    private val kotlin = setOf(
+    private val kotlinWords = setOf(
         "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is", "null", "object",
         "package", "return", "super", "this", "throw", "true", "try", "typealias", "typeof", "val", "var", "when", "while", "by",
         "catch", "constructor", "finally", "import", "init", "where", "abstract", "annotation", "companion", "const", "crossinline",
@@ -76,7 +76,7 @@ private object Keywords {
     val pythonStringPrefixes = setOf("r", "b", "f", "u", "rb", "br", "fr", "rf")
 
     fun forLanguage(language: EditorLanguage): Set<String> = when (language) {
-        EditorLanguage.KOTLIN -> kotlin
+        EditorLanguage.KOTLIN -> kotlinWords
         EditorLanguage.TYPESCRIPT -> typeScript
         else -> javaScript
     }
