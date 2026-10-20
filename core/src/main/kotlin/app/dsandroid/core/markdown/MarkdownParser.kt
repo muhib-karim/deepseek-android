@@ -144,7 +144,8 @@ object MarkdownParser {
             }
             val marker = when {
                 text.startsWith("**", index) -> "**"
-                text.startsWith("__", index) -> "__"
+                // Underscores never open emphasis inside a word (CommonMark): data_analysis__describe_csv stays literal.
+                text.startsWith("__", index) && (index == 0 || !text[index - 1].isLetterOrDigit()) -> "__"
                 text.startsWith("~~", index) -> "~~"
                 char == '`' -> text.substring(index).takeWhile { it == '`' }
                 char == '*' -> "*"

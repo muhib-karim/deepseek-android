@@ -38,6 +38,12 @@ class MarkdownParserTest {
         assertTrue(spans.last().code)
         assertTrue(MarkdownParser.inline("**bold and *nested***").any { it.bold && it.italic })
     }
+    @Test fun underscoresInsideAWordAreLiteral() {
+        val spans = MarkdownParser.inline("Noted: data_analysis__describe_csv was not run. __bold__")
+        assertEquals("Noted: data_analysis__describe_csv was not run. bold", spans.joinToString("") { it.text })
+        assertTrue(spans.single { it.bold }.text == "bold")
+    }
+
     @Test fun incompleteStreamingMarkupRendersWithoutLeakingMarkers() {
         assertEquals(listOf(MarkdownBlock.Code("partial", "kt")), MarkdownParser.parse("```kt\npartial"))
         assertEquals("unfinished", MarkdownParser.inline("**unfinished").joinToString("") { it.text })
