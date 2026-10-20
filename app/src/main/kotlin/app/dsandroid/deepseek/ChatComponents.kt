@@ -42,12 +42,12 @@ import app.dsandroid.ui.LocalOfficialColors
 import app.dsandroid.ui.MarkdownText
 import kotlin.math.roundToInt
 
-/** Official top bar: menu, the chat's title (and the account in use when there are several), new chat. */
+/** Official top bar: menu, the chat's title (and the account in use when there are several), share (open chats), new chat. */
 @Composable
-internal fun ChatTopBar(state: AccountUiState, onMenu: () -> Unit, onNew: () -> Unit) {
+internal fun ChatTopBar(state: AccountUiState, onMenu: () -> Unit, onNew: () -> Unit, onShare: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp)) {
         IconButton(onClick = onMenu, modifier = Modifier.align(Alignment.CenterStart)) { AppIcon(Glyph.MENU, "Open navigation", Modifier.size(24.dp)) }
-        Column(Modifier.align(Alignment.Center).padding(horizontal = 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.align(Alignment.Center).padding(horizontal = if (onShare != null) 104.dp else 60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(state.title.ifBlank { "New chat" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // With several accounts, the one in use is always visible; it changes only from Settings > Accounts.
             if (state.accounts.size > 1) state.accounts.firstOrNull { it.active }?.let { active ->
@@ -55,7 +55,30 @@ internal fun ChatTopBar(state: AccountUiState, onMenu: () -> Unit, onNew: () -> 
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("active-account"))
             }
         }
-        IconButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterEnd)) { AppIcon(Glyph.NEW_CHAT, "New Chat", Modifier.size(24.dp)) }
+        Row(Modifier.align(Alignment.CenterEnd)) {
+            if (onShare != null) IconButton(onClick = onShare, enabled = !state.busy) { AppIcon(Glyph.SHARE, "Share chat", Modifier.size(22.dp)) }
+            IconButton(onClick = onNew, enabled = !state.busy) { AppIcon(Glyph.NEW_CHAT, "New Chat", Modifier.size(24.dp)) }
+        }
+    }
+}
+
+/** Share chat: the conversation as text (to any app) or as a PDF file card in the chat. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ShareChatSheet(onDismiss: () -> Unit, onShareText: () -> Unit, onExportPdf: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = LocalOfficialColors.current.groupSurface) {
+        Text("Share chat", Modifier.padding(horizontal = 20.dp, vertical = 4.dp), style = MaterialTheme.typography.titleMedium)
+        listOf(Triple(Glyph.SHARE, "Share as text", onShareText), Triple(Glyph.EXPORT, "Export as PDF", onExportPdf)).forEach { (glyph, label, action) ->
+            Row(Modifier.fillMaxWidth().clickable(onClick = action).heightIn(min = 52.dp).padding(horizontal = 20.dp)
+                .testTag("share-chat-${label.substringAfterLast(' ').lowercase()}"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                AppIcon(glyph, modifier = Modifier.size(20.dp))
+                Text(label, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        Text("Shared chats say they come from an unofficial client and that replies are AI-generated.", Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.navigationBarsPadding().height(12.dp))
     }
 }
 
@@ -161,7 +184,8 @@ private fun MessageItem(message: AccountMessage, working: Boolean, enabled: Bool
 /** Official thinking block: "Thinking…" while it streams, then "Thought for N seconds"; collapsed once finished. */
 @Composable
 internal fun ThinkingBlock(id: String, text: String, active: Boolean, seconds: Double?) {
-    var expanded by rememberSaveable(id) { mutableStateOf(false) }
+    val collapse = LocalCollapseThinking.current
+    var expanded by rememberSaveable(id) { mutableStateOf(!collapse) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val label = when {
         active -> "Thinking…"
@@ -265,7 +289,7 @@ internal fun ChatComposer(state: AccountUiState, draft: (String) -> Unit, send: 
                         }
                         else -> key(state.conversationId) {
                             AccountDictation(controls, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
-                                speechInput, voiceTrigger, onVoiceHandled)
+                                speechInput, voiceTrigger, onVoiceHandled, language = state.audioLanguage)
                         }
                     }
                 }

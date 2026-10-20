@@ -333,7 +333,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { quickLaunch.value = LaunchRequest(QuickAction.VOICE) }
         compose.waitUntil(10_000) { speech.starts > starts }
         compose.runOnIdle { speech.result?.invoke("Voice shortcut") }
-        settings(); compose.onNodeWithText("Back", substring = false).performClick()
+        settings(); compose.onNodeWithContentDescription("Back").performClick()
         compose.runOnIdle { assertEquals(starts + 1, speech.starts) }
         compose.onNodeWithTag("account-composer").performTextReplacement("")
         compose.onNodeWithContentDescription("Dictate message").performClick()
@@ -398,11 +398,18 @@ class AccountFeaturesTest(private val dark: Boolean) {
         screenshot("feature10-actions")
     }
 
+    /** Official settings: Appearance opens a radio dialog with Confirm. */
+    private fun chooseAppearance(value: Appearance) {
+        compose.onNodeWithTag("settings-appearance").performScrollTo().performClick()
+        compose.onNodeWithTag("choice-${value.name}").performClick()
+        compose.onNodeWithTag("choice-confirm").performClick()
+    }
+
     @Test fun feature11_settings() {
         launch(); send(); finished(); settings()
-        compose.onNodeWithText("System", substring = false).performClick()
+        chooseAppearance(Appearance.SYSTEM)
         assertEquals(Appearance.SYSTEM, vm.state.value.appearance)
-        compose.onNodeWithText(if (dark) "Dark" else "Light", substring = false).performClick()
+        chooseAppearance(theme)
         assertEquals(theme.name, app.getSharedPreferences("deepseek_web_appearance", 0).getString("theme", null))
         lateinit var reloaded: AccountViewModel
         val reloadBase = server.url("/").toString()
