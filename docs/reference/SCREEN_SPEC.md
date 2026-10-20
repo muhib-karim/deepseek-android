@@ -14,6 +14,7 @@ Every value carries a source tag:
 | **[R]** | Resource table of the verified 2.6.2 base APK (string and colour resources read on 2026-10-20 with a local reader; nothing extracted into the repo) | Exact for copy and named colours |
 | **[M]** | Measurements from the Play listing's promotional screenshots in [../ui-spec.md](../ui-spec.md) (phone inset normalised to 393 dp, about 2.14 px/dp, JPEG/PNG compression) | ±1-2 dp, ±1 sp, ±#03 per colour channel |
 | **[E]** | Estimate from public screenshots and descriptions, not yet measured | To be replaced by values measured from the reference capture |
+| **[C]** | Reference capture of the pinned 1.4.1 build (run 39447927215, API 34 Google APIs image, offline), as reviewed from the run's screenshots | Exact for layout and copy of 1.4.1, an older release than 2.6.2 |
 
 The reference workflow ([.github/workflows/reference.yml](../../.github/workflows/reference.yml)) installs the verified APK
 on an emulator at the same viewport as our capture tests (1080 x 2200 px, 440 dpi = 392.7 dp wide, font scale 1.0) and
@@ -119,9 +120,20 @@ embedded browsers), **Log in with phone or email** (DeepSeek's own sign-in page 
 No chat, drawer or composer exists until a session is validated with DeepSeek (`GET /api/v0/users/current`).
 Tags: `welcome-screen`, `welcome-browser`, `welcome-google`, `welcome-phone-email`, `welcome-paste`.
 
+**Captured [C] (1.4.1, an older interface):** the signed-out welcome has "Contact us" at the top right, the whale logo
+and wordmark, then the sign-in buttons and the consent checkbox ("I confirm that I have read and agree to DeepSeek's
+Terms of Use and Privacy Policy"). Offline, as captured, it offers **Continue with Phone** and **Continue with Password**
+and no Google button; online, the same build also showed **Continue with Google** and **Sign up**, but a server-driven
+"Update Required / Please update to the latest version to ensure all features work properly / Update now" modal covered
+every screen (runs 39445093258, 39445097855), which is why the capture runs offline. Tapping a sign-in route before the
+checkbox is ticked opens a "Terms of Use and Privacy Policy" consent dialog. Light and dark welcome were both captured.
+**Ours** keeps the order (mark and wordmark, routes, consent text with links) without the checkbox gate: our consent line
+links DeepSeek's Terms of Use and Privacy Policy, and DeepSeek's own sign-in page asks for consent itself.
+
 ### login-password, forgot-password, login-google
 Variants of the sign-in page. **Ours:** the in-app page is DeepSeek's own web sign-in (password, code and reset live
-there); Google always goes through the phone's browser.
+there); Google always goes through the phone's browser. Not captured yet: the 1.4.1 capture stops at the consent dialog
+until the driver ticks the checkbox first (reviewer's driver fix).
 
 ### chat-empty: new chat [M]
 Top bar: menu icon left ("Open sidebar" [R]), title centred ("New chat" [R]; the model mode "Instant" / "Expert" [R]
