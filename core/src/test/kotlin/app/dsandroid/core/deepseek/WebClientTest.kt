@@ -121,8 +121,8 @@ data: [DONE]
             // Rejected sessions never unlock: HTTP 401 and business code 40003 are both a session error.
             assertThrows(SessionExpired::class.java) { runBlocking { client.currentUser(credentials) } }
             assertThrows(SessionExpired::class.java) { runBlocking { client.currentUser(credentials) } }
-            // Service trouble or an unreadable answer is not a confirmation either.
-            assertThrows(EndpointChanged::class.java) { runBlocking { client.currentUser(credentials) } }
+            // Service trouble (a server error) or an unreadable answer is not a confirmation either.
+            assertThrows(WebServiceBusy::class.java) { runBlocking { client.currentUser(credentials) } }
             assertThrows(EndpointChanged::class.java) { runBlocking { client.currentUser(credentials) } }
         } finally { server.shutdown() }
     }

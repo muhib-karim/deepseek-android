@@ -98,7 +98,7 @@ object ServerHistory {
      * chat whose session DeepSeek no longer lists was deleted elsewhere: without local files it goes, otherwise it stays as a
      * read-only local chat. Chats that exist only here are kept as they are.
      */
-    fun merge(local: List<WebChat>, server: List<ServerSession>, complete: Boolean, openId: String?, newId: () -> String): List<WebChat> {
+    fun merge(local: List<WebChat>, server: List<ServerSession>, complete: Boolean, openId: String?, newId: (ServerSession) -> String): List<WebChat> {
         val listed = server.associateBy { it.id }
         val merged = local.mapNotNull { chat ->
             val session = chat.sessionId?.let(listed::get)
@@ -113,7 +113,7 @@ object ServerHistory {
         }
         val known = local.mapNotNull { it.sessionId }.toSet()
         val added = server.filter { it.id !in known }.map { session ->
-            WebChat(newId(), session.title.ifBlank { "New chat" }, session.id, updatedAt = session.updatedAt, pinned = session.pinned,
+            WebChat(newId(session), session.title.ifBlank { "New chat" }, session.id, updatedAt = session.updatedAt, pinned = session.pinned,
                 remote = true, remoteUpdatedAt = session.updatedAt)
         }
         return (merged + added).sortedByDescending { it.updatedAt }.take(WebHistory.MAX_CHATS)

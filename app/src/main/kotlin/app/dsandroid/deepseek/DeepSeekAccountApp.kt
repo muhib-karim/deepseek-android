@@ -55,7 +55,6 @@ import app.dsandroid.ui.DsAndroidApp
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.deepseek.BrowserSignIn
-import app.dsandroid.core.deepseek.PowChallenge
 import app.dsandroid.core.deepseek.SessionToken
 import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.workbench.ArtifactPanel
@@ -111,6 +110,12 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     fun useSession(token: SessionToken) = scope.launch {
         BrowserSessionInbox.clearStarted(context)
         if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
+    }
+    // Search and uploads leave the device, so they are confirmed first; Retry takes the same path.
+    fun requestSend(think: Boolean, search: Boolean) {
+        if (!state.signedIn) vm.navigate(AccountPage.LOGIN)
+        else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
+        else vm.send(think, search)
     }
     fun openLink(url: String) {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -324,7 +329,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     // The workbench pane keeps its editor state when it moves between the side pane and the full-screen overlay.
     val workbenchPane = remember {
-        movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, browser::solve, saveAs, shareText) }
+        movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, saveAs, shareText) }
     }
     AccountTheme(state.appearance, state.textScale) {
         // An active API-key profile chats through the API-key client; Settings > Accounts and sign-in still use the account shell.
@@ -395,19 +400,17 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         onDraft = vm::draft, onStop = vm::stop, onTheme = vm::appearance, onError = vm::notice,
                         onRename = vm::rename, onDelete = vm::delete, speechInput = speechInput, voiceTrigger = voiceTrigger, onVoiceHandled = { voiceTrigger = 0 },
                         onRegenerate = {
-                            if (vm.messageNeedsConfirmation()) pendingResend = { vm.regenerate(browser::solve) }
-                            else vm.regenerate(browser::solve)
+                            if (vm.messageNeedsConfirmation()) pendingResend = { vm.regenerate() }
+                            else vm.regenerate()
                         },
                         onEdit = { id, text ->
-                            if (vm.messageNeedsConfirmation(id)) pendingResend = { vm.edit(id, text, browser::solve) }
-                            else vm.edit(id, text, browser::solve)
+                            if (vm.messageNeedsConfirmation(id)) pendingResend = { vm.edit(id, text) }
+                            else vm.edit(id, text)
                         },
                         onLogout = { browser.stopForLogout(); vm.logout() }, onAttachment = ::pick, onRemoveAttachment = vm::removeAttachment,
-                        onSend = { think, search ->
-                            if (!state.signedIn) vm.navigate(AccountPage.LOGIN)
-                            else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
-                            else vm.send(think, search, browser::solve)
-                        },
+                        onSend = ::requestSend,
+                        onRetry = { vm.retryRequest()?.let { (think, search) -> requestSend(think, search) } },
+                        onFeedback = vm::setFeedback, onHistoryRefresh = { vm.refreshHistory() },
                         loginContent = {
                             Column(Modifier.fillMaxSize()) {
                                 val page = browser.pageState
@@ -517,7 +520,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                     if (search) append("\n\nDeepSeek Search will be enabled for this message.")
                     if (state.attachments.isNotEmpty()) append("\n\nUpload to DeepSeek: ${state.attachments.joinToString()}.")
                 }) },
-                confirmButton = { TextButton(onClick = { pendingSend = null; vm.send(think, search, browser::solve) }) { Text("Send") } },
+                confirmButton = { TextButton(onClick = { pendingSend = null; vm.send(think, search) }) { Text("Send") } },
                 dismissButton = { TextButton(onClick = { pendingSend = null }) { Text("Cancel") } })
         }
     }
@@ -529,13 +532,13 @@ internal fun apiHistoryDir(profileId: String?): String =
 
 /** The artifacts panel or the editor, with the latest notice shown inside the pane (the chat's banner may be covered). */
 @Composable
-private fun WorkbenchPaneHost(pane: WorkbenchPane, state: AccountUiState, vm: AccountViewModel, solve: suspend (PowChallenge) -> Long,
+private fun WorkbenchPaneHost(pane: WorkbenchPane, state: AccountUiState, vm: AccountViewModel,
     saveAs: (String, String) -> Unit, share: (String, String) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         when (pane) {
             is WorkbenchPane.Panel -> ArtifactPanel(pane, state.textScale, chatBusy = state.busy, draft = vm::draftText, saveDraft = vm::saveDraft,
                 onClose = vm::closePane, onRun = { source -> vm.runArtifact(pane.artifact.id, source) },
-                onAsk = { base, source, instruction -> vm.askArtifactChange(pane.artifact.id, base, source, instruction, solve) },
+                onAsk = { base, source, instruction -> vm.askArtifactChange(pane.artifact.id, base, source, instruction) },
                 onSaveAs = saveAs, onShare = share)
             is WorkbenchPane.Editor -> EditorScreen(pane.file, state.textScale, state.editorOutput, state.editorBusy, draft = vm::draftText,
                 saveDraft = vm::saveDraft, onClose = vm::closePane, onSave = vm::saveEditor, onSaveAs = saveAs, onShare = share,

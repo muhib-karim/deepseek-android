@@ -97,7 +97,8 @@ internal fun EmptyChat(modifier: Modifier = Modifier) {
 /** The conversation, newest at the bottom; follows the reply while it streams. */
 @Composable
 internal fun MessageList(state: AccountUiState, modifier: Modifier, onRegenerate: () -> Unit, onEdit: (AccountMessage) -> Unit,
-    onShareText: (String) -> Unit, onSources: (List<WebCitation>) -> Unit, actions: AgentActions) {
+    onShareText: (String) -> Unit, onSources: (List<WebCitation>) -> Unit, actions: AgentActions,
+    onFeedback: (String, String?) -> Unit = { _, _ -> }) {
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     // Follow the reply to its end (tool steps and file cards make the last item taller than the screen), and once more
     // when the turn finishes, so the final answer and its files are in view.
@@ -264,7 +265,7 @@ internal fun ChatComposer(state: AccountUiState, draft: (String) -> Unit, send: 
     val official = LocalOfficialColors.current
     // The chat page exists only for a confirmed session; this stays as a second line of defence.
     val usable = state.signedIn && state.ready
-    val controls = usable && !state.busy
+    val controls = usable && !state.busy && !state.loadingChat
     val canSend = state.draft.isNotBlank() || state.attachments.isNotEmpty()
     Surface(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp), shape = RoundedCornerShape(22.dp),
         color = official.composerSurface, border = BorderStroke(1.dp, official.composerBorder), shadowElevation = 2.dp) {
