@@ -176,7 +176,7 @@ fun DeepSeekShell(
     onTheme: (Appearance) -> Unit = {}, onLogout: () -> Unit = {}, onError: (String) -> Unit = {},
     onAttachment: (String) -> Unit = {}, onRemoveAttachment: (Int) -> Unit = {},
     onFinishLogin: () -> Unit = {}, loginContent: @Composable () -> Unit = {},
-    onBrowserSignIn: () -> Unit = {}, onPasteSession: () -> Unit = {},
+    onBrowserSignIn: () -> Unit = {}, onPasteSession: () -> Unit = {}, onCopyDiagnostics: () -> Unit = {},
     onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
@@ -260,14 +260,13 @@ fun DeepSeekShell(
                     AccountPage.CHAT -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(Modifier.widthIn(max = 840.dp).fillMaxHeight()) {
                             if (state.messages.isEmpty()) {
-                                Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                                     OriginalMark()
                                     Spacer(Modifier.height(16.dp))
-                                    Text("How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                                    Text(if (state.ready && !state.signedIn) "Sign in to start chatting" else "How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                                     if (state.ready && !state.signedIn) {
                                         Spacer(Modifier.height(20.dp))
-                                        Button(onClick = onLogin, shape = RoundedCornerShape(24.dp)) { Text("Log in with DeepSeek") }
-                                        Text("Use your DeepSeek account", Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                        SignInCard(onBrowser = onBrowserSignIn, onPaste = onPasteSession, onInApp = onLogin)
                                     } else if (!state.ready) Text("Loading…", Modifier.padding(12.dp))
                                 }
                             } else {
@@ -283,7 +282,8 @@ fun DeepSeekShell(
                                     }
                                 }
                             }
-                            if (!state.signedIn && state.messages.isNotEmpty()) TextButton(onClick = onLogin, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Log in with DeepSeek") }
+                            if (state.ready && !state.signedIn && state.messages.isNotEmpty()) SignInCard(onBrowser = onBrowserSignIn, onPaste = onPasteSession, onInApp = onLogin,
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp))
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -341,6 +341,8 @@ fun DeepSeekShell(
                     AccountPage.SKILLS -> SkillsPage(state, actions, Modifier.weight(1f))
                     AccountPage.ACCOUNTS -> AccountsPage(state, accountActions, Modifier.weight(1f))
                     AccountPage.LOGIN -> {
+                        Text(DeepSeekWebView.LOADING_STATUS, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("login-status"),
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                         Text(DeepSeekWebView.SSO_NOTICE, Modifier.heightIn(max = 104.dp).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = onLogin) { Text("Reload login") }
@@ -349,6 +351,9 @@ fun DeepSeekShell(
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             Button(onClick = onBrowserSignIn, modifier = Modifier.testTag("browser-sign-in"), shape = RoundedCornerShape(20.dp)) { Text("Continue with Google") }
                             TextButton(onClick = onPasteSession, modifier = Modifier.testTag("paste-session")) { Text("Paste session") }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = onCopyDiagnostics, modifier = Modifier.testTag("copy-diagnostics")) { Text("Copy diagnostics") }
                         }
                         Box(Modifier.weight(1f).fillMaxWidth()) { loginContent() }
                     }
@@ -570,7 +575,7 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
     onAgent: (Boolean) -> Unit = {}) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
-    // Signed out (no DeepSeek session; an API-key profile uses its own screen): no typing, and a tap opens sign-in.
+    // Signed out (no DeepSeek session; an API-key profile uses its own screen): no typing, no send, no chips or attachments; a tap on the field opens sign-in.
     val locked = state.ready && !state.signedIn
     val pillColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -590,30 +595,53 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.Center) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(selected = think, onClick = { think = !think }, label = { Text("Think", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
+                        leadingIcon = { AppIcon(Glyph.THINK, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
                     FilterChip(selected = search, onClick = { search = !search }, label = { Text("Search", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
+                        leadingIcon = { AppIcon(Glyph.SEARCH, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant))
                     FilterChip(selected = state.agent, onClick = { onAgent(!state.agent) }, label = { Text("Agent", fontSize = 12.sp) },
-                        leadingIcon = { AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp)) }, enabled = !state.busy, shape = RoundedCornerShape(18.dp), colors = pillColors,
-                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant),
+                        leadingIcon = { AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp)) }, enabled = !state.busy && !locked, shape = RoundedCornerShape(18.dp), colors = pillColors,
+                        border = FilterChipDefaults.filterChipBorder(enabled = !state.busy && !locked, selected = false, borderColor = MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.testTag("agent-toggle").semantics { contentDescription = if (state.agent) "Agent mode on" else "Agent mode off" })
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = attach, enabled = !state.busy && !state.importing) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
+                    IconButton(onClick = attach, enabled = !state.busy && !state.importing && !locked) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
                     key(state.conversationId) {
                         AccountDictation(!state.busy && state.ready && !locked, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
                             speechInput, voiceTrigger, onVoiceHandled)
                     }
-                    IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy || locked ||
-                        (state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
+                    IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy ||
+                        (!locked && state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
                         val canSend = state.busy || state.draft.isNotBlank() || state.attachments.isNotEmpty()
                         if (canSend) Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                             AppIcon(if (state.busy) Glyph.STOP else Glyph.SEND, if (state.busy) "Stop response" else "Send message", Modifier.padding(6.dp))
                         } else OutlinedCircle { AppIcon(Glyph.SEND, "Send message", Modifier.size(14.dp)) }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Signed out: every way to sign in, on the first screen. The browser route comes first because it works on every
+ * phone, including ones where the in-app sign-in page stays blank; the in-app page is the secondary option.
+ */
+@Composable
+private fun SignInCard(onBrowser: () -> Unit, onPaste: () -> Unit, onInApp: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.padding(horizontal = 20.dp).widthIn(max = 420.dp).fillMaxWidth().testTag("signin-card"), shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("You're signed out. Chat is off until you sign in with your DeepSeek account.", textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onBrowser, modifier = Modifier.fillMaxWidth().testTag("card-google"), shape = RoundedCornerShape(24.dp)) { Text("Continue with Google") }
+            OutlinedButton(onClick = onBrowser, modifier = Modifier.fillMaxWidth().testTag("card-browser"), shape = RoundedCornerShape(24.dp)) { Text("Sign in with browser") }
+            Text("Both open your browser once, then bring the session back to this app.", textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = onInApp, modifier = Modifier.testTag("card-in-app")) { Text("Log in with DeepSeek") }
+                TextButton(onClick = onPaste, modifier = Modifier.testTag("card-paste")) { Text("Paste session") }
             }
         }
     }
