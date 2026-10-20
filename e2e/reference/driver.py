@@ -427,6 +427,26 @@ class Session:
 
     # ---- signed-out screens ----
 
+    def open_sign_in(self, theme, *patterns):
+        """Taps a sign-in option. The welcome requires the terms checkbox: when the app asks for consent first, that
+        dialog is captured once per theme ("terms-required") and accepted with its own Agree button (a fresh emulator,
+        no account), so the real sign-in screen behind it can be captured."""
+        if not self.tap_text(*patterns, timeout=5):
+            return False
+        dialog = self.device.wait(lambda nodes: find_any(nodes, texts=(r"^Terms of Use and Privacy Policy$",)), timeout=3)
+        if dialog:
+            if (theme, "terms-required") not in {(e["theme"], e["screen"]) for e in self.entries}:
+                self.capture("terms-required", theme)
+            if not self.tap_text(r"^Agree$", timeout=3):
+                return False
+            time.sleep(1.5)
+            nodes, _ = self.device.dump(attempts=2)
+            # Some builds only tick the box on Agree; tap the option again if the welcome is still showing.
+            if self.login_node(nodes) and find_any(nodes, texts=patterns):
+                self.tap_text(*patterns, timeout=3)
+        time.sleep(1.5)
+        return True
+
     def signed_out(self, theme, first=False):
         self.recorder.start(f"{theme}-signed-out")
         if self.to_login(first=first, theme=theme) is None:
@@ -440,8 +460,16 @@ class Session:
             return False
         self.capture("login", theme)
 
+        def phone():
+            if not self.open_sign_in(theme, r"Continue with Phone", r"Log in with phone"):
+                return "no phone sign-in option"
+            self.capture("login-phone", theme)
+            self.to_login(theme=theme)
+            return None
+        self.attempt("login-phone", theme, phone)
+
         def password():
-            if not self.tap_text(r"Log in with password", r"Continue with Password", r"^Password$", timeout=5):
+            if not self.open_sign_in(theme, r"Log in with password", r"Continue with Password", r"^Password$"):
                 return "no password sign-in option"
             self.capture("login-password", theme)
             self.to_login(theme=theme)
@@ -449,7 +477,7 @@ class Session:
         self.attempt("login-password", theme, password)
 
         def forgot():
-            self.tap_text(r"Log in with password", r"Continue with Password", timeout=3)
+            self.open_sign_in(theme, r"Log in with password", r"Continue with Password")
             if not self.tap_text(r"^Forgot password", timeout=5):
                 return "no forgot-password link"
             self.capture("forgot-password", theme)
