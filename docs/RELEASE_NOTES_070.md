@@ -1,11 +1,12 @@
-# v0.7.0 "Workbench" (in development)
+# v0.7.0 "Workbench" (2026-10-20)
 
 The artifacts panel, an in-app code editor and an account manager with manual switching only.
 Tracked in issues #20, #21 and #22.
 
-**Validation status: nothing in this release has been compiled, run or tested yet.** The code and tests
-were written without a local build (the project builds only on GitHub Actions). Every row in the table
-below is PENDING CI until the CI and emulator workflows run on the pushed branch.
+Validation: CI green on PR #23 (core JVM tests, app unit tests, lint, debug and release builds, merged-manifest
+permission check) and 68/68 instrumented tests on an API 34 x86_64 emulator, including `WorkbenchTest` and
+`AccountManagerTest`. The signed release APK is built by the release workflow from tag v0.7.0. No live run
+against chat.deepseek.com or a real API key has been recorded yet (row 15).
 
 ## New
 
@@ -55,20 +56,20 @@ App unit test: `SyntaxPaletteTest`. Emulator: `WorkbenchTest`, `AccountManagerTe
 
 | # | Item | Evidence | Status |
 | --- | --- | --- | --- |
-| 1 | Line diff, version history and "+N -M lines" | `LineDiffTest`, `WorkbenchArtifactTest` | PENDING CI |
-| 2 | "Ask DeepSeek to change this" prompt and reply extraction | `ArtifactRevisionTest` | PENDING CI |
-| 3 | Tokenizer for each language family; undo/redo; find | `SyntaxTokenizerTest`, `EditorStateTest` | PENDING CI |
-| 4 | A quota error never changes the active account; switching only by explicit choice | `AccountRegistryTest` | PENDING CI |
-| 5 | Balance endpoint request, parsing and "last read" text | `BalanceTest` | PENDING CI |
-| 6 | Editor token colors meet 4.5:1 contrast in light and dark | `SyntaxPaletteTest` | PENDING CI |
-| 7 | Open an HTML artifact from an answer, edit it, Run, see v2 | `WorkbenchTest.htmlArtifactOpensEditsRunsAndShowsV2` | PENDING CI |
-| 8 | Ask DeepSeek: request is the next message in the chat; reply becomes v2 | `WorkbenchTest.askDeepSeekSendsTheEditedSourceAndItsReplyBecomesTheNextVersion` | PENDING CI |
-| 9 | Save as launches ACTION_CREATE_DOCUMENT; Save writes the chat folder | `WorkbenchTest.editorSaveAsLaunchesCreateDocumentAndSaveWritesTheChatFolder` | PENDING CI |
-| 10 | Add a second API-key profile, balances, switch manually and back | `AccountManagerTest.aSecondApiKeyProfileIsListedAndUsedOnlyAfterATap` | PENDING CI |
-| 11 | Mocked rate error shows "Switch account"; active account unchanged | `AccountManagerTest.aQuotaOrRateErrorShowsSwitchAccountAndKeepsTheActiveAccount` | PENDING CI |
-| 12 | Mocked 402 quota error (API-key client) shows "Switch account"; profile unchanged | `AccountManagerTest.anApiQuotaErrorShowsSwitchAccountAndKeepsTheProfile` | PENDING CI |
-| 13 | All earlier JVM, app unit and emulator tests still pass | CI and emulator workflows | PENDING CI |
-| 14 | Lint, debug and signed release builds; merged manifest keeps INTERNET + RECORD_AUDIO only | CI and release workflows | PENDING CI |
+| 1 | Line diff, version history and "+N -M lines" | `LineDiffTest`, `WorkbenchArtifactTest` | PASS (CI unit tests) |
+| 2 | "Ask DeepSeek to change this" prompt and reply extraction | `ArtifactRevisionTest` | PASS (CI unit tests) |
+| 3 | Tokenizer for each language family; undo/redo; find | `SyntaxTokenizerTest`, `EditorStateTest` | PASS (CI unit tests) |
+| 4 | A quota error never changes the active account; switching only by explicit choice | `AccountRegistryTest` | PASS (CI unit tests) |
+| 5 | Balance endpoint request, parsing and "last read" text | `BalanceTest` | PASS (CI unit tests) |
+| 6 | Editor token colors meet 4.5:1 contrast in light and dark | `SyntaxPaletteTest` | PASS (CI unit tests) |
+| 7 | Open an HTML artifact from an answer, edit it, Run, see v2 | `WorkbenchTest.htmlArtifactOpensEditsRunsAndShowsV2` | PASS (emulator, 68/68) |
+| 8 | Ask DeepSeek: request is the next message in the chat; reply becomes v2 | `WorkbenchTest.askDeepSeekSendsTheEditedSourceAndItsReplyBecomesTheNextVersion` | PASS (emulator, 68/68) |
+| 9 | Save as launches ACTION_CREATE_DOCUMENT; Save writes the chat folder | `WorkbenchTest.editorSaveAsLaunchesCreateDocumentAndSaveWritesTheChatFolder` | PASS (emulator, 68/68) |
+| 10 | Add a second API-key profile, balances, switch manually and back | `AccountManagerTest.aSecondApiKeyProfileIsListedAndUsedOnlyAfterATap` | PASS (emulator, 68/68) |
+| 11 | Mocked rate error shows "Switch account"; active account unchanged | `AccountManagerTest.aQuotaOrRateErrorShowsSwitchAccountAndKeepsTheActiveAccount` | PASS (emulator, 68/68) |
+| 12 | Mocked 402 quota error (API-key client) shows "Switch account"; profile unchanged | `AccountManagerTest.anApiQuotaErrorShowsSwitchAccountAndKeepsTheProfile` | PASS (emulator, 68/68) |
+| 13 | All earlier JVM, app unit and emulator tests still pass | CI and emulator workflows | PASS (CI and emulator, PR #23) |
+| 14 | Lint, debug and signed release builds; merged manifest keeps INTERNET + RECORD_AUDIO only | CI and release workflows | PASS (CI; signed APK from the release workflow) |
 | 15 | Live: Ask DeepSeek on chat.deepseek.com with a real account; live balance with a real key | manual | NOT RUN |
 
 ## Not included / known limits

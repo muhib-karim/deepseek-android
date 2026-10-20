@@ -5,9 +5,8 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Latest release: **v0.6.0 "Agent"**, released 2026-10-18 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.6.0)).
-**v0.7.0 "Workbench"** (next section) is in development and has not been built or tested yet. Not
-independently audited. Each GitHub release carries a debug APK, a signed
+Latest release: **v0.7.0 "Workbench"**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.7.0)).
+Not independently audited. Each GitHub release carries a debug APK, a signed
 minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitHub Actions.
 Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
 emulators.
@@ -44,9 +43,10 @@ account are in [docs/ACCOUNTS.md](docs/ACCOUNTS.md); release notes:
 No new dependency and no new install permission: INTERNET plus runtime RECORD_AUDIO remain the only
 ones. versionCode 8, versionName 0.7.0.
 
-Status: **nothing in v0.7.0 has been compiled or run yet.** The code, JVM tests and emulator tests were
-written without a local build; the project builds only on GitHub Actions, and every row of the pass/fail
-table in [docs/RELEASE_NOTES_070.md](docs/RELEASE_NOTES_070.md) is PENDING CI.
+Validation: CI green on PR #23 (JVM and app unit tests, lint, debug and release builds) and 68/68
+instrumented tests on an API 34 x86_64 emulator. The pass/fail table is in
+[docs/RELEASE_NOTES_070.md](docs/RELEASE_NOTES_070.md). No live run against chat.deepseek.com or a real API
+key has been recorded yet.
 
 ## v0.6.0: Agent
 
@@ -462,7 +462,7 @@ release keys can require uninstalling first, which clears app data. Use
 files separately. Restore merges records after confirmation; existing IDs win,
 preferences are restored and imported schedules stay paused. Credentials and
 provider/connector configuration must be entered separately. Keep the unencrypted
-backup private. The latest release is 0.6.0 (versionCode 7); v0.7.0 (versionCode 8) is in development.
+backup private. The latest release is 0.7.0 (versionCode 8).
 
 ## Screenshots
 
@@ -492,7 +492,7 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
-- v0.7.0 "Workbench" (in development, not yet built): artifacts panel with edit-and-rerun, code editor and
+- v0.7.0 "Workbench" released 2026-10-20: artifacts panel with edit-and-rerun, code editor and
   account manager with manual switching; see [RELEASE_NOTES_070.md](docs/RELEASE_NOTES_070.md).
 - v0.3.0 delivered every row in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
 - v0.4.0 released (Pass G): signed minified release APK, SHA256SUMS.txt, emulator

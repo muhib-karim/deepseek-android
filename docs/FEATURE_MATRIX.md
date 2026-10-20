@@ -199,9 +199,8 @@ and 45 for the account-mode app; the API-key client keeps its v0.2 canvas.
 
 ## v0.7.0 delivery status
 
-Rows **65-67**: implemented with JVM, app unit and emulator tests on branch `feature/workbench-070`.
-Nothing has been compiled or run yet (the project builds only on GitHub Actions); every test row in
-[RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) is PENDING CI, so this is not a release claim.
+Rows **65-67**: released in v0.7.0 (2026-10-20, PR #23). CI green (JVM and app unit tests, lint, debug and
+release builds) and 68/68 emulator tests; see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md).
 
 ## Not planned
 
@@ -219,5 +218,5 @@ Nothing has been compiled or run yet (the project builds only on GitHub Actions)
 | v0.4.0 (released, hardening) | 7 |
 | v0.5.0 / v0.5.1 (released) | account mode, see [ACCOUNT_CLIENT_050.md](ACCOUNT_CLIENT_050.md) |
 | v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
-| v0.7.0 (in development, PENDING CI) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
+| v0.7.0 (released) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
 | **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |
