@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.dsandroid.BuildConfig
 import app.dsandroid.data.Appearance
+import app.dsandroid.tools.ToolCatalog
+import app.dsandroid.tools.ToolRoute
 import app.dsandroid.ui.AppIcon
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.LocalOfficialColors
@@ -78,6 +80,8 @@ internal fun SettingsPage(state: AccountUiState, actions: SettingsActions, appLa
                 tag = "settings-voice-language") { dialog = "voice" }
         }
         SettingsGroup("Agent") {
+            SettingsRow("Plugins & tools", value = "${ToolCatalog.forRoute(ToolRoute.ACCOUNT).count { ToolCatalog.isEnabled(it.name, state.disabledTools) }} on",
+                tag = "settings-plugins") { onNavigate(AccountPage.PLUGINS) }
             SettingsRow("Skills and Python toolsets", tag = "settings-skills") { onNavigate(AccountPage.SKILLS) }
             Text("Agent mode lets DeepSeek use tools on this phone: files, PDFs and documents, Python, skills and web pages. Downloads and network access ask first.",
                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = muted)

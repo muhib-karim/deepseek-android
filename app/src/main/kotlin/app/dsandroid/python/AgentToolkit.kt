@@ -12,6 +12,7 @@ import app.dsandroid.core.skills.SkillPackReader
 import app.dsandroid.core.skills.SkillStore
 import app.dsandroid.core.skills.SkillTool
 import app.dsandroid.core.tools.*
+import app.dsandroid.tools.CreateImageTool
 import app.dsandroid.tools.CreatePdfTool
 import java.io.File
 
@@ -67,14 +68,18 @@ class AgentToolkit private constructor(context: Context) {
         return skills.enabled()
     }
 
-    /** The agent tools both backends share: dsh-named file tools, documents, Python, skills and web_fetch. */
-    fun tools(includeWeb: Boolean = true): List<Tool> {
-        val enabled = enabledSkills()
+    /**
+     * The account route's tools (app.dsandroid.tools.ToolCatalog, route ACCOUNT): dsh-named file tools, documents, Excel,
+     * PowerPoint, charts, PNG images, ZIP, Python, skills and their functions, web_fetch and web search. [search] is null when
+     * the configured search service is not usable. The API-key client builds its list from the same tool classes.
+     */
+    fun accountTools(search: WebSearchTool?): List<Tool> {
         val base = listOf(
             RunPythonTool(python), PipInstallTool(installer), WriteTool(), ReadTool(), PresentTool(),
-            CreatePdfTool(), WriteFileTool(), SkillTool({ enabledSkills() }, skills::instructions),
-        ) + if (includeWeb) listOf(WebFetchTool()) else emptyList()
-        val skillTools = enabled.flatMap { entry -> entry.manifest.tools.map { SkillFunctionTool(entry, it, python) } }
+            CreatePdfTool(), WriteFileTool(), SkillTool({ enabledSkills() }, skills::instructions), WebFetchTool(),
+            CreateXlsxTool(), CreatePptxTool(), CreateChartTool(), CreateImageTool(), ZipFilesTool(),
+        ) + listOfNotNull(search)
+        val skillTools = enabledSkills().flatMap { entry -> entry.manifest.tools.map { SkillFunctionTool(entry, it, python) } }
             .filter { tool -> base.none { it.name == tool.name } }.distinctBy { it.name }
         return base + skillTools
     }

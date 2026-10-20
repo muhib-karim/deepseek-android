@@ -35,13 +35,13 @@ import java.time.ZoneId
 /**
  * Official drawer (docs/reference/SCREEN_SPEC.md, "drawer"): content search, New chat, chats grouped Pinned / Today /
  * Yesterday / 7 Days / 30 Days / month, each with a "..." menu (Rename, Pin, Delete); then this app's extension rows
- * (files, skills) and the account row that opens Settings.
+ * (files, plugins and tools, skills) and the account row that opens Settings.
  */
 @Composable
 internal fun HistoryDrawer(
     state: AccountUiState, query: String, onQuery: (String) -> Unit, onNew: () -> Unit, onOpen: (String) -> Unit,
     onRename: (AccountHistory) -> Unit, onPin: (AccountHistory) -> Unit, onDelete: (AccountHistory) -> Unit,
-    onFiles: () -> Unit, onSkills: () -> Unit, onSettings: () -> Unit,
+    onFiles: () -> Unit, onSkills: () -> Unit, onSettings: () -> Unit, onPlugins: () -> Unit = {},
 ) {
     val official = LocalOfficialColors.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -86,6 +86,7 @@ internal fun HistoryDrawer(
         HorizontalDivider(color = official.divider)
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             DrawerLink(Glyph.FOLDER, "Files in this chat", "chat-files", onFiles)
+            DrawerLink(Glyph.PUZZLE, "Plugins & tools", "drawer-plugins", onPlugins)
             DrawerLink(Glyph.TOOL, "Skills", "drawer-skills", onSkills)
             DrawerLink(Glyph.GEAR, "Settings", "drawer-settings", onSettings)
             val account = state.accounts.firstOrNull { it.active }

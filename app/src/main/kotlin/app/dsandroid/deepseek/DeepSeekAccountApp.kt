@@ -218,6 +218,9 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             override fun editArtifact(artifact: Artifact) = vm.editArtifactFile(artifact)
             override fun openChatFiles() = vm.showChatFiles()
             override fun hideChatFiles() = vm.hideChatFiles()
+            override fun setToolEnabled(name: String, enabled: Boolean) = vm.setToolEnabled(name, enabled)
+            override fun addRemoteServer(name: String, url: String) = vm.addRemoteServer(name, url)
+            override fun removeRemoteServer(id: String) = vm.removeRemoteServer(id)
             override fun openChatFile(row: ChatFileRow) {
                 vm.hideChatFiles()
                 val artifact = vm.chatFileArtifact(row)

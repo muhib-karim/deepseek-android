@@ -13,6 +13,7 @@ import app.dsandroid.R
 import app.dsandroid.core.mcp.*
 import app.dsandroid.core.personalization.SavedFact
 import app.dsandroid.data.AppSettings
+import app.dsandroid.tools.ToolCatalog
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -61,11 +62,15 @@ fun ToolsSettings(draft: AppSettings, builtIns: List<String>, busy: Boolean, upd
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     fun toggle(id: String, on: Boolean) {
-        update(draft.copy(disabledTools = if (on) draft.disabledTools - id else draft.disabledTools + id))
+        update(draft.copy(disabledTools = ToolCatalog.switched(draft.disabledTools, id, on)))
     }
     Text(stringResource(R.string.tools_notice), style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.tools_builtin), style = MaterialTheme.typography.titleMedium)
-    builtIns.forEach { id -> ToolSwitch(phoneActionLabel(id)?.let { stringResource(it) } ?: id, id !in draft.disabledTools, !busy) { toggle(id, it) } }
+    // One switch per catalog entry (aliases share it, as in the account's Plugins & tools); other names keep their own switch.
+    builtIns.distinctBy { ToolCatalog.entry(it)?.name ?: it }.forEach { id ->
+        val entry = ToolCatalog.entry(id)
+        ToolSwitch(phoneActionLabel(id)?.let { stringResource(it) } ?: entry?.label ?: id, ToolCatalog.isEnabled(id, draft.disabledTools), !busy) { toggle(entry?.name ?: id, it) }
+    }
     Text(stringResource(R.string.tools_custom), style = MaterialTheme.typography.titleMedium)
     if (draft.remoteServers.isEmpty()) Text(stringResource(R.string.tools_empty))
     draft.remoteServers.forEach { server ->

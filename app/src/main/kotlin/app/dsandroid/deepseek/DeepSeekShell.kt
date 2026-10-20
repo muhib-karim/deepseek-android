@@ -42,6 +42,7 @@ import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.agent.TurnStep
 import app.dsandroid.core.deepseek.WebCitation
 import app.dsandroid.core.editor.EditorLanguage
+import app.dsandroid.core.mcp.RemoteServer
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.data.Appearance
 import app.dsandroid.ui.AppIcon
@@ -58,9 +59,9 @@ import app.dsandroid.workbench.WorkbenchPane
 import java.io.File
 import kotlinx.coroutines.launch
 
-enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS, ACCOUNTS, PROFILE, DATA_CONTROLS }
+enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS, ACCOUNTS, PROFILE, DATA_CONTROLS, PLUGINS }
 /** Pages drawn on the official light-grey grouped background. */
-internal val GROUPED_PAGES = setOf(AccountPage.SETTINGS, AccountPage.PROFILE, AccountPage.DATA_CONTROLS)
+internal val GROUPED_PAGES = setOf(AccountPage.SETTINGS, AccountPage.PROFILE, AccountPage.DATA_CONTROLS, AccountPage.PLUGINS)
 data class AccountMessage(
     val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null,
     val steps: List<TurnStep> = emptyList(), val artifacts: List<Artifact> = emptyList(), val codeRuns: List<TurnStep.ToolCall> = emptyList(),
@@ -77,7 +78,9 @@ data class AccountRow(val id: String, val label: String, val type: AccountType, 
 data class ChatFileRow(val path: String, val name: String, val bytes: Long)
 /** A tool call waiting for the user's per-action approval (network, downloads). */
 data class AgentConfirmation(val tool: String, val summary: String)
-data class SkillRow(val name: String, val description: String, val version: String, val builtIn: Boolean, val enabled: Boolean, val tools: Int)
+data class SkillRow(val name: String, val description: String, val version: String, val builtIn: Boolean, val enabled: Boolean, val tools: Int,
+    /** The skill's function tool names (SkillFunctionTool.toolName), switched in Plugins & tools. */
+    val functions: List<String> = emptyList())
 data class PackageRow(val name: String, val version: String, val bytes: Long)
 data class SkillPreview(val name: String, val version: String, val description: String, val tools: List<String>, val pip: List<String>)
 
@@ -105,6 +108,9 @@ interface AgentActions {
     fun openChatFiles() {}
     fun openChatFile(row: ChatFileRow) {}
     fun hideChatFiles() {}
+    fun setToolEnabled(name: String, enabled: Boolean) {}
+    fun addRemoteServer(name: String, url: String) {}
+    fun removeRemoteServer(id: String) {}
     object None : AgentActions
 }
 
@@ -166,6 +172,9 @@ data class AccountUiState(
     val collapseThinking: Boolean = true,
     /** Settings > Audio > Main language for dictation; empty follows the app language. */
     val audioLanguage: String = "",
+    /** Plugins & tools: tool names switched off (app.dsandroid.tools.ToolCatalog) and remote MCP servers, shared with the API-key client. */
+    val disabledTools: Set<String> = emptySet(),
+    val remoteServers: List<RemoteServer> = emptyList(),
 )
 
 /** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
@@ -252,6 +261,7 @@ fun DeepSeekShell(
                 onRename = { chat -> renameTarget = chat; renameTitle = chat.title }, onPin = { chat -> onPin(chat.id, !chat.pinned) },
                 onDelete = { chat -> deleteTarget = chat },
                 onFiles = { actions.openChatFiles(); scope.launch { drawer.close() } },
+                onPlugins = { onNavigate(AccountPage.PLUGINS); scope.launch { drawer.close() } },
                 onSkills = { onNavigate(AccountPage.SKILLS); scope.launch { drawer.close() } },
                 onSettings = { onNavigate(AccountPage.SETTINGS); scope.launch { drawer.close() } })
         }) {
@@ -264,7 +274,8 @@ fun DeepSeekShell(
                     }
                     Text(when (state.page) {
                         AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"
-                        AccountPage.PROFILE -> "Account settings"; AccountPage.DATA_CONTROLS -> "Data controls"; else -> "Log in with DeepSeek"
+                        AccountPage.PROFILE -> "Account settings"; AccountPage.DATA_CONTROLS -> "Data controls"; AccountPage.PLUGINS -> "Plugins & tools"
+                        else -> "Log in with DeepSeek"
                     }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                 }
                 state.error?.let { error ->
@@ -300,6 +311,7 @@ fun DeepSeekShell(
                     AccountPage.PROFILE -> ProfilePage(state, settingsActions, Modifier.weight(1f))
                     AccountPage.DATA_CONTROLS -> DataControlsPage(state, settingsActions, Modifier.weight(1f))
                     AccountPage.SKILLS -> SkillsPage(state, actions, Modifier.weight(1f))
+                    AccountPage.PLUGINS -> PluginsToolsPage(state, actions, onNavigate, Modifier.weight(1f))
                     AccountPage.ACCOUNTS -> AccountsPage(state, accountActions, Modifier.weight(1f))
                     AccountPage.LOGIN -> {
                         Text(DeepSeekWebView.LOADING_STATUS, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("login-status"),

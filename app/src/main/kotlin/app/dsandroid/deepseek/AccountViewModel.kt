@@ -36,13 +36,19 @@ import app.dsandroid.core.llm.ChatMessage
 import app.dsandroid.core.llm.ClientIdentity
 import app.dsandroid.core.python.PythonOutputText
 import app.dsandroid.core.python.RunPythonTool
+import app.dsandroid.core.mcp.McpClient
+import app.dsandroid.core.mcp.McpEndpoint
+import app.dsandroid.core.mcp.RemoteServer
+import app.dsandroid.core.mcp.RemoteTool
 import app.dsandroid.core.skills.SkillDownloader
+import app.dsandroid.core.skills.SkillFunctionTool
 import app.dsandroid.core.skills.SkillPack
 import app.dsandroid.core.skills.SkillPackReader
 import app.dsandroid.core.skills.SkillPrompt
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.tools.ToolContext
 import app.dsandroid.core.tools.ToolRegistry
+import app.dsandroid.core.tools.WebSearchTool
 import app.dsandroid.core.tools.MimeTypes
 import app.dsandroid.core.tools.chatRoot
 import app.dsandroid.core.tools.uniqueFile
@@ -54,6 +60,7 @@ import app.dsandroid.core.workbench.WorkbenchIds
 import app.dsandroid.core.workbench.WorkbenchStore
 import app.dsandroid.python.AgentToolkit
 import app.dsandroid.tools.CreatePdfTool
+import app.dsandroid.tools.ToolCatalog
 import app.dsandroid.data.AppSettings
 import app.dsandroid.data.Appearance
 import app.dsandroid.data.Provider
@@ -108,6 +115,9 @@ class AccountViewModel @JvmOverloads constructor(
     private val drafts = LinkedHashMap<String, String>()
     private val appearancePrefs = application.getSharedPreferences("deepseek_web_appearance", 0)
     private val persistence = Mutex()
+    private val settingsWrite = Mutex()
+    /** The search service web_search uses in the current agent turn, named in its approval. */
+    @Volatile private var searchHost: String? = null
     private var chats = emptyList<WebChat>()
     private var current = emptyChat()
     private val uploads = mutableListOf<Upload>()
@@ -138,8 +148,8 @@ class AccountViewModel @JvmOverloads constructor(
                 val expired = session?.isExpired(System.currentTimeMillis()) == true
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
                 val agent = appearancePrefs.getBoolean("agent_mode", false)
-                mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent, textScale = loaded.settings.fontScale,
-                    apiKeyProfile = apiProfileOf(loaded.settings), collapseThinking = loaded.settings.collapseThinking, audioLanguage = loaded.settings.audioLanguage) }
+                mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent,
+                    apiKeyProfile = apiProfileOf(loaded.settings)).withSettings(loaded.settings) }
                 if (expired) expireSession()
                 else {
                     if (session == null && webAccount != null) {
@@ -164,7 +174,7 @@ class AccountViewModel @JvmOverloads constructor(
         if (session == null && page !in SIGNED_OUT_PAGES) return
         if (page != AccountPage.LOGIN) addingAccount = false
         mutable.update { it.copy(page = page, error = null, offerSwitchAccount = false) }
-        if (page == AccountPage.SKILLS) refreshToolsets()
+        if (page == AccountPage.SKILLS || page == AccountPage.PLUGINS) refreshToolsets()
         if (page == AccountPage.ACCOUNTS) viewModelScope.launch { refreshApiKey() }
     }
     fun setAgent(enabled: Boolean) {
@@ -189,8 +199,7 @@ class AccountViewModel @JvmOverloads constructor(
                 withContext(Dispatchers.IO) { store?.saveRegistry(next) }
                 registry = next
             }
-            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config), textScale = config.fontScale,
-                collapseThinking = config.collapseThinking, audioLanguage = config.audioLanguage) }
+            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config)).withSettings(config) }
             publishAccounts()
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The API key settings could not be read securely. Try again.") }
@@ -625,12 +634,51 @@ class AccountViewModel @JvmOverloads constructor(
 
     private fun updateSettings(failure: String, change: (AppSettings) -> AppSettings) {
         viewModelScope.launch {
-            try {
-                val saved = withContext(Dispatchers.IO) { settings().let { store -> change(store.load()).also(store::save) } }
-                mutable.update { it.copy(textScale = saved.fontScale, collapseThinking = saved.collapseThinking, audioLanguage = saved.audioLanguage) }
-            } catch (cancelled: CancellationException) { throw cancelled }
+            try { saveSettings(change) }
+            catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { notice(failure) }
         }
+    }
+
+    /** Read, change and save the settings in one step (switches tapped quickly never undo each other). */
+    private suspend fun saveSettings(change: (AppSettings) -> AppSettings) {
+        val saved = settingsWrite.withLock { withContext(Dispatchers.IO) { settings().let { store -> change(store.load()).also(store::save) } } }
+        mutable.update { it.withSettings(saved) }
+    }
+
+    /** What the account screens show of the settings (Settings, Plugins & tools); keys and other secrets never enter UI state. */
+    private fun AccountUiState.withSettings(config: AppSettings) = copy(textScale = config.fontScale, collapseThinking = config.collapseThinking,
+        audioLanguage = config.audioLanguage, disabledTools = config.disabledTools, remoteServers = config.remoteServers)
+
+    // ---- Plugins & tools (app.dsandroid.tools.ToolCatalog). The switches are the API-key client's too: one setting per tool. ----
+
+    fun setToolEnabled(name: String, enabled: Boolean) = updateSettings("The tool setting could not be saved.") {
+        it.copy(disabledTools = ToolCatalog.switched(it.disabledTools, name, enabled))
+    }
+
+    /** Adds an HTTPS MCP server after reading its tool list. Its tools ask before every call, and their answers go to DeepSeek. */
+    fun addRemoteServer(name: String, url: String) {
+        if (!available() || locked() || name.isBlank()) return
+        mutable.update { it.copy(toolsetBusy = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val endpoint = McpEndpoint.validate(url.trim())
+                val tools = withContext(Dispatchers.IO) { McpClient(endpoint).listTools() }
+                saveSettings { config ->
+                    require(config.remoteServers.size < MAX_REMOTE_SERVERS)
+                    config.copy(remoteServers = config.remoteServers + RemoteServer(UUID.randomUUID().toString(), name.trim().take(100), endpoint, tools))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The server could not be added. It must be an HTTPS MCP server that lists its tools.") }
+            finally { mutable.update { it.copy(toolsetBusy = false) } }
+        }
+    }
+
+    fun removeRemoteServer(id: String) = updateSettings("The server could not be removed.") { config ->
+        val server = config.remoteServers.firstOrNull { it.id == id }
+        if (server == null) config
+        else config.copy(remoteServers = config.remoteServers - server,
+            disabledTools = config.disabledTools - server.tools.map { RemoteTool.registryName(server.id, it.name) }.toSet())
     }
 
     /**
@@ -806,8 +854,15 @@ class AccountViewModel @JvmOverloads constructor(
                     }
                 }
                 val toolkit = AgentToolkit.get(getApplication())
-                val (tools, skills) = withContext(Dispatchers.IO) { toolkit.tools() to toolkit.enabledSkills() }
-                val registry = ToolRegistry(tools)
+                val config = withContext(Dispatchers.IO) { settings().load() }
+                // A configured search service that is not public HTTPS leaves web_search out rather than using another service.
+                val search = runCatching { WebSearchTool(config.searchBackend.takeIf { it == "searxng" }?.let { config.searxngUrl }) }.getOrNull()
+                searchHost = search?.let { runCatching { java.net.URI(it.searchUrl("q")).host }.getOrNull() }
+                val remote = config.remoteServers.flatMap { server -> McpClient(server.url).let { client -> server.tools.map { RemoteTool(server, it, client) } } }
+                val (tools, skills) = withContext(Dispatchers.IO) { (toolkit.accountTools(search) + remote).distinctBy { it.name } to toolkit.enabledSkills() }
+                // Switched-off tools are left out of the prompt; the switches are read again on every lookup, so a tool switched
+                // off during the turn (even while its approval is showing) is neither offered nor run afterwards.
+                val registry = ToolRegistry(tools, ToolCatalog.disabledNames(config.disabledTools)) { name -> ToolCatalog.isEnabled(name, state.value.disabledTools) }
                 val llm = WebToolProtocolClient(transport) { specs -> ToolCallProtocol.systemPrompt(specs, SkillPrompt.summaries(skills)) }
                 val loop = AgentLoop(llm, registry, GuardPolicy(registry, agentWorkspace), ToolContext(agentWorkspace, chatDir = chatDir(current.id)),
                     Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = 8)
@@ -860,7 +915,12 @@ class AccountViewModel @JvmOverloads constructor(
             "pip_install" -> "Download these Python packages from PyPI and install them in this app:\n" +
                 (arguments["packages"] as? JsonArray).orEmpty().joinToString("\n") { "- " + ((it as? JsonPrimitive)?.contentOrNull ?: it.toString()) }
             "web_fetch" -> "Fetch this web page; its text is then sent to DeepSeek:\n${text("url")}"
-            else -> "$name\n${arguments.toString().take(800)}"
+            "web_search" -> "Search the web${searchHost?.let { " with $it" }.orEmpty()} for:\n${text("query")}\n\nThe query goes to that search service; the results are then sent to DeepSeek."
+            else -> state.value.remoteServers.firstNotNullOfOrNull { server ->
+                server.tools.firstOrNull { RemoteTool.registryName(server.id, it.name) == name }?.let { tool ->
+                    "Call ${tool.name} on ${server.name} (${server.url}) with:\n${arguments.toString().take(800)}\n\nIts answer is then sent to DeepSeek."
+                }
+            } ?: "$name\n${arguments.toString().take(800)}"
         }
     }
 
@@ -935,7 +995,8 @@ class AccountViewModel @JvmOverloads constructor(
                 val toolkit = AgentToolkit.get(getApplication())
                 val (skills, packages) = withContext(Dispatchers.IO) { toolkit.ensureBuiltIns(); toolkit.skills.list() to toolkit.installer.installed() }
                 mutable.update { state -> state.copy(
-                    skills = skills.map { SkillRow(it.manifest.name, it.manifest.description, it.manifest.version, it.builtIn, it.enabled, it.manifest.tools.size) },
+                    skills = skills.map { SkillRow(it.manifest.name, it.manifest.description, it.manifest.version, it.builtIn, it.enabled, it.manifest.tools.size,
+                        it.manifest.tools.map { spec -> SkillFunctionTool.toolName(it.manifest, spec) }) },
                     packages = packages.map { PackageRow(it.name, it.version, it.bytes) },
                     bundledPackages = "Built in: Python 3.13 with numpy ${AgentToolkit.BUNDLED["numpy"]} and matplotlib ${AgentToolkit.BUNDLED["matplotlib"]} " +
                         "(plus Pillow, fontTools, contourpy, kiwisolver, cycler, pyparsing, python-dateutil, packaging, six).",
@@ -1482,6 +1543,7 @@ class AccountViewModel @JvmOverloads constructor(
         /** DeepSeek's Search replies cite pages as [citation:N]; the chat shows [N]. */
         private val CITATION = Regex("\\[citation:(\\d{1,3})]")
         private const val SEARCH_TEXT_LIMIT = 4000
+        private const val MAX_REMOTE_SERVERS = 8
         private const val MAX_EDITOR_BYTES = 1024 * 1024
     }
 }

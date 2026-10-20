@@ -57,6 +57,12 @@ The remaining provider/OAuth sections describe the explicit legacy API client.
   ordinary messages in your DeepSeek chat and are stored by DeepSeek like any other message.
   Tool results and fetched pages are untrusted data; the guard checks every call regardless of
   what a page or result says.
+- **Plugins & tools (v1.0.0).** Every tool has a switch (drawer or Settings > Plugins & tools; the
+  same switches as the API-key client's Settings > Tools). A switched-off tool is left out of the
+  tool list sent to the model, and a call for it is refused. The switches are read again before a
+  tool runs, so a tool switched off while its approval is showing does not run. In account mode
+  `web_search` asks before every search and names the search service; remote MCP tools ask before
+  every call (see Remote tool servers), and their answers are sent to DeepSeek as tool results.
 
 ## Reporting
 
@@ -323,7 +329,9 @@ by this rule alone, and allowing a search query can disclose its contents.
 - Responses are capped at 1 MiB.
 - Every remote tool is registered as CONFIRM: each call shows the server, tool
   name and arguments and runs only after you approve it. Each tool can be
-  switched off in Settings → Tools, and removing a server removes its tools.
+  switched off in Settings → Tools (or Plugins & tools in account mode), and
+  removing a server removes its tools. Account mode and the API-key client
+  share the list of servers.
 - A tool server sees the arguments you approve and can return misleading text;
   treat its output like any web page.
 
