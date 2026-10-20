@@ -39,7 +39,8 @@ object SandboxWebViews {
     @Suppress("DEPRECATION")
     fun create(context: Context, javaScriptEnabled: Boolean, approvedNetwork: Boolean = false,
         cachedResource: ((String) -> WebResourceResponse?)? = null,
-        onFailure: () -> Unit = {}, onConsole: ((String) -> Unit)? = null): WebView = WebView(context).apply {
+        onFailure: () -> Unit = {}, onConsole: ((String) -> Unit)? = null,
+        onPageEvent: ((String) -> Unit)? = null): WebView = WebView(context).apply {
         settings.javaScriptEnabled = javaScriptEnabled
         settings.allowFileAccess = false
         settings.allowContentAccess = false
@@ -65,7 +66,12 @@ object SandboxWebViews {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                onPageEvent?.invoke("started ${url?.take(40)}")
                 if (url != null && url != "about:blank" && url != CodeSandboxDocument.BASE_URL && !url.startsWith("data:text/html")) view?.stopLoading()
+            }
+            override fun onPageFinished(view: WebView?, url: String?) { onPageEvent?.invoke("finished ${url?.take(40)}") }
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true) onPageEvent?.invoke("error ${error?.errorCode} ${error?.description}")
             }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse {
                 if (cachedResource != null) {

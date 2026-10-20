@@ -116,6 +116,9 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         var logins = 0
         launch(AccountUiState(ready = true, signedIn = false), login = { logins++ })
         compose.onNodeWithText("Log in with phone or email").assertIsDisplayed().performClick()
+        // Terms are unticked on a fresh install, so the tap first asks; agreeing continues the same route once.
+        compose.runOnIdle { assertEquals(0, logins) }
+        compose.onNodeWithTag("consent-agree").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, logins) }
         compose.onAllNodes(hasText("API key", substring = true, ignoreCase = true)).assertCountEquals(0)
         // Signed out, there is no chat to type into at all, and no drawer.

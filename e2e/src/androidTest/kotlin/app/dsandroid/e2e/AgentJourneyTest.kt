@@ -46,6 +46,9 @@ class AgentJourneyTest {
         e2e.tap(By.text("Think"), "the Think pill (off)")
         e2e.tap(By.text("Search"), "the Search pill")
         send("Search for the E2E fixture")
+        // A Search message is confirmed first ("Send to DeepSeek?"), as it shares the query with DeepSeek Search.
+        e2e.waitFor(By.text("Send to DeepSeek?"), "the Search send confirmation", 20_000)
+        e2e.tap(By.text("Send"), "Send (confirm Search)")
         e2e.waitFor(By.textContains("web page"), "the searched pages", 60_000)
         e2e.step("search")
         e2e.tap(By.text("Search"), "the Search pill (off)")
