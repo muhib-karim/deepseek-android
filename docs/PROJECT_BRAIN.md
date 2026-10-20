@@ -26,6 +26,7 @@ Design: web account "default" keeps legacy slots (session key "session", deepsee
 ## Gotchas
 - Only AccountRegistry.switchTo (a tap in Settings > Accounts) may change the active account; failures go through AccountFailurePolicy (docs/ACCOUNTS.md).
 - Tags inside clickable (merged) rows need useUnmergedTree = true in Compose tests.
+- No local compiler: before each commit check cross-package extension imports, BoxWithConstraints reads in nested scopes, and in test files with explicit (non-wildcard) androidx.compose.ui.test imports every extension call (performScrollTo, assertIsOff, ...); members like assertDoesNotExist need none.
 - Resume must retain source numbering and mode, and never replay completed tools.
 - Only current-turn reasoning belongs in follow-up tool requests; omit older reasoning.
 
