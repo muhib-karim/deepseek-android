@@ -4,20 +4,15 @@
 v0.7.0 "Workbench" (branch feature/workbench-070; issues #20 artifacts panel, #21 editor, #22 account manager): artifacts panel with live preview, edit-and-rerun, versions and "Ask DeepSeek to change this"; in-app code editor (tokenizer in :core, undo/redo, find, SAF Save As, Run for Python); account manager listing DeepSeek web accounts and API-key profiles with balance, manual one-tap switching only. CI validates (no local Gradle).
 
 ## Status
+- v0.7.0 on feature/workbench-070 (not pushed, nothing compiled locally): :core workbench/editor/accounts + tests committed; :app editor, artifacts panel, account manager and wiring committed. Remaining: androidTests, docs, review pass.
 - v0.6.0 "Agent" released 2026-10-18 (PR #18, merge 63897c9; tag v0.6.0; versionCode 7). Signed release APK, debug APK and SHA256SUMS.txt on the release.
 - :core: ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PdfLayoutEngine + DocumentModel (images, tables, lists, page breaks), DocxWriter/CsvWriter, write/read/present/write_file, run_python/pip_install + WheelInstaller, skills. JVM tests written for all.
 - :app: Chaquopy 17.1.0 / Python 3.13 (numpy, matplotlib) in a :python worker process, account-mode agent UI (toggle, tool rows, artifact cards, Export PDF, Run, Skills page, approvals), API-mode agent tools, built-in skills, emulator tests AgentModeTest + PythonRuntimeTest. CI workflows install Python 3.13.
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-v0.7.0 plan (commit per step, "Refs #2x"):
-1. :core workbench (artifact model, versions, LineDiff, revision prompt/extract, store) + tests.
-2. :core editor (language families, SyntaxTokenizer, EditHistory, TextSearch) + tests.
-3. :core accounts (AccountRegistry, AccountFailurePolicy, balance client/parser/text) + tests.
-4. :app CodeEditor, ArtifactPanel (overlay on phones, side-by-side >= 840 dp), account-mode wiring.
-5. :app account manager: per-account session slots/history/workspace roots, Accounts page, API-key profiles, Switch account on quota/rate errors.
-6. androidTests WorkbenchTest + AccountManagerTest; versionCode 8 / 0.7.0; docs (README badges + section, RELEASE_NOTES_070, ACCOUNTS.md, matrix, PLAN).
-Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>. Active pointer is one id across both kinds; API-key profiles stay in SettingsStore.accounts.
+v0.7.0 remaining: androidTests WorkbenchTest + AccountManagerTest (emulator.yml); docs (README badges + v0.7.0 section, RELEASE_NOTES_070 with PENDING CI rows, ACCOUNTS.md, FEATURE_MATRIX rows 65-67, PLAN Phase 2 checkboxes); static review of new Compose code; then push for CI (owner).
+Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>, workbench/<id>. One active id across both kinds; API-key profiles stay in SettingsStore.accounts (Settings key = profile "api-key"); API chats in conversations[-<profile>].
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
