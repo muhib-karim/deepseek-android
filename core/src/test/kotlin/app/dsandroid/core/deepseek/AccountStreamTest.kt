@@ -78,7 +78,6 @@ data: {}
             "data: {\"v\":{\"response\":[]}}\n\n",
             "data: {\"v\":{\"response\":{\"fragments\":[{\"type\":\"RESPONSE\",\"content\":42}]}}}\n\n",
             "data: {\"choices\":[{\"delta\":{\"content\":{}}}]}\n\n",
-            "data: {\"p\":\"response/status\",\"v\":\"UNKNOWN\"}\n\n",
             "data: {\"p\":\"response/fragments/0/content\",\"v\":\"uninitialized\"}\n\n",
             "data: {\"p\":\"response/fragments\",\"v\":\"wrong-shape\"}\n\n",
             "data: " + "x".repeat(2 * 1024 * 1024 + 1),
@@ -95,6 +94,15 @@ data: {}
                 val error = assertThrows(SessionExpired::class.java) { DeepSeekStream().feed("data: $json\n\n") }
                 assertEquals("Your DeepSeek session expired. Please sign in again.", error.message)
             }
+        }
+    }
+
+    @Test fun replyStatesThisClientDoesNotKnowAreIgnoredButNeverFinishTheReply() {
+        val stream = DeepSeekStream()
+        stream.feed("data: {\"p\":\"response/status\",\"v\":\"SOMETHING_NEW\"}\n\n")
+        assertThrows(WebReplyInterrupted::class.java) { stream.finish() }
+        listOf("INCOMPLETE", "CONTENT_FILTER").forEach { state ->
+            assertThrows(WebReplyInterrupted::class.java) { DeepSeekStream().feed("data: {\"p\":\"response/status\",\"v\":\"$state\"}\n\n") }
         }
     }
 }

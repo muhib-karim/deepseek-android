@@ -166,9 +166,14 @@ class AccountTransportTest {
                     assertEquals(expiry, error!!.message)
                 }
             }
-            listOf("data: {bad}\n\n", "data: {\"unknown\":true}\n\ndata: [DONE]\n\n", "data: {\"v\":{\"response_message_id\":22}}\n\n").forEach { stream ->
+            listOf("data: {bad}\n\n", "data: {\"unknown\":true}\n\ndata: [DONE]\n\n").forEach { stream ->
                 server.enqueue(challenge()); server.enqueue(sse(stream))
                 expectChanged { client.complete(credentials, CompletionInput("s", null, "Hello", false, false)) { 1 }.toList() }
+            }
+            // A stream that ends before FINISHED is an interrupted reply, not a changed service.
+            server.enqueue(challenge()); server.enqueue(sse("data: {\"v\":{\"response_message_id\":22}}\n\n"))
+            assertThrows(WebReplyInterrupted::class.java) {
+                runBlocking { client.complete(credentials, CompletionInput("s", null, "Hello", false, false)) { 1 }.toList() }
             }
         }
     }

@@ -68,26 +68,56 @@ fun sessionRoute(token: SessionToken?, apiFallbackChosen: Boolean, nowMillis: Lo
     else -> ChatRoute.DEEPSEEK
 }
 
-/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+/**
+ * A typed, user-facing failure of the web route. Each message is fixed text (never a server body) and each class refuses
+ * coroutine stack-trace copies, so no cause chain can carry server data into the UI or logs.
+ */
+sealed interface WebFailure
+
+/** DeepSeek rejected the session (401, auth codes): the app locks back to the welcome screen. */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SessionExpired : Exception("Your DeepSeek session expired. Please sign in again."), CopyableThrowable<SessionExpired> {
+class SessionExpired : Exception("Your DeepSeek session expired. Please sign in again."), CopyableThrowable<SessionExpired>, WebFailure {
     override fun createCopy(): SessionExpired? = null
 }
-/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+/** Only for answers whose shape this client cannot read (unknown envelope, unparseable JSON, missing required fields). */
 @OptIn(ExperimentalCoroutinesApi::class)
-class EndpointChanged : Exception("DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings."), CopyableThrowable<EndpointChanged> {
+class EndpointChanged : Exception("DeepSeek's web service changed and this app can't talk to it right now. Try again later, update the app, or switch to API-key mode in Settings."), CopyableThrowable<EndpointChanged>, WebFailure {
     override fun createCopy(): EndpointChanged? = null
 }
 
 /** Source compatibility for callers of the original protocol error. */
 typealias UpdateRequired = EndpointChanged
-/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
 @OptIn(ExperimentalCoroutinesApi::class)
-class WebRateLimited : Exception("DeepSeek is busy or has limited requests. Try again later."), CopyableThrowable<WebRateLimited> {
+class WebRateLimited : Exception("DeepSeek is busy or has limited requests. Try again later."), CopyableThrowable<WebRateLimited>, WebFailure {
     override fun createCopy(): WebRateLimited? = null
 }
-/** Safe user-facing error; never copied by coroutine stack-trace recovery, so no cause chain can carry server data. */
+/** The phone could not reach DeepSeek or the connection dropped (timeouts, DNS, TLS, a body cut off in transit). */
 @OptIn(ExperimentalCoroutinesApi::class)
-class WebConnectionFailed : Exception("Could not reach DeepSeek. Check your connection and try again."), CopyableThrowable<WebConnectionFailed> {
+class WebConnectionFailed : Exception("Couldn't reach DeepSeek. Check your connection, then tap Retry."), CopyableThrowable<WebConnectionFailed>, WebFailure {
     override fun createCopy(): WebConnectionFailed? = null
 }
+/** DeepSeek answered with a server error (HTTP 5xx). */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebServiceBusy : Exception("DeepSeek is having trouble right now. Tap Retry in a moment."), CopyableThrowable<WebServiceBusy>, WebFailure {
+    override fun createCopy(): WebServiceBusy? = null
+}
+/** The reply stream ended, or DeepSeek marked the reply incomplete, before it finished. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebReplyInterrupted : Exception("The reply stopped before it finished. Tap Retry to ask again."), CopyableThrowable<WebReplyInterrupted>, WebFailure {
+    override fun createCopy(): WebReplyInterrupted? = null
+}
+/** DeepSeek did not accept the proof of work (codes 40300-40399); a fresh challenge usually passes. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebPowRejected : Exception("DeepSeek's request check did not pass. Tap Retry."), CopyableThrowable<WebPowRejected>, WebFailure {
+    override fun createCopy(): WebPowRejected? = null
+}
+/** An uploaded file that DeepSeek could not process, or is still processing after the wait; [fileName] is the user's own name. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WebFileFailed(val fileName: String, val stillProcessing: Boolean = false) : Exception(
+    if (stillProcessing) "DeepSeek is still processing “$fileName”. Tap Retry in a moment."
+    else "DeepSeek couldn't process “$fileName”. Remove it or try another file."), CopyableThrowable<WebFileFailed>, WebFailure {
+    override fun createCopy(): WebFileFailed? = null
+}
+
+/** Failures worth one automatic retry when nothing of the reply has arrived yet: the network, the server, the request check. */
+fun Throwable.isTransientWebFailure(): Boolean = this is WebConnectionFailed || this is WebServiceBusy || this is WebPowRejected || this is WebReplyInterrupted
