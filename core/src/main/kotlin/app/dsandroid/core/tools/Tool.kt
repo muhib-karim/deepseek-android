@@ -48,9 +48,10 @@ fun stringSchema(description: String): JsonObject = buildJsonObject {
 fun writeArtifact(ctx: ToolContext, fileName: String, extension: String, mime: String, bytes: ByteArray): ToolResult {
     require(fileName.endsWith(extension, ignoreCase = true)) { "Expected a $extension file" }
     require(bytes.size <= 2 * 1024 * 1024) { "Artifact exceeds 2 MB" }
-    val file = ctx.workspace.resolve(fileName)
-    require(file != ctx.workspace.root && file.parentFile == ctx.workspace.root) { "Use a simple file name in the workspace" }
-    check(ctx.workspace.root.isDirectory || ctx.workspace.root.mkdirs()) { "Cannot create workspace" }
+    // In the run's chat folder when it has one, so the file stays with its chat and account (and is deleted with them).
+    val folder = ctx.chatRoot()
+    val file = ctx.workspace.resolve(if (ctx.chatDir.isEmpty()) fileName else "${ctx.chatDir}/$fileName")
+    require(file != folder && file.parentFile == folder) { "Use a simple file name in the workspace" }
     Files.write(file.toPath(), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
     val artifact = Artifact(file.name, mime, ctx.workspace.relative(file))
     return ToolResult("Created ${file.name}", artifacts = listOf(artifact))
