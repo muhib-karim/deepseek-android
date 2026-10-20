@@ -5,7 +5,7 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Latest release: **v0.7.0 "Workbench"**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.7.0)).
+Latest release: **v0.7.1 "Sign-in fix"**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.7.1)).
 Not independently audited. Each GitHub release carries a debug APK, a signed
 minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitHub Actions.
 Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
@@ -500,6 +500,8 @@ light/dark layouts. No first-build success or screenshot parity is claimed.
 
 ## Roadmap
 
+- v0.7.1 "Sign-in fix" released 2026-10-20: blank sign-in page fixed, Continue with Google through the
+  browser, Paste session, signed-out composer locked; see [RELEASE_NOTES_071.md](docs/RELEASE_NOTES_071.md).
 - v0.7.0 "Workbench" released 2026-10-20: artifacts panel with edit-and-rerun, code editor and
   account manager with manual switching; see [RELEASE_NOTES_070.md](docs/RELEASE_NOTES_070.md).
 - v0.3.0 delivered every row in [FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).

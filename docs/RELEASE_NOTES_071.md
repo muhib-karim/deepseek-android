@@ -3,7 +3,7 @@
 Fixes the blank **Log in with DeepSeek** page, adds **Continue with Google** for DeepSeek accounts that use Google,
 and stops the signed-out composer from looking usable.
 
-Validation: PENDING (CI and emulator results are filled in after the pull request runs).
+Validation: CI green and 72/72 emulator tests (one opt-in live test skipped in pull request runs; run separately, passed). Not tested on a real phone; see Results.
 
 ## Fixed
 
@@ -53,9 +53,9 @@ Validation: PENDING (CI and emulator results are filled in after the pull reques
 
 | Check | Result |
 | --- | --- |
-| CI (unit tests, lint, debug and release builds) | PENDING |
-| Emulator tests | PENDING |
-| Live sign-in page on an emulator (`live_login`) | PENDING |
+| CI (unit tests, lint, debug and release builds) | PASS (PR #27 head f097a48) |
+| Emulator tests | PASS, 72/72 on an API 34 emulator (the opt-in live test is skipped there). One fix on the way: local non-https documents had started getting a 403 and showed an error page; they keep the empty response they always had |
+| Live sign-in page on an emulator (`live_login`) | PASS twice (b77ea2f and fe211fa; the https path is unchanged since): the real chat.deepseek.com/sign_in passed the security check (challenge script, then reload) and rendered the phone/email and password form in the app's sign-in browser on an API 34 emulator from a GitHub runner, with the security-check cookie set and no notice shown |
 | Google sign-in through the browser on a real phone | NOT RUN (no Google test account on a device) |
 | Sign-in page on a real phone | NOT RUN |
 

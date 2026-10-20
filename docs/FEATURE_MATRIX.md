@@ -219,4 +219,5 @@ release builds) and 68/68 emulator tests; see [RELEASE_NOTES_070.md](RELEASE_NOT
 | v0.5.0 / v0.5.1 (released) | account mode, see [ACCOUNT_CLIENT_050.md](ACCOUNT_CLIENT_050.md) |
 | v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
 | v0.7.0 (released) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
+| v0.7.1 (released) | sign-in fix, see [RELEASE_NOTES_071.md](RELEASE_NOTES_071.md) |
 | **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |

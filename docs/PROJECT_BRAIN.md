@@ -1,9 +1,10 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-v0.7.0 "Workbench" (branch feature/workbench-070; issues #20 artifacts panel, #21 editor, #22 account manager): artifacts panel with live preview, edit-and-rerun, versions and "Ask DeepSeek to change this"; in-app code editor (tokenizer in :core, undo/redo, find, SAF Save As, Run for Python); account manager listing DeepSeek web accounts and API-key profiles with balance, manual one-tap switching only. CI validates (no local Gradle).
+v0.7.1 "Sign-in fix" is released. Next: v0.8.0 "Showcase" (queued). The sign-in browser must keep working behind DeepSeek's AWS WAF security check; Google sign-in goes through the phone's browser (Continue with Google, Paste session), never an embedded or spoofed WebView. CI validates (no local Gradle).
 
 ## Status
+- v0.7.1 "Sign-in fix" released 2026-10-20 (PR #27, merge ffd2608; tag v0.7.1; versionCode 9). CI green and 72/72 emulator tests; opt-in live_login run passed twice (real sign-in page passes the WAF check and renders in the app's WebView on an emulator). One CI fix: local non-https documents had begun receiving a 403 (WebViewBoundaryTest), restored to the empty response. Not tested on a real phone: the sign-in page on the reporter's device, Google sign-in end to end, the bookmark hand-off in real Chrome.
 - v0.7.0 "Workbench" released 2026-10-20 (PR #23, merge ed910d8; tag v0.7.0; versionCode 8). CI green and 68/68 emulator tests; one CI fix (BalanceTest: MockWebServer ignores DISCONNECT_AT_START on a reused connection, now DISCONNECT_AFTER_REQUEST). Contents: :core workbench/editor/accounts with JVM tests, :app artifacts panel, code editor, account manager, SyntaxPaletteTest, emulator WorkbenchTest + AccountManagerTest, versionCode 8 / 0.7.0, docs (README badges + section, RELEASE_NOTES_070, ACCOUNTS.md, FEATURE_MATRIX 65-67, PLAN Phase 2).
 - v0.6.0 "Agent" released 2026-10-18 (PR #18, merge 63897c9; tag v0.6.0; versionCode 7). Signed release APK, debug APK and SHA256SUMS.txt on the release.
 - :core: ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PdfLayoutEngine + DocumentModel (images, tables, lists, page breaks), DocxWriter/CsvWriter, write/read/present/write_file, run_python/pip_install + WheelInstaller, skills. JVM tests written for all.
@@ -11,7 +12,7 @@ v0.7.0 "Workbench" (branch feature/workbench-070; issues #20 artifacts panel, #2
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-Push feature/workbench-070 (owner), open the PR, run CI and the emulator workflow; fix any compile, lint or test failures; then record results in docs/RELEASE_NOTES_070.md (pass/fail table), FEATURE_MATRIX v0.7.0 status and the README v0.7.0 status line before tagging v0.7.0.
+v0.8.0 "Showcase" (versionCode 10) on branch feature/showcase-080 from main; then CI, emulator workflow, release notes and tag. Ask the reporter of the blank sign-in page to try v0.7.1 on the phone and report the notice shown, if any.
 Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>, workbench/<id>. One active id across both kinds; API-key profiles stay in SettingsStore.accounts (Settings key = profile "api-key"); API chats in conversations[-<profile>]. See docs/ACCOUNTS.md.
 
 ## Decisions
@@ -52,3 +53,4 @@ Design: web account "default" keeps legacy slots (session key "session", deepsee
 - 2026-10-18 Claude Code (Opus 5.5): v0.6.0 Agent implemented (core protocol/loop/PDF/writers/Python/skills, Chaquopy worker, account-mode agent UI, API wiring, emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.
 - 2026-10-20 maintainer: README/PROJECT_BRAIN updated to the released v0.6.0 state; Chaquopy pip given --timeout/--retries for release builds.
 - 2026-10-20 11:09Z Claude Code (Opus 5.5): v0.7.0 Workbench implemented (artifacts panel, editor, account manager, core + emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.
+- 2026-10-20 12:45Z maintainer: v0.7.1 sign-in fix released (WAF-safe sign-in browser, blank-page notice, Continue with Google through the browser, Paste session, locked signed-out composer, opt-in live_login diagnostic); next: v0.8.0.
