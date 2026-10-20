@@ -1,9 +1,10 @@
 # PROJECT_BRAIN — DeepSeek Android (Unofficial)
 
 ## Goal
-v0.7.1 "Sign-in fix" is released. Next: v0.8.0 "Showcase" (queued). The sign-in browser must keep working behind DeepSeek's AWS WAF security check; Google sign-in goes through the phone's browser (Continue with Google, Paste session), never an embedded or spoofed WebView. CI validates (no local Gradle).
+v1.0.0 (versionCode 10) on branch feature/v1.0.0, built on PR #28 (sign-in card, composer off while signed out). Plan: docs/PLAN_v1.md, slices S1-S10 in order (supersedes the queued v0.8.0). Owner's definition of done: official-reference capture workflow + SCREEN_SPEC.md, UI matching the official app in both themes, welcome screen and full sign-in gate, agent tools that output real files with a Plugins/Tools screen and docs/TOOLS.md, a release-config emulator E2E suite with video, versionCode 10 / 1.0.0 with RELEASE_NOTES_100.md rows "PENDING CI". The sign-in browser must keep working behind DeepSeek's AWS WAF check; Google sign-in goes through the phone's browser, never an embedded or spoofed WebView. CI validates (no local Gradle).
 
 ## Status
+- v1.0.0 in progress on feature/v1.0.0 (nothing compiled locally; CI runs only after the branch is pushed). Done: docs/PLAN_v1.md (commit bb5c448).
 - v0.7.1 "Sign-in fix" released 2026-10-20 (PR #27, merge ffd2608; tag v0.7.1; versionCode 9). CI green and 72/72 emulator tests; opt-in live_login run passed twice (real sign-in page passes the WAF check and renders in the app's WebView on an emulator). One CI fix: local non-https documents had begun receiving a 403 (WebViewBoundaryTest), restored to the empty response. Not tested on a real phone: the sign-in page on the reporter's device, Google sign-in end to end, the bookmark hand-off in real Chrome.
 - v0.7.0 "Workbench" released 2026-10-20 (PR #23, merge ed910d8; tag v0.7.0; versionCode 8). CI green and 68/68 emulator tests; one CI fix (BalanceTest: MockWebServer ignores DISCONNECT_AT_START on a reused connection, now DISCONNECT_AFTER_REQUEST). Contents: :core workbench/editor/accounts with JVM tests, :app artifacts panel, code editor, account manager, SyntaxPaletteTest, emulator WorkbenchTest + AccountManagerTest, versionCode 8 / 0.7.0, docs (README badges + section, RELEASE_NOTES_070, ACCOUNTS.md, FEATURE_MATRIX 65-67, PLAN Phase 2).
 - v0.6.0 "Agent" released 2026-10-18 (PR #18, merge 63897c9; tag v0.6.0; versionCode 7). Signed release APK, debug APK and SHA256SUMS.txt on the release.
@@ -12,7 +13,8 @@ v0.7.1 "Sign-in fix" is released. Next: v0.8.0 "Showcase" (queued). The sign-in 
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-v0.8.0 "Showcase" (versionCode 10) on branch feature/showcase-080 from main; then CI, emulator workflow, release notes and tag. Ask the reporter of the blank sign-in page to try v0.7.1 on the phone and report the notice shown, if any.
+S1 official reference (workflow, fetch/verify script, driver, check script, SOURCE.json, SCREEN_SPEC.md), then S2 release E2E harness, S3 welcome + auth gate, S4 chat/composer/drawer/themes, S5 settings/profile/share, S6 tool catalog + Plugins/Tools, S7 sandbox, S8 file journey, S9 full E2E + docs/TOOLS.md, S10 version 1.0.0 / 10 and release gates.
+Reference facts (verified 2026-10-20): APKPure's API (api.pureapk.com, as used by EFF's apkeep) serves com.deepseek.chat 2.6.2 (versionCode 282) as an XAPK (base + armeabi-v7a + language/density splits, minSdk 29, targetSdk 36). Its signer certificate SHA-256 digests (v2/v3 for API 24-32: 1E:EC:C4:6F:..., rotated v3.1 for API 33+: C6:89:3C:53:...) equal the two DeepSeek publishes in https://chat.deepseek.com/.well-known/assetlinks.json. Only armeabi-v7a native code, so the reference emulator is an x86_64 Google APIs image with ARM translation (API 30).
 Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>, workbench/<id>. One active id across both kinds; API-key profiles stay in SettingsStore.accounts (Settings key = profile "api-key"); API chats in conversations[-<profile>]. See docs/ACCOUNTS.md.
 
 ## Decisions
