@@ -1,6 +1,7 @@
 # v0.7.1 "Sign-in fix" (2026-10-20)
 
-Fixes the blank **Log in with DeepSeek** page and adds a way in for DeepSeek accounts that use Google.
+Fixes the blank **Log in with DeepSeek** page, adds **Continue with Google** for DeepSeek accounts that use Google,
+and stops the signed-out composer from looking usable.
 
 Validation: PENDING (CI and emulator results are filled in after the pull request runs).
 
@@ -14,12 +15,14 @@ Validation: PENDING (CI and emulator results are filled in after the pull reques
   - The script that hides the Google button had lost its quotes and threw a syntax error on every page.
   - A security-check (CAPTCHA) response was treated as a refused login. It now stays on screen with a
     short notice, so it can be completed.
+- **Signed out, the composer looked usable.** With no DeepSeek session it now takes no typing, reads
+  "Log in to chat", and a tap on it (or on send) opens the sign-in page.
 - Debug builds record page addresses (without queries), main-frame errors, other hosts contacted and console
   lines for diagnosis. Release builds record nothing.
 
 ## New
 
-- **Sign in with Google** (on the sign-in page). Google does not allow its sign-in inside an app's embedded
+- **Continue with Google** (on the sign-in page). Google does not allow its sign-in inside an app's embedded
   browser, so this uses the phone's browser once:
   1. **Copy the helper** and save it in Chrome as a bookmark named `dsandroid`.
   2. **Open DeepSeek in your browser** and sign in with Google.
@@ -40,6 +43,8 @@ Validation: PENDING (CI and emulator results are filled in after the pull reques
 - `BrowserSignInLinkTest` (emulator): the helper's intent parses to the receiver with the session; a
   pending sign-in takes it; an unrequested link, garbage and a missing session are ignored.
 - `AccountFeaturesTest.feature12_loginWebView` checks the new notice and both new buttons.
+- `OfficialScreenshotsTest`: the signed-out composer is disabled and reads "Log in to chat"; the sign-in page
+  shows Continue with Google.
 
 ## Results
 

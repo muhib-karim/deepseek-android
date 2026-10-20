@@ -69,7 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val BIRTHDAY_NOTICE = "Confirm your date of birth on the DeepSeek page to finish signing in."
-private const val LINK_IGNORED_NOTICE = "A sign-in link arrived that this app didn't ask for, so it was ignored. Start with Sign in with Google here first."
+private const val LINK_IGNORED_NOTICE = "A sign-in link arrived that this app didn't ask for, so it was ignored. Start with Continue with Google here first."
 private const val BROWSER_STEPS = "Google doesn't allow its sign-in inside apps, so this uses your browser once.\n\n" +
     "1. Copy the helper. In Chrome, bookmark any page, then edit that bookmark: name it dsandroid and paste the helper as its address.\n" +
     "2. Open DeepSeek in your browser and sign in with Google.\n" +
@@ -383,7 +383,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         }
         if (browserGuide) AlertDialog(
             onDismissRequest = { browserGuide = false },
-            title = { Text("Sign in with Google") },
+            title = { Text("Continue with Google") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(BROWSER_STEPS, style = MaterialTheme.typography.bodyMedium)

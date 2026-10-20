@@ -64,7 +64,7 @@ the saved key.
 ## Signing in with Google (v0.7.1)
 
 Google does not allow its sign-in inside an app's embedded browser, so a DeepSeek account that uses Google
-signs in through the phone's browser. On the sign-in page tap **Sign in with Google**:
+signs in through the phone's browser. On the sign-in page tap **Continue with Google**:
 
 1. **Copy the helper.** In Chrome, bookmark any page, edit that bookmark, name it `dsandroid` and paste the
    helper as its address.

@@ -258,6 +258,6 @@ class DeepSeekWebView(
   if (!window.__dsHideGoogle) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList: true, subtree: true}); }
 })();"""
         const val SECURITY_CHECK_NOTICE = "DeepSeek is running a security check. Complete it on this page if one is shown."
-        const val SSO_NOTICE = "Google sign-in can't run inside apps. For a Google account, tap Sign in with Google to use your browser."
+        const val SSO_NOTICE = "Google sign-in can't run inside apps. For a Google account, tap Continue with Google to use your browser."
     }
 }

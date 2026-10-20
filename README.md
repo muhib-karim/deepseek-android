@@ -14,8 +14,9 @@ emulators.
 ## v0.7.1: Sign-in fix
 
 Fixes the blank **Log in with DeepSeek** page (DeepSeek's site now runs a security check first; the sign-in
-browser mishandled it) and adds **Sign in with Google** through your phone's browser, plus **Paste session**
-as a fallback. Steps and safety rules: [docs/ACCOUNTS.md](docs/ACCOUNTS.md#signing-in-with-google-v071).
+browser mishandled it) and adds **Continue with Google** through your phone's browser, plus **Paste session**
+as a fallback. Signed out, the composer no longer accepts typing; it reads "Log in to chat" and opens sign-in.
+Steps and safety rules: [docs/ACCOUNTS.md](docs/ACCOUNTS.md#signing-in-with-google-v071).
 Release notes: [docs/RELEASE_NOTES_071.md](docs/RELEASE_NOTES_071.md). versionCode 9, versionName 0.7.1.
 
 ## v0.7.0: Workbench
