@@ -19,10 +19,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,6 +81,7 @@ private const val BROWSER_STEPS = "Google doesn't allow its sign-in inside apps,
 private const val PASTE_STEPS = "If the Open in DeepSeek Android button doesn't come back to this app, tap Copy session instead on that page and paste it here. " +
     "The session is stored encrypted on this phone, like a normal sign-in."
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
     launchRequest: LaunchRequest? = null, launchConsumed: () -> Unit = {},
@@ -307,7 +311,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         val shellPage = state.page == AccountPage.ACCOUNTS || state.page == AccountPage.LOGIN
         val apiMode = (apiFallback || apiProfile != null) && !shellPage
         val pane = state.pane.takeIf { !apiMode }
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Test tags double as resource ids so the release E2E driver (UiAutomator, outside the app) can find controls.
+        BoxWithConstraints(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
             // Side by side on wide windows (840 dp and up); full screen over the chat on phones.
             val wide = maxWidth >= 840.dp
             Row(Modifier.fillMaxSize()) {

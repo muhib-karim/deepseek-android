@@ -21,12 +21,15 @@ chaquopy = "17.1.0"
 test-runner = "1.6.2"
 test-ext-junit = "1.2.1"
 espresso = "3.6.1"
+# Release E2E driver only (:e2e androidTest); never an app dependency.
+uiautomator = "2.3.0"
 
 [libraries]
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "test-runner" }
 androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "test-ext-junit" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
+androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
