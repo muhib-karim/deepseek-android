@@ -18,7 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -181,8 +183,13 @@ private fun ChipText(text: String, modifier: Modifier, style: androidx.compose.u
             CitationChip(number) { citations.open(number) }
         }
     }
+    // Screen readers reach the sources through the paragraph: one "Open source N" action per chip in it.
+    val used = remember(text, citations.chips) {
+        CITATION_CHIP.findAll(text).mapNotNull { it.groupValues[1].toIntOrNull() }.filter { it in 1..citations.chips }.distinct().toList()
+    }
     SelectionContainer {
-        Text(annotated, modifier, style = style.copy(color = if (style.color == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else style.color),
+        Text(annotated, modifier.semantics { customActions = used.map { number -> CustomAccessibilityAction("Open source $number") { citations.open(number); true } } },
+            style = style.copy(color = if (style.color == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else style.color),
             inlineContent = chips)
     }
 }

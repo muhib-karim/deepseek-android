@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
@@ -165,7 +166,10 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
                 WebStep.Think("Read the pages.", 2.0), WebStep.Read(pages), WebStep.Think("Answer briefly.", 0.5)))
         launch(AccountUiState(ready = true, signedIn = true, title = "Revenue", messages = listOf(AccountMessage("u3", true, "How did revenue do?"), answer)))
         compose.onNodeWithText("Thought for 4 seconds").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Source 2").assertExists()
+        // The citation chip's source is reachable from the paragraph (an accessibility action per chip).
+        compose.onNode(SemanticsMatcher("has the Open source 2 action") { node ->
+            node.config.getOrNull(SemanticsActions.CustomActions)?.any { it.label == "Open source 2" } == true
+        }).assertExists()
         compose.onAllNodes(hasText("[citation:", substring = true)).assertCountEquals(0)
         compose.onNodeWithTag("thinking-a3").performClick()
         compose.onNodeWithText("Found 2 web pages").assertIsDisplayed()
