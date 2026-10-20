@@ -11,6 +11,9 @@ object CodeSandboxDocument {
      */
     const val BASE_URL = "https://sandbox.invalid/"
 
+    /** The origin of [BASE_URL]: the only document the trusted bootstrap runs in. */
+    const val ORIGIN = "https://sandbox.invalid"
+
     fun javascriptString(text: String): String = JsonPrimitive(text).toString()
         .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
         .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -104,6 +107,10 @@ object CodeSandboxDocument {
         val shell = "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"></head><body></body></html>"
         val bootstrap = """
             (() => {
+              // Only the committed sandbox page may run it (not the empty document a fresh view starts with), and only once.
+              if (location.origin !== ${javascriptString(ORIGIN)}) return 'wait ' + location.origin + ' ' + document.readyState;
+              if (Object.prototype.hasOwnProperty.call(window, ${javascriptString(pollKey)})) return 'ok';
+            (() => {
               'use strict';
               let result = null;
               // Defined first: '' while the worker runs, then the result. A page that never gets here reads as not started.
@@ -134,6 +141,8 @@ object CodeSandboxDocument {
               };
               worker.onerror = event => finish({stdout:'',stderr:'Worker execution failed' + (event && event.message ? ': ' + event.message : ''),failed:true});
             })();
+              return 'ok';
+            })()
             """.trimIndent()
         return Page(shell, bootstrap)
     }

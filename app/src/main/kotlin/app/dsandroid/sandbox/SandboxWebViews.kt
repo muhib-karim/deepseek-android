@@ -40,7 +40,7 @@ object SandboxWebViews {
     fun create(context: Context, javaScriptEnabled: Boolean, approvedNetwork: Boolean = false,
         cachedResource: ((String) -> WebResourceResponse?)? = null,
         onFailure: () -> Unit = {}, onConsole: ((String) -> Unit)? = null,
-        onPageEvent: ((String) -> Unit)? = null): WebView = WebView(context).apply {
+        onPageEvent: ((String) -> Unit)? = null, sandboxPage: String? = null): WebView = WebView(context).apply {
         settings.javaScriptEnabled = javaScriptEnabled
         settings.allowFileAccess = false
         settings.allowContentAccess = false
@@ -55,8 +55,9 @@ object SandboxWebViews {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
         // Cached Python uses synthetic HTTPS requests: every one is intercepted below.
-        settings.blockNetworkLoads = !approvedNetwork && cachedResource == null
-        settings.blockNetworkImage = !approvedNetwork && cachedResource == null
+        // The code page itself is served the same way (a real https origin, so its blob worker is same-origin).
+        settings.blockNetworkLoads = !approvedNetwork && cachedResource == null && sandboxPage == null
+        settings.blockNetworkImage = !approvedNetwork && cachedResource == null && sandboxPage == null
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         isSaveEnabled = false
         setDownloadListener { _, _, _, _, _ -> } // Exports belong to the explicit native Save action.
@@ -74,6 +75,12 @@ object SandboxWebViews {
                 if (request?.isForMainFrame == true) onPageEvent?.invoke("error ${error?.errorCode} ${error?.description}")
             }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse {
+                if (sandboxPage != null && request != null && request.isForMainFrame) {
+                    return if (request.method == "GET" && request.url.toString() == CodeSandboxDocument.BASE_URL)
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
+                            ByteArrayInputStream(sandboxPage.toByteArray(Charsets.UTF_8)))
+                    else blocked()
+                }
                 if (cachedResource != null) {
                     return if (request != null && !request.isForMainFrame && request.method == "GET")
                         cachedResource(request.url.toString()) ?: blocked() else blocked()

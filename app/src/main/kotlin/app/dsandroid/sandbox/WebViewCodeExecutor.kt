@@ -42,14 +42,17 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                 var finished = false
                 var unanswered = 0
                 var bootstrapped = false
+                var bootstrapAnswer = "not tried"
                 val view = SandboxWebViews.create(context, javaScriptEnabled = true,
                     cachedResource = if (python) runtime::resource else null, onFailure = { rendererFailed = true },
                     onConsole = { line -> if (messages.size < 8) messages += line.take(300) },
-                    onPageEvent = { event -> if (event.startsWith("finished")) finished = true; if (events.size < 8) events += event })
+                    onPageEvent = { event -> if (event.startsWith("finished")) finished = true; if (events.size < 8) events += event },
+                    sandboxPage = page.shell)
                 try {
                     withTimeoutOrNull(CodeLimits.WALL_TIME_MS) {
-                        // A real https origin (never resolved, every request intercepted), so the blob worker is same-origin.
-                        view.loadDataWithBaseURL(CodeSandboxDocument.BASE_URL, page.shell, "text/html", "UTF-8", null)
+                        // A real https origin (never resolved: the view serves the page itself and intercepts every request),
+                        // so the blob worker is same-origin.
+                        view.loadUrl(CodeSandboxDocument.BASE_URL)
                         val loadStarted = SystemClock.uptimeMillis()
                         var result: CodeExecution? = null
                         while (result == null) {
@@ -61,9 +64,15 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                             if (!finished && !started && SystemClock.uptimeMillis() - loadStarted < 3_000) { delay(50); continue }
                             // The trusted bootstrap is run by the host once the (script-free) shell has loaded, rather than
                             // inline, so the page cannot be up without it. It defines the poll function first.
+                            // It answers "ok" only in the committed sandbox page, so an early try is simply repeated.
                             if (!bootstrapped) {
-                                bootstrapped = true
-                                view.evaluateJavascript(page.bootstrap, null)
+                                bootstrapAnswer = withTimeoutOrNull(POLL_TIMEOUT_MS) {
+                                    suspendCancellableCoroutine<String> { reply ->
+                                        view.evaluateJavascript(page.bootstrap) { if (reply.isActive) reply.resume(it ?: "null") }
+                                    }
+                                } ?: "no answer"
+                                bootstrapped = bootstrapAnswer == "\"ok\""
+                                if (!bootstrapped) { delay(100); continue }
                             }
                             val raw = withTimeoutOrNull(POLL_TIMEOUT_MS) {
                                 suspendCancellableCoroutine<String> { reply ->
@@ -79,7 +88,7 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                     } ?: CodeExecution(timedOut = true, failed = true, stderr = when {
                         // A page that never started is a sandbox fault, not slow code: say so, with what the page reported.
                         !started -> "The sandbox page did not start (page: " + events.joinToString("; ").ifEmpty { "no load events" } +
-                            "; unanswered polls: $unanswered; probe: ${probe(view)})." +
+                            "; unanswered polls: $unanswered; bootstrap: $bootstrapAnswer; probe: ${probe(view)})." +
                             if (messages.isEmpty()) "" else " Page messages:\n" + messages.joinToString("\n")
                         else -> messages.joinToString("\n")
                     })
