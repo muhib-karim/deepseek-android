@@ -1,4 +1,4 @@
-# Official DeepSeek Android app: screen specification (reference for v1.0.0)
+# Official DeepSeek Android app: screen specification (reference for v1.0.0 and v1.1.0)
 
 What the official app (`com.deepseek.chat` 2.6.2, versionCode 282, see [SOURCE.json](SOURCE.json)) shows, screen by screen,
 and how DeepSeek Android (Unofficial) reproduces it. This file describes publicly observable layout, colour, type,
@@ -89,14 +89,21 @@ System sans-serif (Roboto); the base APK bundles no font [R]. Sizes at font scal
 | Drawer | 86 % of width, max 320 dp; selected chat is a light pill with a "..." button | [E] |
 | Settings groups | radius 12 dp, 16 dp outside margin, 52 dp rows, 12 dp between groups | [E] |
 | Dialogs | radius 20 dp, title, radio list, full-width blue "Confirm" | [M] owner screenshots, [E] sizes |
+| Attach panel (2.6.x) | inline under the composer: a row of recent photos (about 76 dp squares, radius 12 dp, a selection circle top right), then the Camera / Photo / Document tiles | [M] Play screenshot |
+| File chip | above the user bubble: white card with a hairline border, coloured file icon, name, then type and size ("TXT 1.2MB") | [M] Play screenshot |
+
+**Ours (v1.1.0):** dialogs and sheets are white in light mode and dark grey (`#26272B`) in dark mode with 20 dp corners;
+every Material surface, secondary and inverse slot is set, so no tinted (lavender) surface remains.
 
 ### Icons
 
 Line icons with round caps, 1.8 px stroke on a 24 px grid, drawn in [../../app/src/main/kotlin/app/dsandroid/ui/AppIcon.kt](../../app/src/main/kotlin/app/dsandroid/ui/AppIcon.kt):
-menu (two lines, the lower one shorter), new chat (circle with plus), attach (circle with plus), think (atom-like
-spark), search (globe), microphone, send (up arrow in a filled accent circle), stop (filled square), copy (two sheets),
-regenerate (circular arrow), share (box with arrow), more ("..."), camera, photo, file, chevron. The official whale logo
-is **not** recreated; our original chat-bubble-and-spark mark takes its place.
+menu (two lines, the lower one shorter), new chat (circle with plus), attach (plus in an outlined circle), think (two
+crossed orbits around a nucleus, atom-like; drawn by us), search (globe, on the Search pill), magnifier (drawer search
+and "Found N web pages" steps), voice (a dot and two arcs in an outlined circle), send (up arrow in a filled accent
+circle), stop (filled square), copy (two sheets), regenerate (circular arrow), like / dislike (thumbs), share (box with
+arrow), more ("..."), camera, photo, file, chevron. The official whale logo is **not** recreated; our original
+chat-bubble-and-spark mark takes its place.
 
 ## Screens
 
@@ -154,8 +161,10 @@ appears as a picker), new-chat icon right ("New Chat" [R]). Centre: logo above a
 right side plus (attach, "Attach files" [R]) and microphone; the microphone becomes send when there is text and stop
 while a reply streams. The resources also hold "AI-generated response, for reference only." [R]; where it is shown is to
 be confirmed by the capture.
-**Ours:** same layout; greeting "How can I help you?"; an **Agent** pill joins Think and Search (agent extension,
-off by default) and the top bar's right side keeps the new-chat icon. Tags: `account-composer`, `agent-toggle`.
+**Ours:** same layout; greeting "How can I help you?"; an empty new chat shows no title (v1.1.0, as the 2.6.x
+screenshots); attach and voice are outlined 32 dp circles (voice becomes the filled send circle when there is text); an
+**Agent** pill joins Think and Search (agent extension, off by default) and the top bar's right side keeps the new-chat
+icon. Tags: `account-composer`, `agent-toggle`, `chat-title` (absent on an empty chat).
 
 ### think-on, search-on [M]
 Selected pill: light-blue fill, accent icon and label; unselected: outlined with a hairline border. Search with an
@@ -163,7 +172,11 @@ attached file is refused: "Please remove the file before searching" [R]. **Ours:
 sending (the query leaves the device).
 
 ### attach-sheet [M]
-Bottom sheet with three tiles: Camera, Photo, File (labelled "Document" on older builds). **Ours:** Camera, Photo, File.
+2.6.x: an inline panel under the composer with recent photos (pick several) above three tiles: Camera, Photo, Document.
+**Ours (v1.1.0):** the same inline panel (`attachment-panel`); the recent-photos strip appears after the person taps
+**Recent photos** and allows photo access (runtime `READ_MEDIA_IMAGES`, `READ_EXTERNAL_STORAGE` up to API 32); picked
+photos are added together ("Add N photos"). Without access the Photo tile's system picker works. Back or a second tap on
+"+" closes it.
 
 ### model-picker [R]
 "Instant: Instant responses for daily conversations" and "Expert: For complex problems, busy at peak times".
@@ -175,8 +188,13 @@ code cards with "Copy" and a language label, inline maths). Thinking: grey "Thin
 "Thought for N seconds" with a chevron; expanded text is grey, smaller, with a thin vertical line on its left. Search:
 "Searching the web", then "Read N web pages" with numbered citations [R]. Below the last reply: copy, regenerate,
 like, dislike and share icons [R labels: Copy, Regenerate, Like, Dislike, Share].
-**Ours:** same; agent tool steps appear inside the same grey timeline ("Created report.pdf"), files as cards with
-Open, Save and Share (agent extension).
+**Ours (v1.1.0):** the thinking timeline as in the 2.6.x screenshots: "Thinking" then "Thought for N seconds" with a
+chevron; expanded, a grey timeline with a dot per thinking stage and search steps "Found N web pages" (magnifier) and
+"Read N pages" (document) followed by up to three overlapping site icons (DeepSeek's icon service named in the result, or
+the site's favicon; cached; a letter when none loads); each step opens its pages. Citation markers are small numbered
+chips that open the source. Files sent with a message are chips above the bubble. Reply actions: Copy, Regenerate (latest
+reply), Like, Dislike (sent to DeepSeek's message_feedback), Share. Agent tool steps appear in the same grey timeline
+("Created report.pdf"), files as cards with Open, Edit, Download, Save as and Share (agent extension).
 
 ### message-menu [R]
 Long-press menu: Copy, Edit (user messages), Regenerate, Select text, Share, Report. **Ours:** Copy, Edit, Regenerate,
@@ -184,16 +202,21 @@ Select text, Share, Export PDF (no Report: there is no reporting channel for an 
 
 ### share, share-image [R]
 Share opens a turn picker ("%d turns selected"), then "Create Image" (a branded card with "AI-generated, for reference
-only") or "Copy Link" (a server-side shared link). **Ours:** Share sends the conversation as text or Markdown, or
-exports a PDF; there are no server-side shared links in the web contract we use, so "Copy Link" is not offered.
+only") or "Copy Link" (a server-side shared link). **Ours:** Share on a reply offers text, **Create image** (a card with
+this app's own mark, the question and the reply, and "AI-generated, for reference only"; previewed, then shared through
+the system sheet) and PDF; Share in the top bar sends the conversation as text or a PDF. There are no server-side shared
+links in the web contract we use, so "Copy Link" is not offered.
 
 ### drawer, drawer-item-menu [R copy, E layout]
 Search field "Search chat content..." [R], "New chat" [R], chats grouped "Pinned", "Today", "Yesterday", "7 Days",
 "30 Days" then months [R]; empty state "No chat yet" / "Your chat with DeepSeek will be displayed here." [R]. Long-press:
 Rename ("Rename Chat" dialog), Pin / Unpin, Delete ("Once deleted, this chat can't be recovered") [R]. Bottom: avatar,
 account name and a "..." button that opens Settings.
-**Ours:** same groups, search, rename and delete (pinning is local); bottom row shows the account label and opens
-Settings. Extra rows below the list: **Files**, **Plugins & tools**, **Skills** (agent extensions).
+**Ours:** same groups, search (magnifier), rename, pin and delete. Since v1.1.0 the list holds DeepSeek's own history
+(`chat_session/fetch_page`, every device and the website) merged with chats on this phone by session id; opening a chat
+from another device loads its messages (`chat/history_messages`) and continues from its current message; pins are set on
+DeepSeek (`update_pinned`). The bottom row shows the account label and opens Settings. Extra rows below the list:
+**Files**, **Plugins & tools**, **Skills** (agent extensions).
 
 ### settings, settings-more [R copy, E layout]
 Title "Settings" [R]. Groups on a light-grey page [R section names]: **Profile** (Account settings, Data controls),
@@ -231,8 +254,8 @@ Response settings and read-aloud options. **Ours:** collapse thinking automatica
 4. **Agent extensions:** Agent pill, tool steps, file cards, Files panel, Plugins & tools, Skills, artifacts panel and
    editor. They appear only when used or from the drawer, so the default chat matches the reference.
 5. **Not offered:** voice calls, model mode picker on the web route, server-side share links, account deletion,
-   report, WeChat / Apple binding, training switch, like / dislike (there is no feedback channel for an unofficial
-   client).
+   report, WeChat / Apple binding, training switch. (Like / Dislike are offered since v1.1.0: they use the same
+   message_feedback call as DeepSeek's web client.)
 6. **Contrast:** the accent is `#3D63F5` (white text on the official `#426EFE` is about 4.3:1) and secondary text is
    `#6E7178` (the measured `#909398` is about 3.2:1 on white), so text keeps 4.5:1. The dark palette is ours until the
    reference capture measures the official one.

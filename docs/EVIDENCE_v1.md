@@ -15,12 +15,16 @@ debug build and are not release evidence.
 
 1. **Build** (`build` job). Pull requests and manual runs build `:app:assembleRelease` (R8, resource shrinking, not
    debuggable) signed with a throwaway key made for that run; the tag pipeline passes the exact signed APK it will
-   publish. `scripts/check_release_apk.py` checks package, SDK levels (26/35), permissions (INTERNET and RECORD_AUDIO
-   only), ABIs, the debuggable flag and the signature. The `:e2e` module (a test-only host app plus UiAutomator tests in
+   publish. `scripts/check_release_apk.py` checks package, SDK levels (26/35), permissions (INTERNET, RECORD_AUDIO
+   and, since v1.1.0, runtime photo access only), ABIs, the debuggable flag and the signature. The `:e2e` module (a test-only host app plus UiAutomator tests in
    `e2e/src/androidTest`) is built separately; it shares no code with the app.
 2. **Fixture** (`e2e/fixture/server.py`). A standard-library HTTPS server on the runner stands in for chat.deepseek.com
-   (sign-in page, `users/current`, sessions, proof-of-work challenge and worker, streamed replies with thinking and
-   search, uploads), api.deepseek.com (models, balance, native tool calls) and the pages the web tools read. Replies are
+   (sign-in page, `users/current`, sessions, streamed replies with thinking and search, uploads, history, pins and
+   feedback), api.deepseek.com (models, balance, native tool calls) and the pages the web tools read. Since v1.1.0 it
+   behaves like the live service: real DeepSeekHashV1 challenges at the live difficulty whose answers it checks for
+   every completion and upload (40300 / 40301 otherwise), uploads PENDING until `fetch_files` is polled, the live
+   Search and DeepThink + Search stream shapes (negative indices, nested batches, TOOL_SEARCH / TOOL_OPEN,
+   `[reference:N]`, metadata events), and per-account history with a chat "from another device". Replies are
    chosen by markers in the prompt (`E2E-TOOL:<name>`, `E2E-EXPIRE`, `E2E-SLOW`). Its request log keeps hosts, paths,
    flags and tool names only.
 3. **Emulator** (`scripts/e2e_device_setup.sh`, disposable emulator only). A throwaway CA (`scripts/e2e_certs.sh`,
@@ -32,14 +36,17 @@ debug build and are not release evidence.
    `am instrument`. Each step leaves a numbered screenshot and window hierarchy.
 5. **Check** (`scripts/check_e2e_evidence.py`). Requires passing tests, matching APK hashes, 1080 x 2200 step
    screenshots, a decodable video, no credential markers, and the protocol order (session validated before chat, a
-   proof-of-work header on every completion, no unexpected request to a fixture host). The full suite is also checked
+   valid proof of work on every completion and upload, no file referenced before processing, no server chat continued
+   from a wrong parent, no unexpected request to a fixture host). The full suite is also checked
    against [`e2e/coverage.json`](../e2e/coverage.json) with `--coverage`: every required tool case must appear in the
    fixture's own log as an agent turn that requested the tool (offered or not, as the case says) followed by that tool's
    result with the expected ok flag. A missing case fails the run. `ToolCatalogCoverageTest` keeps the list in step with
    the account route of the tool catalog.
 
 Journeys: `BaselineJourneyTest` (welcome, terms, rejected and accepted session, one streamed reply) and
-`AgentJourneyTest` (DeepThink and Search replies, then one agent turn per tool case: files, documents, Excel,
+`AgentJourneyTest` (DeepThink, Search and DeepThink + Search replies with no raw citation marker, a file shared into
+the app and uploaded, the chat from another device opened from the drawer and continued, then one agent turn per tool
+case: files, documents, Excel,
 PowerPoint, PNG, chart, ZIP, code sandbox, skill, web search approved, web fetch declined, native Python and skill
 functions refused while trusted execution is off, Charts refused after it is switched off in Plugins & tools; the PDF
 travels through the system share sheet to a test-only receiver in the driver app, which checks its type, header and

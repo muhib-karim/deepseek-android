@@ -55,7 +55,9 @@ fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, on
                 is TurnStep.Reasoning -> ThinkingBlock("$messageId-$index", step.text, working && !step.complete,
                     step.durationMs.takeIf { step.complete && it > 0 }?.let { it / 1000.0 })
                 is TurnStep.ToolCall -> ToolStepRow(step)
-                is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(step.text.trim(), onRunCode = onRunCode, onPreviewCode = onPreviewCode, onEditCode = onEditCode)
+                // An agent turn keeps no source list, so citation markers from a searched first round read as plain numbers.
+                is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(shareableText(step.text.trim()), onRunCode = onRunCode,
+                    onPreviewCode = onPreviewCode, onEditCode = onEditCode)
             }
         }
     }

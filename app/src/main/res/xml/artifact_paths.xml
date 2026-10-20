@@ -3,4 +3,5 @@
     <files-path name="artifacts" path="artifacts/" />
     <files-path name="workspace" path="workspace/" />
     <cache-path name="camera" path="camera/" />
+    <cache-path name="share_cards" path="share-cards/" />
 </paths>

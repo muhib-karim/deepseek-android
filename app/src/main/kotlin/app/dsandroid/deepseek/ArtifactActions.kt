@@ -34,9 +34,12 @@ object ArtifactActions {
         context.startActivity(Intent.createChooser(intent, "Open ${artifact.fileName}"))
     }
 
-    /** Android 10+: MediaStore Downloads/DeepSeek, no permission. Returns false where the caller must use the system file picker. */
-    fun saveToDownloads(context: Context, artifact: Artifact, file: File): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+    /**
+     * Android 10+: MediaStore Downloads/DeepSeek, no permission. Returns the saved item once its bytes are written and it is
+     * published, or null where the caller must use the system file picker (Android 9 and older).
+     */
+    fun saveToDownloads(context: Context, artifact: Artifact, file: File): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, artifact.fileName)
@@ -52,7 +55,14 @@ object ArtifactActions {
             resolver.delete(target, null, null)
             throw error
         }
-        return true
+        return target
+    }
+
+    /** "Open" on the Saved to Downloads notice: the saved item itself, read-only, in an app the person picks. */
+    fun openSaved(context: Context, uri: Uri, mimeType: String, name: String) {
+        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            .apply { clipData = ClipData.newRawUri(name, uri) }
+        context.startActivity(Intent.createChooser(intent, "Open $name").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** Older Android: copy into the document the user created with the system file picker. */

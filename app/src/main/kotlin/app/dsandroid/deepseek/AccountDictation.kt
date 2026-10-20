@@ -4,9 +4,12 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.dsandroid.ui.AppIcon
 import app.dsandroid.ui.DictationSession
@@ -79,7 +82,8 @@ fun AccountDictation(
     LaunchedEffect(enabled) { if (!enabled) cancel() }
     LaunchedEffect(trigger) { if (trigger > 0) { onTriggerConsumed(); request() } }
     DisposableEffect(speech) { onDispose { session.cancel(); speech.cancel() } }
+    // Official composer: the voice button is an outlined circle with a sound-wave mark.
     IconButton(onClick = { if (listening) cancel() else request() }, enabled = enabled) {
-        AppIcon(if (listening) Glyph.STOP else Glyph.MIC, if (listening) "Stop dictation" else "Dictate message")
+        OutlinedRound { AppIcon(if (listening) Glyph.STOP else Glyph.VOICE, if (listening) "Stop dictation" else "Dictate message", Modifier.size(18.dp)) }
     }
 }

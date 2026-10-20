@@ -4,7 +4,8 @@
 Checks: the instrumentation ran tests and none failed; the installed APK equals the artifact; every step screenshot is a
 1080x2200 PNG; at least one decodable video segment exists; no credential marker appears in any text evidence; and, for
 the mocked run, the fixture saw the required protocol (session validated before chat, proof-of-work header on every
-completion, no unexpected request to a fixture host). Results are labelled "release with mocked backend" or
+completion and upload, no file referenced before processing, no unexpected request to a fixture host). Results are
+labelled "release with mocked backend" or
 "live login-page check"; neither claims live model behaviour.
 
 Usage: check_e2e_evidence.py OUT_DIR --mode mocked|live
@@ -66,8 +67,16 @@ def requests_problems(path):
         problems.append("a chat request was sent before the session was validated")
     if not completions:
         problems.append("no chat completion reached the fixture")
-    if any(not chat[i].get("has_pow") for i in completions):
-        problems.append("a completion was sent without a proof-of-work header")
+    # Since v1.1.0 the fixture checks each proof of work against the challenge it issued for that path (live behaviour).
+    if any(chat[i].get("pow") != "ok" for i in completions):
+        problems.append("a completion was sent without a valid proof of work for its path")
+    uploads = [e for e in chat if e.get("path") == "/api/v0/file/upload_file" and e.get("auth") == "valid"]
+    if any(e.get("pow") != "ok" for e in uploads):
+        problems.append("a file upload was sent without a valid proof of work for its path")
+    if any(e.get("refs_ready") is False for e in chat):
+        problems.append("a completion referenced a file before DeepSeek had finished processing it")
+    if any(e.get("scenario") == "server_history_wrong_parent" for e in chat):
+        problems.append("a chat loaded from DeepSeek was continued from the wrong parent message")
     if any(e.get("auth") == "valid" and e.get("path", "").startswith("/api/v0/") and e.get("rejected") for e in chat):
         problems.append("the fixture rejected a valid session")
     return problems, notes

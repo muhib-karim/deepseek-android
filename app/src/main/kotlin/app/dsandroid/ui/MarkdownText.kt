@@ -3,7 +3,12 @@ package app.dsandroid.ui
 import androidx.compose.ui.res.stringResource
 import app.dsandroid.R
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +17,17 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -30,8 +46,10 @@ import app.dsandroid.core.markdown.*
 import app.dsandroid.core.tools.WebSource
 import app.dsandroid.core.workbench.ArtifactKind
 
-private data class CitationLinks(val numbers: Set<Int> = emptySet(), val open: (Int) -> Unit = {})
+/** [chips]: the web route's [citation:N] markers (N in 1..chips) render as numbered chips that call [open]. */
+private data class CitationLinks(val numbers: Set<Int> = emptySet(), val open: (Int) -> Unit = {}, val chips: Int = 0)
 private val LocalCitations = compositionLocalOf { CitationLinks() }
+private val CITATION_CHIP = Regex("\\[citation:(\\d{1,3})]")
 
 /**
  * [onRunCode], when set, adds a Run action to Python code blocks. [onPreviewCode] adds Preview to HTML, SVG and Markdown
@@ -39,9 +57,10 @@ private val LocalCitations = compositionLocalOf { CitationLinks() }
  */
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebSource> = emptyList(), onCitation: (Int) -> Unit = {},
-    onRunCode: ((String) -> Unit)? = null, onPreviewCode: ((String, String) -> Unit)? = null, onEditCode: ((String, String) -> Unit)? = null) {
+    onRunCode: ((String) -> Unit)? = null, onPreviewCode: ((String, String) -> Unit)? = null, onEditCode: ((String, String) -> Unit)? = null,
+    citationCount: Int = 0) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
-    CompositionLocalProvider(LocalCitations provides CitationLinks(sources.map { it.number }.toSet(), onCitation)) {
+    CompositionLocalProvider(LocalCitations provides CitationLinks(sources.map { it.number }.toSet(), onCitation, citationCount)) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         blocks.forEach { block ->
             when (block) {
@@ -83,6 +102,7 @@ private fun InlineText(text: String, modifier: Modifier = Modifier, style: andro
     val uriHandler = LocalUriHandler.current
     val linkColor = MaterialTheme.colorScheme.primary
     val citations = LocalCitations.current
+    if (citations.chips > 0 && "[citation:" in text) { ChipText(text, modifier, style, citations); return }
     val annotated = remember(text, linkColor, citations.numbers) {
         buildAnnotatedString {
             MarkdownParser.inline(text).forEach { part ->
@@ -119,6 +139,67 @@ private fun InlineText(text: String, modifier: Modifier = Modifier, style: andro
                 if (citation != null) citations.open(citation)
                 else annotated.getStringAnnotations("url", offset, offset).firstOrNull()?.let { runCatching { uriHandler.openUri(it.item) } }
             })
+    }
+}
+
+/**
+ * Text with the web route's citation markers drawn as small numbered chips (official layout); links stay tappable through
+ * link annotations. Code spans never hold chips.
+ */
+@Composable
+private fun ChipText(text: String, modifier: Modifier, style: androidx.compose.ui.text.TextStyle, citations: CitationLinks) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    val annotated = remember(text, linkColor, citations.chips) {
+        buildAnnotatedString {
+            MarkdownParser.inline(text).forEach { part ->
+                val link = part.link
+                val span = SpanStyle(
+                    fontWeight = if (part.bold) FontWeight.Bold else null,
+                    fontStyle = if (part.italic) FontStyle.Italic else null,
+                    fontFamily = if (part.code) FontFamily.Monospace else null,
+                    textDecoration = if (part.strikethrough) TextDecoration.LineThrough else null,
+                )
+                when {
+                    link != null -> withLink(LinkAnnotation.Url(link, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))) {
+                        withStyle(span) { append(part.text) }
+                    }
+                    part.code -> withStyle(span) { append(part.text) }
+                    else -> {
+                        var from = 0
+                        CITATION_CHIP.findAll(part.text).forEach { match ->
+                            withStyle(span) { append(part.text.substring(from, match.range.first)) }
+                            val number = match.groupValues[1].toInt()
+                            if (number in 1..citations.chips) appendInlineContent("citation-$number", "[$number]")
+                            from = match.range.last + 1
+                        }
+                        withStyle(span) { append(part.text.substring(from)) }
+                    }
+                }
+            }
+        }
+    }
+    val chips = (1..citations.chips).associate { number ->
+        "citation-$number" to InlineTextContent(Placeholder(if (number < 10) 18.sp else 24.sp, 16.sp, PlaceholderVerticalAlign.TextCenter)) {
+            CitationChip(number) { citations.open(number) }
+        }
+    }
+    // Screen readers reach the sources through the paragraph: one "Open source N" action per chip in it.
+    val used = remember(text, citations.chips) {
+        CITATION_CHIP.findAll(text).mapNotNull { it.groupValues[1].toIntOrNull() }.filter { it in 1..citations.chips }.distinct().toList()
+    }
+    SelectionContainer {
+        Text(annotated, modifier.semantics { customActions = used.map { number -> CustomAccessibilityAction("Open source $number") { citations.open(number); true } } },
+            style = style.copy(color = if (style.color == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else style.color),
+            inlineContent = chips)
+    }
+}
+
+@Composable
+private fun CitationChip(number: Int, onClick: () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 1.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+        .clickable(onClick = onClick).semantics { contentDescription = "Source $number" }.testTag("citation-$number"),
+        contentAlignment = androidx.compose.ui.Alignment.Center) {
+        Text("$number", fontSize = 10.sp, lineHeight = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

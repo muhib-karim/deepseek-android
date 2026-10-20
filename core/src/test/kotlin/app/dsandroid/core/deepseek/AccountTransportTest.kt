@@ -59,14 +59,19 @@ class AccountTransportTest {
             try {
                 file.writeBytes(byteArrayOf(0, 1, 2, 10, 65, 66))
                 listOf("""{"id":"file-direct"}""", """{"file":{"id":"file-nested"}}""").forEachIndexed { index, body ->
+                    server.enqueue(challenge())
                     server.enqueue(envelope(body))
-                    assertEquals(if (index == 0) "file-direct" else "file-nested", client.uploadFile(credentials, file, "original.pdf", "application/pdf"))
+                    val uploaded = client.uploadFile(credentials, file, "original.pdf", "application/pdf") { 1 }
+                    assertEquals(if (index == 0) "file-direct" else "file-nested", uploaded.id)
+                    assertEquals("/api/v0/chat/create_pow_challenge", server.takeRequest(1, TimeUnit.SECONDS)!!.path)
                     val request = server.takeRequest(1, TimeUnit.SECONDS)!!
                     assertEquals("/api/v0/file/upload_file", request.path)
                     assertEquals("POST", request.method)
                     assertTrue(request.getHeader("Content-Type")!!.startsWith("multipart/form-data; boundary="))
                     assertEquals("Bearer synthetic-session", request.getHeader("Authorization"))
                     assertEquals("ds_session_id=synthetic-cookie", request.getHeader("Cookie"))
+                    val pow = String(java.util.Base64.getDecoder().decode(request.getHeader("X-DS-PoW-Response")!!), Charsets.UTF_8)
+                    assertTrue(pow.contains("\"target_path\":\"/api/v0/file/upload_file\""))
                     val wire = request.body.readUtf8()
                     assertTrue(wire.contains("name=\"file\"; filename=\"original.pdf\""))
                     assertTrue(wire.contains("Content-Type: application/pdf"))
@@ -121,9 +126,15 @@ class AccountTransportTest {
 
     @Test fun unexpectedHttpAndMalformedRequiredEnvelopesHaveTheExactSafeMessage() = runBlocking<Unit> {
         withServer { server, client ->
-            listOf(302, 404, 410, 500, 503).forEach { code ->
+            listOf(302, 404, 410).forEach { code ->
                 server.enqueue(MockResponse().setResponseCode(code).setBody("synthetic-session"))
                 expectChanged { client.createSession(credentials) }
+            }
+            listOf(500, 502, 503).forEach { code ->
+                server.enqueue(MockResponse().setResponseCode(code).setBody("synthetic-session"))
+                val error = try { client.createSession(credentials); null } catch (error: WebServiceBusy) { error }
+                assertEquals("DeepSeek is having trouble right now. Tap Retry in a moment.", error!!.message)
+                assertNull(error.cause)
             }
             listOf(
                 "synthetic-session", "[]", "{}", """{"data":{"biz_code":0,"biz_data":{"id":"wrong"}}}""",
@@ -143,8 +154,9 @@ class AccountTransportTest {
             val file = Files.createTempFile("bad-upload", ".txt").toFile()
             try {
                 listOf("{}", """{"id":null}""", """{"file":{"id":false}}""").forEach {
+                    server.enqueue(challenge())
                     server.enqueue(envelope(it))
-                    expectChanged { client.uploadFile(credentials, file, "file.txt", "text/plain") }
+                    expectChanged { client.uploadFile(credentials, file, "file.txt", "text/plain") { 1 } }
                 }
             } finally { file.delete() }
             listOf("{}", """{"challenge":{}}""", """{"challenge":{"algorithm":"unknown","challenge":"x","salt":"x","difficulty":1,"expire_at":9999999999999,"signature":"x"}}""").forEach {
@@ -166,19 +178,27 @@ class AccountTransportTest {
                     assertEquals(expiry, error!!.message)
                 }
             }
-            listOf("data: {bad}\n\n", "data: {\"unknown\":true}\n\ndata: [DONE]\n\n", "data: {\"v\":{\"response_message_id\":22}}\n\n").forEach { stream ->
+            listOf("data: {bad}\n\n", "data: {\"unknown\":true}\n\ndata: [DONE]\n\n").forEach { stream ->
                 server.enqueue(challenge()); server.enqueue(sse(stream))
                 expectChanged { client.complete(credentials, CompletionInput("s", null, "Hello", false, false)) { 1 }.toList() }
+            }
+            // A stream that ends before FINISHED is an interrupted reply, not a changed service.
+            server.enqueue(challenge()); server.enqueue(sse("data: {\"v\":{\"response_message_id\":22}}\n\n"))
+            assertThrows(WebReplyInterrupted::class.java) {
+                runBlocking { client.complete(credentials, CompletionInput("s", null, "Hello", false, false)) { 1 }.toList() }
             }
         }
     }
 
-    @Test fun anHttpBodyTruncatedDuringAStreamIsATypedProtocolFailure() = runBlocking<Unit> {
+    @Test fun anHttpBodyTruncatedDuringAStreamIsAConnectionFailure() = runBlocking<Unit> {
         withServer { server, client ->
             server.enqueue(challenge())
             server.enqueue(sse("data: {\"v\":{\"response_message_id\":22}}\n\n")
                 .setHeader("Content-Length", 1000000).setSocketPolicy(SocketPolicy.DISCONNECT_AT_END))
-            expectChanged { client.complete(credentials, CompletionInput("s", null, "Hi", false, false)) { 1 }.toList() }
+            val error = try { client.complete(credentials, CompletionInput("s", null, "Hi", false, false)) { 1 }.toList(); null }
+                catch (error: WebConnectionFailed) { error }
+            assertEquals("Couldn't reach DeepSeek. Check your connection, then tap Retry.", error!!.message)
+            assertNull(error.cause)
         }
     }
 

@@ -1,0 +1,1189 @@
+event: ready
+data: {"request_message_id":1,"response_message_id":2,"model_type":"default"}
+
+event: update_session
+data: {"updated_at":1792530210.7533638}
+
+data: {"v":{"response":{"message_id":2,"parent_id":1,"model":"","role":"ASSISTANT","thinking_enabled":true,"ban_edit":false,"ban_regenerate":false,"status":"WIP","incomplete_message":null,"accumulated_token_usage":0,"feedback":null,"inserted_at":1792530210.740012,"search_enabled":true,"fragments":[{"id":2,"type":"THINK","content":"The","elapsed_secs":null,"references":[],"stage_id":1}],"conversation_mode":"DEFAULT","has_pending_fragment":false,"auto_continue":false,"search_triggered":true,"extra_search_providers":[]}}}
+
+data: {"p":"response/conversation_mode","v":"DEEP_SEARCH"}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" user"}
+
+data: {"v":" wants"}
+
+data: {"v":" the"}
+
+data: {"v":" latest"}
+
+data: {"v":" news"}
+
+data: {"v":" headline"}
+
+data: {"v":" about"}
+
+data: {"v":" NASA"}
+
+data: {"v":" today"}
+
+data: {"v":","}
+
+data: {"v":" in"}
+
+data: {"v":" one"}
+
+data: {"v":" line"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" need"}
+
+data: {"v":" to"}
+
+data: {"v":" search"}
+
+data: {"v":" for"}
+
+data: {"v":" recent"}
+
+data: {"v":" NASA"}
+
+data: {"v":" news"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" use"}
+
+data: {"v":" the"}
+
+data: {"v":" search"}
+
+data: {"v":" tool"}
+
+data: {"v":" with"}
+
+data: {"v":" a"}
+
+data: {"v":" query"}
+
+data: {"v":" like"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" news"}
+
+data: {"v":" October"}
+
+data: {"v":" "}
+
+data: {"v":"21"}
+
+data: {"v":" "}
+
+data: {"v":"202"}
+
+data: {"v":"6"}
+
+data: {"v":"\""}
+
+data: {"v":" or"}
+
+data: {"v":" \""}
+
+data: {"v":"latest"}
+
+data: {"v":" NASA"}
+
+data: {"v":" headline"}
+
+data: {"v":"\"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" try"}
+
+data: {"v":" to"}
+
+data: {"v":" get"}
+
+data: {"v":" results"}
+
+data: {"v":" from"}
+
+data: {"v":" today"}
+
+data: {"v":"."}
+
+data: {"p":"response/fragments/-1/elapsed_secs","o":"SET","v":1.1202514159999999}
+
+data: {"p":"response/has_pending_fragment","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":3,"type":"TOOL_SEARCH","status":"WIP","content":null,"queries":[{"query":"NASA news October 21 2026"},{"query":"latest NASA headline today"}],"results":[],"stage_id":1}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-1/results","o":"SET","v":[{"url":"https://spacepolicyonline.com/news/whats-happening-in-space-policy-october-18-24-2026/","title":"What’s Happening in Space Policy October 18-24, 2026","snippet":"Tuesday-Wednesday, October 20-21 ... Wednesday, October 21 - Human Exploration Across the Moon: Report Release (National Academies), virtual, 1:00-2:30 pm ET Wednesday-Friday, October 21-23","cite_index":null,"published_at":1792252800.0,"site_icon":"https://cdn.deepseek.com/site-icons/spacepolicyonline.com","site_name":"Space Policy Online","query_indexes":[0],"provider":null},{"url":"https://www.tomorrowsworldtoday.com/space/nasa-prepares-for-spacewalks-advanced-biomedical-research/","title":"NASA Prepares for Spacewalks & Advanced Biomedical Research","snippet":"2026年10月21日星期三 # NASA Prepares for Spacewalks & Advanced Biomedical Research Astronauts will install new solar arrays on the ISS and explore personalized treatments in space. Preparations for upcoming spacewalks kicked off this week aboard the International Space Station, with two ... the end of October.","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/tomorrowsworldtoday.com","site_name":"Tomorrow's World Today","query_indexes":[0],"provider":null},{"url":"https://www.ecoticias.com/en/nasa-released-footage-of-astronauts-testing-lunar-outposts-pegasus-as-robotic-rovers-and-lunar-terrain-vehicles-get-ready-to-scout-the-moons-south-pole-and-each-ltv-will-cover-up-to-3-7-miles-a-day/52598/","title":"NASA released footage of astronauts testing Lunar Outpost's Pegasus as robotic rovers and lunar terrain vehicles get ready to scout the Moon's South Pole, and each LTV will cover up to 3.7 miles a day","snippet":"NASA released footage of astronauts testing Lunar Outpost’s Pegasus as robotic rovers and lunar terrain vehicles get ready to scout the Moon’s South Pole ... NASA on October 20 ... released a progress update on the rovers that will open its Moon Base...","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/ecoticias.com","site_name":"ECOticias.com El Periódico Verde","query_indexes":[0],"provider":null},{"url":"https://manager.bg/%d1%81%d0%b2%d1%8f%d1%82/kanadec-i-amrikanec-izlizat-v-otkritia-kosmos-za-da-obnovat-slanchevite-paneli-na-mks","title":"Канадец и амриканец излизат в открития космос, за да обновят слънчевите панели на МКС","snippet":"Астронавтите на борда на Международната космическа станция (МКС) ще извършат излизане в открития космос на 29 октомври и 5 ноември, за да обновят енергийната система на орбиталната лаборатория, обяви NASA.","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/manager.bg","site_name":"manager.bg","query_indexes":[0],"provider":null},{"url":"https://keeptrack.space/space-brief/space-brief-2026-10-18","title":"Orionid Meteor Shower Peaks October 21-22","snippet":"Orionid Meteor Shower Peaks October 21-22 The Orionids peak October 21-22 with 10 to 20 meteors per hour from Halley's Comet debris. ... NASA Converts the Eagle Nebula Pillars Into Sound","cite_index":null,"published_at":1792252800.0,"site_icon":"https://cdn.deepseek.com/site-icons/keeptrack.space","site_name":"KeepTrack","query_indexes":[0],"provider":null},{"url":"https://isstracker.pl/news/przygotowania-do-spacerow-kosmicznych-i-zaawansowane-badania-biomedyczne-rozpoczynaja-tydzien,446zM7","title":"Przygotowania do spacerów kosmicznych i zaawansowane badania biomedyczne rozpoczynają tydzień • ISS Tracker","snippet":"Kierownictwo NASA omówi zbliżające się spacery podczas konferencji w Centrum Lotów Kosmicznych Johnsona, o godzinie 14:00 czasu wschodniego we wtorek 20 października.","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/isstracker.pl","site_name":"isstracker.pl","query_indexes":[0],"provider":null},{"url":"https://technews.tw/2026/10/17/nasa-roman-space-telescope-initial-optical-test-successful/?utm_source=fb_tn&utm_medium=facebook","title":"精度堪比「240 公里外打硬幣」，NASA 羅曼太空望遠鏡超高穩定度通過關鍵測試","snippet":"根據 NASA 公布的最新資訊，工程團隊於 9 月 15 日至 21 日期間順利測試其「精細導引系統」，確認望遠鏡能持續精準鎖定同一片天空，穩定度正式達到科學觀測所需的高標準。","cite_index":null,"published_at":1792166400.0,"site_icon":"https://cdn.deepseek.com/site-icons/technews.tw","site_name":"TechNews 科技新報","query_indexes":[0],"provider":null},{"url":"https://www.publicnow.com/view/98980A063D4E284EC5D41B6D8D1A9C3561A6E0A6","title":"NASA - The National Aeronautics and Space[...] (via Public) / Two NASA Commercial Satellite Communication Demonstrations Launch","snippet":"Two NASA Commercial Satellite Communication Demonstrations Launch ... Two NASA-funded demonstrations have successfully launched into low Earth orbit aboard the SpaceX Bandwagon-5 rideshare. Over the coming weeks ... After Tuesday's launch, two of NASA's partners, Viasat and SES Space and Defense, will prepare to test high- and low-rate communications capabilities for the agency.","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/publicnow.com","site_name":"Public now","query_indexes":[0],"provider":null},{"url":"https://havadiskolik.com/teknoloji/nasa-minyatur-insan-beyinlerini-uzayda-inceleyecek/","title":"NASA, minyatür insan beyinlerini uzayda inceleyecek","snippet":"ABONE OL Ekim 20, 2026 14:22  News  Uzay koşullarının insan beynini nasıl etkilediğini anlamayı amaçlayan yeni bir araştırma kapsamında, laboratuvarda yetiştirilen minyatür insan beyni modelleri Ulusl","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/havadiskolik.com","site_name":"Havadiskolik","query_indexes":[0],"provider":null},{"url":"https://misskey.virtualrocketwatching.net/notes/as5ozyh7n8","title":"Guppy@ロケみる集会 (@guppy0228)","snippet":"# ロケット打ち上げを観る集会  VRChatでロケットの打ち上げ生中継・アーカイブ動画を同時視聴する、パブリックビューイングイベントを行っています。実物大の3Dモデルや教材を用いて、最新の宇宙開発事情をお届けします。 ホームページ→ https://virtualrocketwatching.net/  用户  22  帖子  110,083  看看时间线  bot  @guppy0228  b","cite_index":null,"published_at":1791561600.0,"site_icon":"https://cdn.deepseek.com/site-icons/virtualrocketwatching.net","site_name":"renter | ロケット打ち上げを観る集会","query_indexes":[0],"provider":null},{"url":"https://globalnews.ca/video/11892616/nasa-reverses-evacuation-alert-order-for-astronauts-aboard-international-space-station/","title":"NASA reverses evacuation alert order for astronauts aboard International Space Station | Watch News Videos Online","snippet":"NASA reverses evacuation alert order for astronauts aboard International Space Station Description 14 minutes ago Astronauts on board the International Space Station have now been told by NASA to “end the safe haven procedures and return to planned operations aboard the International Space Station.” Nathaniel Dove has the latest.","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/globalnews.ca","site_name":"Global News","query_indexes":[0],"provider":null},{"url":"https://www.wafb.com/news/national/www.wafb.com/#main","title":"National","snippet":"A 22-year-old NASA observatory is expected to reenter Earth's atmosphere in the coming weeks. ... NASA and SpaceX launched Crew-13 to the International Space Station, led by commander Jessica Watkins and carrying a Canadian astronaut set to become a father in orbit.","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/wafb.com","site_name":"WAFB","query_indexes":[0],"provider":null},{"url":"https://www.firstalert4.com/news/national/Woman-sentenced-to-80-years-for-day-care-fire-that-killed-4-children-180190231.html?c=y&c=y&c=y&c=y&gallery=y&img=4","title":"National","snippet":"National Updated: 17 minutes ago By The Associated Press and Marcia Dunn NASA is racing to save an aging telescope from falling back to Earth with a daring rescue mission. Updated: 2 hours ago ... Astronomers have uncovered a pair of giant planets that are lighter than cotton candy. Updated: 9 hours ago","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/firstalert4.com","site_name":"KMOV","query_indexes":[0],"provider":null},{"url":"https://botasot.co/no/tag/nasa/","title":"NASA - World Today News 🌐","snippet":"NASA deler bilder fra verdensrommet av orkanen Milton som traff Florida ... NASA ... NASA oppdager den lyseste kosmiske eksplosjonen som noen gang er registrert ... NASA oppdager 'superjorden' eksoplanet i beboelig sone","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/botasot.co","site_name":"Bota Sot News 🌐","query_indexes":[0],"provider":null},{"url":"https://newsweek.ro/actualitate/astronaut-nasa-speriat-de-moarte-la-406000-km-de-pamant-nu-ne-vom-mai-intoarce-acasa","title":"Astronaut NASA, speriat de moarte la 406.000 km de Pământ: „Nu ne vom mai întoarce acasă” • Newsweek România","snippet":"Astronaut NASA, speriat de moarte la 406.000 km de Pământ: „Nu ne vom mai întoarce acasă” ... Astronaut NASA, speriat de moarte la peste 406.000 km de Pământ...","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/newsweek.ro","site_name":"Newsweek Romania","query_indexes":[0],"provider":null},{"url":"https://botasot.co/es/tag/nasa/","title":"NASA - Noticias del Mundo Hoy 🌐","snippet":"La NASA comparte fotos desde el espacio del huracán Milton que azotó Florida ... NASA ... 2 Minutos ### La NASA descubre la explosión cósmica más brillante jamás registrada ... La NASA descubre un exoplaneta 'supertierra' en zona habitable","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/botasot.co","site_name":"Bota Sot News 🌐","query_indexes":[0],"provider":null},{"url":"https://flipboard.com/@pablorodreguez/fabric-of-the-universe-1859oe53z/nasa-s-sr-1-freedom-advances-with-progress-on-nuclear-power-module---nasa/a-r1btP5X_S1uUJrQPlgmojQ%3Aa%3A3256150430-bff61ba261%2Fnasa.gov","title":"NASA’s SR-1 Freedom Advances with Progress on Nuclear Power Module - NASA | Flipboard","snippet":"NASA’s SR-1 Freedom Advances with Progress on Nuclear Power Module - NASA Destined for Mars and beyond, NASA’s ... NASA images reveal unusual Pacific Ocean color shift amid strengthening El Niño ... Today in History: Today is Tuesday, Oct. 20, the 293rd day of 2026.","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/flipboard.com","site_name":"flipboard.com","query_indexes":[0],"provider":null},{"url":"https://flipboard.com/topic/moonmissions/after-a-year-on-simulated-mars-nasa-crew-prepares-to-return-home/a-gmStS6DtSKuKw0BPhGiYiw%3Aa%3A2780262975-d17013d01d%2Faccuweather.com","title":"After a year on simulated Mars, NASA crew prepares to return home | Flipboard","snippet":"After a year on simulated Mars, NASA crew prepares to return home The 378-day mission is helping researchers understand how isolation, limited resources and communication delays could affect future Mars … ... NASA satellite images reveal quiet disaster unfolding under Aussie waters","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/flipboard.com","site_name":"flipboard.com","query_indexes":[0],"provider":null},{"url":"https://test-mobile-feeds.cbsnews.com/tag/nasa/#app","title":"NASA news - Today’s latest updates","snippet":"NASA #### NASA hauls Artemis II moon rocket to launch pad for February flight ... NASA begins Artemis II rollout to launchpad ... Astronauts back on Earth after medical issue cut mission short ... 2025 was one of hottest years ever, NASA says","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/cbsnews.com","site_name":"cbsnews.com","query_indexes":[0],"provider":null},{"url":"https://www.itiger.com/hans/news/2671520982","title":"美国航空航天局（NASA）：波音(BA.N)已在“星际客机-1”（Starliner-1）上实施改进措施，此前公司已确定","snippet":"美国航空航天局（NASA） ... 美国航空航天局（NASA）：波音(BA.N)已在“星际客机-1”（Starliner-1）上实施改进措施，此前公司已确定该飞船氦气泄漏的原因。","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/itiger.com","site_name":"Tiger Brokers","query_indexes":[0],"provider":null}]}
+
+data: {"p":"response/fragments/-1","o":"BATCH","v":[{"p":"status","v":"FINISHED"},{"p":"content","v":"Found 20 web pages"}]}
+
+data: {"p":"response/has_pending_fragment","o":"SET","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":4,"type":"THINK","content":"The","elapsed_secs":null,"references":[],"stage_id":2}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" search"}
+
+data: {"v":" results"}
+
+data: {"v":" show"}
+
+data: {"v":" some"}
+
+data: {"v":" recent"}
+
+data: {"v":" NASA"}
+
+data: {"v":" news"}
+
+data: {"v":"."}
+
+data: {"v":" The"}
+
+data: {"v":" user"}
+
+data: {"v":" wants"}
+
+data: {"v":" the"}
+
+data: {"v":" latest"}
+
+data: {"v":" headline"}
+
+data: {"v":" \""}
+
+data: {"v":"today"}
+
+data: {"v":"\""}
+
+data: {"v":" ("}
+
+data: {"v":"October"}
+
+data: {"v":" "}
+
+data: {"v":"21"}
+
+data: {"v":","}
+
+data: {"v":" "}
+
+data: {"v":"202"}
+
+data: {"v":"6"}
+
+data: {"v":")."}
+
+data: {"v":" The"}
+
+data: {"v":" search"}
+
+data: {"v":" results"}
+
+data: {"v":" include"}
+
+data: {"v":" items"}
+
+data: {"v":" from"}
+
+data: {"v":" October"}
+
+data: {"v":" "}
+
+data: {"v":"20"}
+
+data: {"v":" and"}
+
+data: {"v":" "}
+
+data: {"v":"21"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" need"}
+
+data: {"v":" to"}
+
+data: {"v":" pick"}
+
+data: {"v":" a"}
+
+data: {"v":" headline"}
+
+data: {"v":" that"}
+
+data: {"v":" is"}
+
+data: {"v":" current"}
+
+data: {"v":" and"}
+
+data: {"v":" relevant"}
+
+data: {"v":"."}
+
+data: {"v":" Let"}
+
+data: {"v":"'s"}
+
+data: {"v":" look"}
+
+data: {"v":" at"}
+
+data: {"v":" the"}
+
+data: {"v":" first"}
+
+data: {"v":" search"}
+
+data: {"v":" result"}
+
+data: {"v":":"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" Prep"}
+
+data: {"v":"ares"}
+
+data: {"v":" for"}
+
+data: {"v":" Space"}
+
+data: {"v":"walks"}
+
+data: {"v":" &"}
+
+data: {"v":" Advanced"}
+
+data: {"v":" Biomedical"}
+
+data: {"v":" Research"}
+
+data: {"v":"\""}
+
+data: {"v":" from"}
+
+data: {"v":" tomorrow"}
+
+data: {"v":"sw"}
+
+data: {"v":"orld"}
+
+data: {"v":"today"}
+
+data: {"v":".com"}
+
+data: {"v":","}
+
+data: {"v":" dated"}
+
+data: {"v":" "}
+
+data: {"v":"202"}
+
+data: {"v":"6"}
+
+data: {"v":"-"}
+
+data: {"v":"10"}
+
+data: {"v":"-"}
+
+data: {"v":"20"}
+
+data: {"v":"."}
+
+data: {"v":" That"}
+
+data: {"v":" might"}
+
+data: {"v":" be"}
+
+data: {"v":" yesterday"}
+
+data: {"v":"'s"}
+
+data: {"v":" news"}
+
+data: {"v":","}
+
+data: {"v":" but"}
+
+data: {"v":" it"}
+
+data: {"v":" could"}
+
+data: {"v":" still"}
+
+data: {"v":" be"}
+
+data: {"v":" current"}
+
+data: {"v":"."}
+
+data: {"v":" Another"}
+
+data: {"v":" result"}
+
+data: {"v":":"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" released"}
+
+data: {"v":" footage"}
+
+data: {"v":" of"}
+
+data: {"v":" astronauts"}
+
+data: {"v":" testing"}
+
+data: {"v":" Lunar"}
+
+data: {"v":" Out"}
+
+data: {"v":"post"}
+
+data: {"v":"'s"}
+
+data: {"v":" Peg"}
+
+data: {"v":"asus"}
+
+data: {"v":"...\""}
+
+data: {"v":" also"}
+
+data: {"v":" dated"}
+
+data: {"v":" "}
+
+data: {"v":"202"}
+
+data: {"v":"6"}
+
+data: {"v":"-"}
+
+data: {"v":"10"}
+
+data: {"v":"-"}
+
+data: {"v":"20"}
+
+data: {"v":"."}
+
+data: {"v":" There"}
+
+data: {"v":"'s"}
+
+data: {"v":" also"}
+
+data: {"v":" a"}
+
+data: {"v":" result"}
+
+data: {"v":" about"}
+
+data: {"v":" \""}
+
+data: {"v":"Or"}
+
+data: {"v":"ion"}
+
+data: {"v":"id"}
+
+data: {"v":" Meteor"}
+
+data: {"v":" Sh"}
+
+data: {"v":"ower"}
+
+data: {"v":" Pe"}
+
+data: {"v":"aks"}
+
+data: {"v":" October"}
+
+data: {"v":" "}
+
+data: {"v":"21"}
+
+data: {"v":"-"}
+
+data: {"v":"22"}
+
+data: {"v":"\""}
+
+data: {"v":" but"}
+
+data: {"v":" that"}
+
+data: {"v":"'s"}
+
+data: {"v":" not"}
+
+data: {"v":" specifically"}
+
+data: {"v":" a"}
+
+data: {"v":" NASA"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" There"}
+
+data: {"v":"'s"}
+
+data: {"v":" a"}
+
+data: {"v":" result"}
+
+data: {"v":" from"}
+
+data: {"v":" global"}
+
+data: {"v":"news"}
+
+data: {"v":".ca"}
+
+data: {"v":" about"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" reverses"}
+
+data: {"v":" evacuation"}
+
+data: {"v":" alert"}
+
+data: {"v":" order"}
+
+data: {"v":" for"}
+
+data: {"v":" astronauts"}
+
+data: {"v":" aboard"}
+
+data: {"v":" International"}
+
+data: {"v":" Space"}
+
+data: {"v":" Station"}
+
+data: {"v":"\""}
+
+data: {"v":" with"}
+
+data: {"v":" no"}
+
+data: {"v":" publish"}
+
+data: {"v":" date"}
+
+data: {"v":","}
+
+data: {"v":" but"}
+
+data: {"v":" it"}
+
+data: {"v":" says"}
+
+data: {"v":" \""}
+
+data: {"v":"14"}
+
+data: {"v":" minutes"}
+
+data: {"v":" ago"}
+
+data: {"v":"\""}
+
+data: {"v":" in"}
+
+data: {"v":" the"}
+
+data: {"v":" snippet"}
+
+data: {"v":"."}
+
+data: {"v":" That"}
+
+data: {"v":" seems"}
+
+data: {"v":" very"}
+
+data: {"v":" recent"}
+
+data: {"v":"."}
+
+data: {"v":" However"}
+
+data: {"v":","}
+
+data: {"v":" the"}
+
+data: {"v":" snippet"}
+
+data: {"v":" might"}
+
+data: {"v":" be"}
+
+data: {"v":" from"}
+
+data: {"v":" a"}
+
+data: {"v":" live"}
+
+data: {"v":" feed"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" should"}
+
+data: {"v":" check"}
+
+data: {"v":" that"}
+
+data: {"v":"."}
+
+data: {"v":" Also"}
+
+data: {"v":","}
+
+data: {"v":" result"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":" from"}
+
+data: {"v":" w"}
+
+data: {"v":"af"}
+
+data: {"v":"b"}
+
+data: {"v":".com"}
+
+data: {"v":" mentions"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" and"}
+
+data: {"v":" SpaceX"}
+
+data: {"v":" launched"}
+
+data: {"v":" Crew"}
+
+data: {"v":"-"}
+
+data: {"v":"13"}
+
+data: {"v":" to"}
+
+data: {"v":" the"}
+
+data: {"v":" International"}
+
+data: {"v":" Space"}
+
+data: {"v":" Station"}
+
+data: {"v":"\"."}
+
+data: {"v":" That"}
+
+data: {"v":" could"}
+
+data: {"v":" be"}
+
+data: {"v":" recent"}
+
+data: {"v":"."}
+
+data: {"v":" But"}
+
+data: {"v":" the"}
+
+data: {"v":" user"}
+
+data: {"v":" wants"}
+
+data: {"v":" one"}
+
+data: {"v":" line"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" need"}
+
+data: {"v":" to"}
+
+data: {"v":" verify"}
+
+data: {"v":" the"}
+
+data: {"v":" most"}
+
+data: {"v":" recent"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" open"}
+
+data: {"v":" a"}
+
+data: {"v":" few"}
+
+data: {"v":" links"}
+
+data: {"v":" to"}
+
+data: {"v":" check"}
+
+data: {"v":" dates"}
+
+data: {"v":" and"}
+
+data: {"v":" content"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" open"}
+
+data: {"v":" result"}
+
+data: {"v":" "}
+
+data: {"v":"0"}
+
+data: {"v":" from"}
+
+data: {"v":" search"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":" ("}
+
+data: {"v":"global"}
+
+data: {"v":"news"}
+
+data: {"v":".ca"}
+
+data: {"v":")"}
+
+data: {"v":" and"}
+
+data: {"v":" result"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":" from"}
+
+data: {"v":" search"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":" ("}
+
+data: {"v":"w"}
+
+data: {"v":"af"}
+
+data: {"v":"b"}
+
+data: {"v":".com"}
+
+data: {"v":")"}
+
+data: {"v":" and"}
+
+data: {"v":" maybe"}
+
+data: {"v":" result"}
+
+data: {"v":" "}
+
+data: {"v":"0"}
+
+data: {"v":" from"}
+
+data: {"v":" search"}
+
+data: {"v":" "}
+
+data: {"v":"0"}
+
+data: {"v":" ("}
+
+data: {"v":"space"}
+
+data: {"v":"policy"}
+
+data: {"v":"online"}
+
+data: {"v":")"}
+
+data: {"v":" but"}
+
+data: {"v":" that"}
+
+data: {"v":"'s"}
+
+data: {"v":" a"}
+
+data: {"v":" policy"}
+
+data: {"v":" round"}
+
+data: {"v":"up"}
+
+data: {"v":"."}
+
+data: {"v":" Also"}
+
+data: {"v":" result"}
+
+data: {"v":" "}
+
+data: {"v":"1"}
+
+data: {"v":" from"}
+
+data: {"v":" search"}
+
+data: {"v":" "}
+
+data: {"v":"0"}
+
+data: {"v":" ("}
+
+data: {"v":"tom"}
+
+data: {"v":"orrow"}
+
+data: {"v":"sw"}
+
+data: {"v":"orld"}
+
+data: {"v":"today"}
+
+data: {"v":")"}
+
+data: {"v":" seems"}
+
+data: {"v":" like"}
+
+data: {"v":" a"}
+
+data: {"v":" NASA"}
+
+data: {"v":" update"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" open"}
+
+data: {"v":" these"}
+
+data: {"v":" to"}
+
+data: {"v":" see"}
+
+data: {"v":" the"}
+
+data: {"v":" headline"}
+
+data: {"v":" and"}
+
+data: {"v":" date"}
+
+data: {"v":"."}
+
+data: {"p":"response/fragments/-1/elapsed_secs","o":"SET","v":1.990561364}
+
+data: {"p":"response/has_pending_fragment","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":5,"type":"TOOL_OPEN","status":"WIP","result":{"url":"https://globalnews.ca/video/11892616/nasa-reverses-evacuation-alert-order-for-astronauts-aboard-international-space-station/","title":"NASA reverses evacuation alert order for astronauts aboard International Space Station | Watch News Videos Online","snippet":"NASA reverses evacuation alert order for astronauts aboard International Space Station Description 14 minutes ago Astronauts on board the International Space Station have now been told by NASA to “end the safe haven procedures and return to planned operations aboard the International Space Station.” Nathaniel Dove has the latest.","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/globalnews.ca","site_name":"Global News","query_indexes":[0],"provider":null},"reference":{"id":3,"type":"TOOL_SEARCH"},"stage_id":2},{"id":6,"type":"TOOL_OPEN","status":"WIP","result":{"url":"https://www.wafb.com/news/national/www.wafb.com/#main","title":"National","snippet":"A 22-year-old NASA observatory is expected to reenter Earth's atmosphere in the coming weeks. ... NASA and SpaceX launched Crew-13 to the International Space Station, led by commander Jessica Watkins and carrying a Canadian astronaut set to become a father in orbit.","cite_index":null,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/wafb.com","site_name":"WAFB","query_indexes":[0],"provider":null},"reference":{"id":3,"type":"TOOL_SEARCH"},"stage_id":2},{"id":7,"type":"TOOL_OPEN","status":"WIP","result":{"url":"https://www.tomorrowsworldtoday.com/space/nasa-prepares-for-spacewalks-advanced-biomedical-research/","title":"NASA Prepares for Spacewalks & Advanced Biomedical Research","snippet":"2026年10月21日星期三 # NASA Prepares for Spacewalks & Advanced Biomedical Research Astronauts will install new solar arrays on the ISS and explore personalized treatments in space. Preparations for upcoming spacewalks kicked off this week aboard the International Space Station, with two ... the end of October.","cite_index":null,"published_at":1792425600.0,"site_icon":"https://cdn.deepseek.com/site-icons/tomorrowsworldtoday.com","site_name":"Tomorrow's World Today","query_indexes":[0],"provider":null},"reference":{"id":3,"type":"TOOL_SEARCH"},"stage_id":2}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-2/status","o":"SET","v":"FINISHED"}
+
+data: {"p":"response/fragments/-3/status","v":"FINISHED"}
+
+data: {"p":"response/fragments/-1/status","v":"FINISHED"}
+
+data: {"p":"response/has_pending_fragment","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":8,"type":"THINK","content":"The","elapsed_secs":null,"references":[],"stage_id":3}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" global"}
+
+data: {"v":"news"}
+
+data: {"v":".ca"}
+
+data: {"v":" result"}
+
+data: {"v":" says"}
+
+data: {"v":" \""}
+
+data: {"v":"14"}
+
+data: {"v":" minutes"}
+
+data: {"v":" ago"}
+
+data: {"v":"\""}
+
+data: {"v":" but"}
+
+data: {"v":" that"}
+
+data: {"v":" might"}
+
+data: {"v":" be"}
+
+data: {"v":" relative"}
+
+data: {"v":" to"}
+
+data: {"v":" when"}
+
+data: {"v":" the"}
+
+data: {"v":" search"}
+
+data: {"v":" was"}
+
+data: {"v":" performed"}
+
+data: {"v":","}
+
+data: {"v":" not"}
+
+data: {"v":" the"}
+
+data: {"v":" actual"}
+
+data: {"v":" publish"}
+
+data: {"v":" date"}
+
+data: {"v":"."}
+
+data: {"v":" The"}
+
+data: {"v":" w"}
+
+data: {"v":"af"}
+
+data: {"v":"b"}
+
+data: {"v":".com"}
+
+data: {"v":" result"}
+
+data: {"v":" says"}
+
+data: {"v":" \""}
+
+data: {"v":"Updated"}
+
+data: {"v":":"}
+
+data: {"v":" "}
+
+data: {"v":"4"}
+
+data: {"v":" hours"}
+
+data: {"v":" ago"}
+
+data: {"v":"\""}
+
+data: {"v":" for"}
+
+data: {"v":" the"}
+
+data: {"v":" Crew"}
+
+data: {"v":"-"}
+
+data: {"v":"13"}
+
+data: {"v":" launch"}
+
+data: {"v":"."}
+
+data: {"v":" The"}
+
+data: {"v":" tomorrow"}
+
+data: {"v":"sw"}
+
+data: {"v":"orld"}
+
+data: {"v":"today"}
+
+data: {"v":" article"}
+
+data: {"v":" is"}
+
+data: {"v":" dated"}
+
+data: {"v":" October"}
+
+data: {"v":" "}
+
+data: {"v":"21"}
+
+data: {"v":","}
+
+data: {"v":" "}
+
+data: {"v":"202"}
+
+data: {"v":"6"}
+
+data: {"v":","}
+
+data: {"v":" which"}
+
+data: {"v":" is"}
+
+data: {"v":" today"}
+
+data: {"v":"."}
+
+data: {"v":" Its"}
+
+data: {"v":" headline"}
+
+data: {"v":" is"}
+
+data: {"v":" \""}
+
+data: {"v":"NASA"}
+
+data: {"v":" Prep"}
+
+data: {"v":"ares"}
+
+data: {"v":" for"}
+
+data: {"v":" Space"}
+
+data: {"v":"walks"}
+
+data: {"v":" &"}
+
+data: {"v":" Advanced"}
+
+data: {"v":" Biomedical"}
+
+data: {"v":" Research"}
+
+data: {"v":"\"."}
+
+data: {"v":" That"}
+
+data: {"v":" seems"}
+
+data: {"v":" like"}
+
+data: {"v":" a"}
+
+data: {"v":" solid"}
+
+data: {"v":","}
+
+data: {"v":" current"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" need"}
+
+data: {"v":" to"}
+
+data: {"v":" provide"}
+
+data: {"v":" a"}
+
+data: {"v":" one"}
+
+data: {"v":"-line"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" use"}
+
+data: {"v":" that"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":" should"}
+
+data: {"v":" cite"}
+
+data: {"v":" the"}
+
+data: {"v":" source"}
+
+data: {"v":"."}
+
+data: {"v":" The"}
+
+data: {"v":" source"}
+
+data: {"v":" is"}
+
+data: {"v":" tomorrow"}
+
+data: {"v":"sw"}
+
+data: {"v":"orld"}
+
+data: {"v":"today"}
+
+data: {"v":".com"}
+
+data: {"v":","}
+
+data: {"v":" lines"}
+
+data: {"v":" "}
+
+data: {"v":"3"}
+
+data: {"v":"-"}
+
+data: {"v":"4"}
+
+data: {"v":" show"}
+
+data: {"v":" the"}
+
+data: {"v":" headline"}
+
+data: {"v":"."}
+
+data: {"v":" I"}
+
+data: {"v":"'ll"}
+
+data: {"v":" provide"}
+
+data: {"v":" that"}
+
+data: {"v":"."}
+
+data: {"p":"response/fragments/-1/elapsed_secs","o":"SET","v":0.967581539}
+
+data: {"p":"response/fragments","o":"APPEND","v":[{"id":9,"type":"RESPONSE","content":"NASA","references":[],"stage_id":3}]}
+
+data: {"p":"response/fragments/-1/content","v":" Prep"}
+
+data: {"v":"ares"}
+
+data: {"v":" for"}
+
+data: {"v":" Space"}
+
+data: {"v":"walks"}
+
+data: {"v":" &"}
+
+data: {"v":" Advanced"}
+
+data: {"v":" Biomedical"}
+
+data: {"v":" Research"}
+
+data: {"p":"response/fragments/-1","o":"BATCH","v":[{"p":"content","o":"APPEND","v":"[reference:0]"},{"p":"references","o":"SET","v":[{"id":7,"type":"TOOL_OPEN"}]}]}
+
+data: {"p":"response","v":[{"p":"accumulated_token_usage","v":78},{"p":"quasi_status","v":"FINISHED"}]}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: update_session
+data: {"updated_at":1792530214.8745859}
+
+event: title
+data: {"content":"NASA spacewalk headline"}
+
+event: close
+data: {"click_behavior":"none","auto_resume":false}
+

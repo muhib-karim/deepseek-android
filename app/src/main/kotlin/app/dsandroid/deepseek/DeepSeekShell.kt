@@ -40,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.agent.TurnStep
+import app.dsandroid.core.deepseek.WebAttachment
 import app.dsandroid.core.deepseek.WebCitation
+import app.dsandroid.core.deepseek.WebStep
 import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.core.mcp.RemoteServer
 import app.dsandroid.core.tools.Artifact
@@ -51,6 +53,7 @@ import app.dsandroid.ui.DarkOfficialColors
 import app.dsandroid.ui.LightChatColors
 import app.dsandroid.ui.LightOfficialColors
 import app.dsandroid.ui.LocalOfficialColors
+import app.dsandroid.ui.OfficialShapes
 import app.dsandroid.ui.OfficialTypography
 import app.dsandroid.ui.scaled
 import app.dsandroid.ui.Glyph
@@ -68,8 +71,15 @@ data class AccountMessage(
     val revisionOf: String? = null,
     /** "Thought for N seconds", as the service reported it; null for older messages or no thinking. */
     val thinkingSeconds: Double? = null,
-    /** Pages a Search turn read, shown as "Read N web pages". */
+    /** The numbered sources of the reply; [citation:N] markers in [text] are chips that open source N. */
     val citations: List<WebCitation> = emptyList(),
+    /** Files sent with a user message: chips with type and size above its bubble. */
+    val files: List<WebAttachment> = emptyList(),
+    /** Like ("GOOD") or Dislike ("BAD"); [rateable] when DeepSeek knows the reply, so the rating can be sent. */
+    val feedback: String? = null,
+    /** Thinking stages and search steps (Found N web pages, Read N pages) of a reply that searched. */
+    val timeline: List<WebStep> = emptyList(),
+    val rateable: Boolean = false,
 )
 /** One row of Settings > Accounts: no credential, only what the list shows. */
 data class AccountRow(val id: String, val label: String, val type: AccountType, val active: Boolean, val signedIn: Boolean,
@@ -181,6 +191,10 @@ data class AccountUiState(
     val trustedExecution: Boolean = false,
     /** The welcome screen's terms box (DeepSeek's Terms of Use and Privacy Policy); remembered on this phone once ticked. */
     val termsAgreed: Boolean = false,
+    /** A chat from DeepSeek's list is loading its messages; nothing can be sent until it has. */
+    val loadingChat: Boolean = false,
+    /** The last send failed before any reply; the banner offers Retry with the restored draft and files. */
+    val canRetry: Boolean = false,
 )
 
 /** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
@@ -189,7 +203,7 @@ fun AccountTheme(appearance: Appearance, textScale: Float = 1f, content: @Compos
     val dark = appearance == Appearance.DARK || (appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     CompositionLocalProvider(LocalOfficialColors provides if (dark) DarkOfficialColors else LightOfficialColors) {
         MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography.scaled(textScale.coerceIn(0.85f, 1.3f)),
-            content = content)
+            shapes = OfficialShapes, content = content)
     }
 }
 
@@ -223,6 +237,8 @@ fun DeepSeekShell(
     onTextScale: (Float) -> Unit = {}, onCollapseThinking: (Boolean) -> Unit = {}, onAudioLanguage: (String) -> Unit = {},
     onAppLanguage: (String) -> Unit = {}, appLanguage: String = "", onDeleteAllChats: () -> Unit = {},
     onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {}, onTerms: (Boolean) -> Unit = {},
+    onRetry: () -> Unit = {}, onFeedback: (String, String?) -> Unit = { _, _ -> }, onHistoryRefresh: () -> Unit = {},
+    onCreateImage: (String) -> Unit = {}, onAddPhotos: (List<android.net.Uri>) -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -244,6 +260,7 @@ fun DeepSeekShell(
     var editText by remember { mutableStateOf("") }
     var sources by remember { mutableStateOf<List<WebCitation>?>(null) }
     var shareSheet by remember { mutableStateOf(false) }
+    var shareReply by remember { mutableStateOf<AccountMessage?>(null) }
     val settingsActions = object : SettingsActions {
         override fun theme(value: Appearance) = onTheme(value)
         override fun textScale(value: Float) = onTextScale(value)
@@ -257,6 +274,10 @@ fun DeepSeekShell(
         override fun logout() = onLogout()
     }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
+    // The attach panel is inline under the composer; Back closes it first.
+    BackHandler(!drawer.isOpen && attachmentTray && state.page == AccountPage.CHAT) { attachmentTray = false }
+    // Opening the drawer reads DeepSeek's chat list again (chats from other devices); the view model limits how often.
+    LaunchedEffect(drawer.isOpen) { if (drawer.isOpen) onHistoryRefresh() }
     BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(parentPage(state.page, state.signedIn)) }
     CompositionLocalProvider(LocalCollapseThinking provides state.collapseThinking) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -288,19 +309,26 @@ fun DeepSeekShell(
                     Text(error, Modifier.fillMaxWidth().heightIn(max = 96.dp).background(MaterialTheme.colorScheme.errorContainer).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account-error"),
                         color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
                     // Quota and rate errors never change the account; this only opens the list so the user can choose.
-                    if (state.offerSwitchAccount) Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer)) {
-                        TextButton(onClick = { onNavigate(AccountPage.ACCOUNTS) }, enabled = !state.busy, modifier = Modifier.padding(horizontal = 4.dp).testTag("switch-account")) {
-                            Text("Switch account")
+                    if (state.offerSwitchAccount || state.canRetry) Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.errorContainer)) {
+                        if (state.canRetry) TextButton(onClick = onRetry, enabled = !state.busy, modifier = Modifier.padding(horizontal = 4.dp).testTag("retry-send")) {
+                            Text("Retry")
                         }
+                        if (state.offerSwitchAccount) TextButton(onClick = { onNavigate(AccountPage.ACCOUNTS) }, enabled = !state.busy,
+                            modifier = Modifier.padding(horizontal = 4.dp).testTag("switch-account")) { Text("Switch account") }
                     }
                 }
                 when (state.page) {
                     AccountPage.CHAT -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Column(Modifier.widthIn(max = 840.dp).fillMaxHeight()) {
-                            if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
+                            if (state.loadingChat) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("chat-loading"))
+                            if (state.messages.isEmpty() && state.loadingChat) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("Loading this chat from DeepSeek…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
                             else MessageList(state, Modifier.weight(1f).fillMaxWidth(), onRegenerate = onRegenerate,
                                 onEdit = { message -> editTarget = message; editText = message.prompt ?: message.text },
-                                onShareText = onShareText, onSources = { sources = it }, actions = actions)
+                                onShareText = { onShareText(shareableText(it)) }, onSources = { sources = it }, actions = actions, onFeedback = onFeedback,
+                                onOpenLink = onOpenLink, onShareReply = { shareReply = it })
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -310,7 +338,11 @@ fun DeepSeekShell(
                                 }
                             }
                             if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-                            ChatComposer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
+                            ChatComposer(state, onDraft, { think, search -> attachmentTray = false; onSend(think, search) }, onStop,
+                                { attachmentTray = !attachmentTray }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
+                            if (attachmentTray) AttachmentPanel(enabled = !state.busy && !state.importing,
+                                onPick = { label -> attachmentTray = false; onAttachment(label) },
+                                onAddPhotos = { uris -> attachmentTray = false; onAddPhotos(uris) })
                         }
                     }
                     AccountPage.SETTINGS -> SettingsPage(state, settingsActions, appLanguage, onNavigate, Modifier.weight(1f))
@@ -341,11 +373,13 @@ fun DeepSeekShell(
         }
     }
     }
-    if (attachmentTray) AttachmentSheet(enabled = !state.busy && !state.importing, onDismiss = { attachmentTray = false },
-        onPick = { label -> attachmentTray = false; onAttachment(label) })
     sources?.let { list -> SourcesSheet(list, onDismiss = { sources = null }, onOpen = onOpenLink) }
     if (shareSheet) ShareChatSheet(onDismiss = { shareSheet = false }, onShareText = { shareSheet = false; onShareChat() },
         onExportPdf = { shareSheet = false; onExportChatPdf() })
+    shareReply?.let { reply ->
+        ReplyShareSheet(onDismiss = { shareReply = null }, onText = { shareReply = null; onShareText(shareableText(reply.text)) },
+            onImage = { shareReply = null; onCreateImage(reply.id) }, onPdf = { shareReply = null; actions.exportPdf(reply.id) })
+    }
     state.chatFiles?.let { files ->
         ModalBottomSheet(onDismissRequest = actions::hideChatFiles) {
             Text("Files in this chat", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)

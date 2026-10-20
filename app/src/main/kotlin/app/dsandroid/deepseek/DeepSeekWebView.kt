@@ -13,10 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.dsandroid.core.deepseek.*
 import app.dsandroid.BuildConfig
-import java.util.UUID
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 import kotlin.coroutines.resume
 
@@ -54,7 +51,6 @@ class DeepSeekWebView(
     private var rendererGone = false
     private var destroyed = false
     private var generation = 0
-    private val solverLock = Mutex()
     private val traceLines = java.util.ArrayDeque<String>()
     /** Debug builds only: page addresses (no query), main-frame errors, other hosts contacted and console lines, for diagnosis. */
     fun diagnostics(): List<String> = synchronized(traceLines) { traceLines.toList() }
@@ -211,76 +207,6 @@ class DeepSeekWebView(
         token
     }
 
-    suspend fun solve(challenge: PowChallenge): Long = withContext(Dispatchers.Main.immediate) {
-        solverLock.withLock {
-            try {
-                withTimeout(30_000) {
-                    if (destroyed) throw UpdateRequired()
-                    if (!loaded || !DeepSeekOrigin.isTrusted(view.url)) {
-                        loaded = false; navigationFailed = false
-                        view.loadUrl(DeepSeekOrigin.URL)
-                        while (!loaded) { if (destroyed || rendererGone || navigationFailed) throw UpdateRequired(); delay(100) }
-                    }
-                    val epoch = generation
-                    val key = "__unofficialPow" + UUID.randomUUID().toString().replace("-", "")
-                    val slot = JsonPrimitive(key).toString()
-                    // A same-origin blob Worker imports the current public official worker at runtime.
-                    // Only the challenge goes to the worker; neither token nor cookie enters this script.
-                    val bootstrap = JsonPrimitive("importScripts(${JsonPrimitive(PowChallenge.WORKER_URL)});").toString()
-                    try {
-                        val started = evaluate("""
-                            (() => {
-                              if (location.origin !== "https://chat.deepseek.com") return false;
-                              const state = {status: "pending"}; window[$slot] = state;
-                              try {
-                                const url = URL.createObjectURL(new Blob([$bootstrap], {type: "application/javascript"}));
-                                state.url = url; const worker = new Worker(url); state.worker = worker;
-                                worker.onerror = () => { state.status = "error"; };
-                                worker.onmessage = event => {
-                                  const data = event.data;
-                                  if (data && data.type === "pow-answer" && data.answer && Number.isSafeInteger(data.answer.answer)) {
-                                    state.answer = data.answer.answer; state.status = "done";
-                                  } else { state.status = "error"; }
-                                };
-                                worker.postMessage(${challenge.workerMessage()});
-                              } catch (_) { state.status = "error"; }
-                              return true;
-                            })()
-                        """.trimIndent())
-                        if (started != "true") throw UpdateRequired()
-                        while (true) {
-                            delay(100)
-                            if (generation != epoch || !DeepSeekOrigin.isTrusted(view.url)) throw UpdateRequired()
-                            val raw = evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return null; const s = window[$slot]; return s ? JSON.stringify({status:s.status,answer:s.answer}) : null; })()""")
-                            val text = (Json.parseToJsonElement(raw ?: "null") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw UpdateRequired()
-                            val result = Json.parseToJsonElement(text).jsonObject
-                            when (result["status"]?.jsonPrimitive?.content) {
-                                "done" -> {
-                                    val answer = result["answer"]?.jsonPrimitive?.longOrNull ?: throw UpdateRequired()
-                                    challenge.header(answer) // Bounds/algorithm validation before accepting the worker result.
-                                    return@withTimeout answer
-                                }
-                                "pending" -> Unit
-                                else -> throw UpdateRequired()
-                            }
-                        }
-                        @Suppress("UNREACHABLE_CODE")
-                        throw UpdateRequired()
-                    } finally {
-                        withContext(NonCancellable) {
-                            if (!destroyed && generation == epoch && DeepSeekOrigin.isTrusted(view.url)) {
-                                withTimeoutOrNull(1000) {
-                                    evaluate("""(() => { if (location.origin !== "https://chat.deepseek.com") return; const s = window[$slot]; if(s) { if(s.worker) s.worker.terminate(); if(s.url) URL.revokeObjectURL(s.url); delete window[$slot]; } })()""")
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (_: TimeoutCancellationException) { throw UpdateRequired() }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { throw UpdateRequired() }
-        }
-    }
     fun stopForLogout() { if (!destroyed) { view.stopLoading(); view.loadUrl("about:blank"); view.clearHistory() }; loaded = false; generation++ }
     fun destroy() { if (!destroyed) { view.stopLoading(); view.destroy() }; destroyed = true; loaded = false }
     private suspend fun evaluate(script: String): String? = suspendCancellableCoroutine { continuation ->

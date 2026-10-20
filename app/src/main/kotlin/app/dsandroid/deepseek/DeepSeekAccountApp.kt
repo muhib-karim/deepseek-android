@@ -23,6 +23,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -55,7 +58,6 @@ import app.dsandroid.ui.DsAndroidApp
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.accounts.AccountType
 import app.dsandroid.core.deepseek.BrowserSignIn
-import app.dsandroid.core.deepseek.PowChallenge
 import app.dsandroid.core.deepseek.SessionToken
 import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.workbench.ArtifactPanel
@@ -112,6 +114,12 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         BrowserSessionInbox.clearStarted(context)
         if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
     }
+    // Search and uploads leave the device, so they are confirmed first; Retry takes the same path.
+    fun requestSend(think: Boolean, search: Boolean) {
+        if (!state.signedIn) vm.navigate(AccountPage.LOGIN)
+        else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
+        else vm.send(think, search)
+    }
     fun openLink(url: String) {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (_: Exception) { vm.notice("No browser is available on this phone.") }
@@ -135,6 +143,9 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     var viewing by remember { mutableStateOf<Artifact?>(null) }
     var pendingSave by remember { mutableStateOf<Artifact?>(null) }
+    /** "Saved to Downloads" with Open (official apps confirm a download; v1.0.0 saved silently). */
+    val snackbar = remember { SnackbarHostState() }
+    var shareCard by remember { mutableStateOf<File?>(null) }
     // Save as (and Download before Android 10): the system file picker with the file's own name and type, no storage permission.
     val saveDocument = rememberLauncherForActivityResult(CreateTextDocument()) { target ->
         val artifact = pendingSave
@@ -143,7 +154,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         if (target != null && artifact != null && file != null) scope.launch {
             try {
                 withContext(Dispatchers.IO) { ArtifactActions.copyTo(context, file, target) }
-                Toast.makeText(context, "Saved ${artifact.fileName}", Toast.LENGTH_SHORT).show()
+                snackbar.showSnackbar("Saved ${artifact.fileName}")
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { vm.notice("The file could not be saved.") }
         }
@@ -188,9 +199,12 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                 val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")
                 scope.launch {
                     try {
-                        if (withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }) {
-                            Toast.makeText(context, "Saved to Downloads/DeepSeek", Toast.LENGTH_SHORT).show()
-                        } else saveArtifactAs(artifact)
+                        val saved = withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }
+                        if (saved == null) saveArtifactAs(artifact)
+                        else if (snackbar.showSnackbar("Saved to Downloads", actionLabel = "Open", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+                            try { ArtifactActions.openSaved(context, saved, artifact.mimeType, artifact.fileName) }
+                            catch (_: Exception) { vm.notice("No app on this phone can open ${artifact.fileName}.") }
+                        }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { vm.notice("The file could not be saved.") }
                 }
@@ -324,7 +338,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     // The workbench pane keeps its editor state when it moves between the side pane and the full-screen overlay.
     val workbenchPane = remember {
-        movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, browser::solve, saveAs, shareText) }
+        movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, saveAs, shareText) }
     }
     AccountTheme(state.appearance, state.textScale) {
         // An active API-key profile chats through the API-key client; Settings > Accounts and sign-in still use the account shell.
@@ -395,19 +409,27 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         onDraft = vm::draft, onStop = vm::stop, onTheme = vm::appearance, onError = vm::notice,
                         onRename = vm::rename, onDelete = vm::delete, speechInput = speechInput, voiceTrigger = voiceTrigger, onVoiceHandled = { voiceTrigger = 0 },
                         onRegenerate = {
-                            if (vm.messageNeedsConfirmation()) pendingResend = { vm.regenerate(browser::solve) }
-                            else vm.regenerate(browser::solve)
+                            if (vm.messageNeedsConfirmation()) pendingResend = { vm.regenerate() }
+                            else vm.regenerate()
                         },
                         onEdit = { id, text ->
-                            if (vm.messageNeedsConfirmation(id)) pendingResend = { vm.edit(id, text, browser::solve) }
-                            else vm.edit(id, text, browser::solve)
+                            if (vm.messageNeedsConfirmation(id)) pendingResend = { vm.edit(id, text) }
+                            else vm.edit(id, text)
                         },
                         onLogout = { browser.stopForLogout(); vm.logout() }, onAttachment = ::pick, onRemoveAttachment = vm::removeAttachment,
-                        onSend = { think, search ->
-                            if (!state.signedIn) vm.navigate(AccountPage.LOGIN)
-                            else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
-                            else vm.send(think, search, browser::solve)
+                        onSend = ::requestSend,
+                        onCreateImage = { id ->
+                            vm.shareTurn(id)?.let { (question, answer) ->
+                                scope.launch {
+                                    try { shareCard = withContext(Dispatchers.Default) { ShareCard.render(context, question, answer) } }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (_: Exception) { vm.notice("The image could not be created.") }
+                                }
+                            }
                         },
+                        onAddPhotos = vm::importShared,
+                        onRetry = { vm.retryRequest()?.let { (think, search) -> requestSend(think, search) } },
+                        onFeedback = vm::setFeedback, onHistoryRefresh = { vm.refreshHistory() },
                         loginContent = {
                             Column(Modifier.fillMaxSize()) {
                                 val page = browser.pageState
@@ -440,6 +462,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             }
             // Blocks touches to the chat underneath the full-screen pane.
             if (!wide && pane != null) Box(Modifier.fillMaxSize().pointerInput(Unit) {}) { workbenchPane(pane, state) }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().imePadding().padding(bottom = 104.dp).testTag("snackbar"))
         }
         if (browserGuide) AlertDialog(
             onDismissRequest = { browserGuide = false },
@@ -493,6 +516,25 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                 dismissButton = { TextButton(onClick = { browserToken = null; BrowserSessionInbox.clearStarted(context) }) { Text("Cancel") } },
             )
         }
+        shareCard?.let { file ->
+            val image = remember(file) { android.graphics.BitmapFactory.decodeFile(file.path)?.asImageBitmap() }
+            AlertDialog(
+                onDismissRequest = { shareCard = null },
+                title = { Text("Share image") },
+                text = {
+                    Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()).testTag("share-card-preview")) {
+                        image?.let { Image(it, "Image of this reply", Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        shareCard = null
+                        try { ShareCard.share(context, file) } catch (_: Exception) { vm.notice("No app is available to share this image.") }
+                    }, modifier = Modifier.testTag("share-card-share")) { Text("Share") }
+                },
+                dismissButton = { TextButton(onClick = { shareCard = null }) { Text("Close") } },
+            )
+        }
         viewing?.let { artifact ->
             Dialog(onDismissRequest = { viewing = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 Surface(Modifier.fillMaxSize()) {
@@ -517,7 +559,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                     if (search) append("\n\nDeepSeek Search will be enabled for this message.")
                     if (state.attachments.isNotEmpty()) append("\n\nUpload to DeepSeek: ${state.attachments.joinToString()}.")
                 }) },
-                confirmButton = { TextButton(onClick = { pendingSend = null; vm.send(think, search, browser::solve) }) { Text("Send") } },
+                confirmButton = { TextButton(onClick = { pendingSend = null; vm.send(think, search) }) { Text("Send") } },
                 dismissButton = { TextButton(onClick = { pendingSend = null }) { Text("Cancel") } })
         }
     }
@@ -529,13 +571,13 @@ internal fun apiHistoryDir(profileId: String?): String =
 
 /** The artifacts panel or the editor, with the latest notice shown inside the pane (the chat's banner may be covered). */
 @Composable
-private fun WorkbenchPaneHost(pane: WorkbenchPane, state: AccountUiState, vm: AccountViewModel, solve: suspend (PowChallenge) -> Long,
+private fun WorkbenchPaneHost(pane: WorkbenchPane, state: AccountUiState, vm: AccountViewModel,
     saveAs: (String, String) -> Unit, share: (String, String) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         when (pane) {
             is WorkbenchPane.Panel -> ArtifactPanel(pane, state.textScale, chatBusy = state.busy, draft = vm::draftText, saveDraft = vm::saveDraft,
                 onClose = vm::closePane, onRun = { source -> vm.runArtifact(pane.artifact.id, source) },
-                onAsk = { base, source, instruction -> vm.askArtifactChange(pane.artifact.id, base, source, instruction, solve) },
+                onAsk = { base, source, instruction -> vm.askArtifactChange(pane.artifact.id, base, source, instruction) },
                 onSaveAs = saveAs, onShare = share)
             is WorkbenchPane.Editor -> EditorScreen(pane.file, state.textScale, state.editorOutput, state.editorBusy, draft = vm::draftText,
                 saveDraft = vm::saveDraft, onClose = vm::closePane, onSave = vm::saveEditor, onSaveAs = saveAs, onShare = share,

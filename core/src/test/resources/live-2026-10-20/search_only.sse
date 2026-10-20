@@ -1,0 +1,87 @@
+event: ready
+data: {"request_message_id":1,"response_message_id":2,"model_type":"default"}
+
+event: update_session
+data: {"updated_at":1792533429.899158}
+
+data: {"v":{"response":{"message_id":2,"parent_id":1,"model":"","role":"ASSISTANT","thinking_enabled":false,"ban_edit":false,"ban_regenerate":false,"status":"WIP","incomplete_message":null,"accumulated_token_usage":0,"feedback":null,"inserted_at":1792533429.883869,"search_enabled":true,"fragments":[{"id":2,"type":"SEARCH","status":"WIP","content":null,"queries":[{"query":"What is the tallest building in the world in 2026"},{"query":"site:skyscrapercenter.com tallest building in the world"}],"results":[]}],"conversation_mode":"DEFAULT","has_pending_fragment":false,"auto_continue":false,"search_triggered":true,"extra_search_providers":[]}}}
+
+data: {"p":"response/fragments/-1/results","v":[{"url":"https://rri.co.id/bogor/internasional/2314758/daftar-20-gedung-tertinggi-dunia-2026-asia-dominasi-pencakar-langit-global#1","title":"Daftar 20 Gedung Tertinggi Dunia 2026, Asia Dominasi Pencakar Langit Global - RRI.co.id - Daftar 20 Gedung Tertinggi Dunia 2026, Asia Dominasi Pencakar Langit Global","snippet":"Data terbaru menunjukkan Burj Khalifa di Dubai tetap menjadi gedung tertinggi di dunia. Berdasarkan data dari laman Skyscraper Center, Burj Khalifa memiliki ketinggian mencapai 828 meter atau sekitar 2.717 kaki. ... meter, disusul Shanghai Tower","cite_index":1,"published_at":1775491200.0,"site_icon":"https://cdn.deepseek.com/site-icons/rri.co.id","site_name":"RRI.co.id","query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/trends-and-forecasts/2026","title":"CVU 2026 Trends & Forecasts","snippet":"A total of seven buildings entered the 100 tallest in 2025: JPMorganChase Tower, New York City, at 423.06 meters; Zijin Financial Building, Nanjing, at 416.60 meters; Ningbo Center Tower 1...","cite_index":2,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null},{"url":"https://indianexpress.com/article/trending/top-10-listing/top-10-tallest-skyscrapers-global-2026-burj-khalifa-tops-10548758/#1","title":"Top 10 tallest skyscrapers in the world, 2026: Burj Khalifa tops chart; Merdeka 118, built in 2023, replaces Shanghai Tower - Thursday, Oct 15, 2026","snippet":"World’s tallest skyscrapers in 2026 are led by Dubai’s Burj Khalifa at 828 metres, followed by Kuala Lumpur’s Merdeka 118 and Shanghai Tower, according to the latest global rankings. ... Burj Khalifa, standing 828 metres tall with 163 floors in Dubai, United Arab Emirates (UAE), has remained the world’s tallest building.","cite_index":3,"published_at":1771862400.0,"site_icon":"https://cdn.deepseek.com/site-icons/indianexpress.com","site_name":"The Indian Express","query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/buildings","title":"The 100 Tallest Completed Buildings in the World in 2026","snippet":"2010 ... Steel Over Concrete ... 2023 ... Concrete-Steel Composite ... 2015 ... 2012 ... 2017 ... 2014 ... 2016 ... 2018 ... 2020","cite_index":4,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null},{"url":"https://en.wikipedia.org/api/rest_v1/page/pdf/List_of_tallest_structures#24#1","title":"List of tallest structures","snippet":"The tallest structure in the world is the Burj Khalifa, a skyscraper at \\(828~\\mathrm{m}\\) (2,717 ft). ... 2026: 1. Burj Khalifa skyscraper 2. Merdeka 118 skyscraper 3. Tokyo Skytree 4. Shanghai Tower skyscraper 5. ... Khalifa</td><td>829.8 m (2,722","cite_index":5,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/wikipedia.org","site_name":null,"query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/buildings?status=construction","title":"The 100 Tallest Under Construction Buildings in the World in 2026","snippet":"2030 1,000 m / 3,281 ft 167 All-Concrete Residential / Serviced Apartments ... 2027 ... Concrete-Steel Composite ... 2029 ... 2028 ... 2026","cite_index":6,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null},{"url":"https://en.tempo.co/read/2085983/burj-khalifa-to-lose-status-as-worlds-tallest-building#1","title":"Burj Khalifa to Lose Status as World's Tallest Building","snippet":"February 9, 2026 | 08 ... TEMPO.CO, Jakarta - The Burj Khalifa in Dubai, United Arab Emirates, still holds the record as the world's tallest building at 828 meters. However ... maintaining Dubai's status as the world's tallest building.","cite_index":7,"published_at":1770566400.0,"site_icon":"https://cdn.deepseek.com/site-icons/tempo.co","site_name":"Tempo.co English","query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/explore-data?output=list&statuses%5b%5d=COM&types%5b%5d=building","title":"Explore Data","snippet":"Building Name City Status Completion Height Floors ... 1 | Burj Khalifa | Dubai (AE) | 2010 | 828 m | 163 | Steel Over Concrete | Office / Residential / Hotel 2 | Menara Merdeka Maybank | Kuala Lumpur (MY) | 2023 |","cite_index":8,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null},{"url":"https://jang.com.pk/en/59193-worlds-tallest-building-burj-khalifa-may-lose-its-crown-soon-news","title":"World's tallest building Burj Khalifa may lose its crown soon","snippet":"A new skyscraper called the Rise Tower is designed to reach an unprecedented height of 2 ... stands at 828 meters and become the tallest building in the world once completed. ... What are top 5 world's tallest buildings? 1. Burj Khalifa, Dubai–(828 meters)","cite_index":9,"published_at":1770220800.0,"site_icon":"https://cdn.deepseek.com/site-icons/jang.com.pk","site_name":"Daily Jang","query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/year-in-review/2024","title":"CTBUH 2025 Trends & Forecasts","snippet":"The tallest building to complete in 2024 was Iconic Tower, in Cairo, at 393.8 meters. ... Iconic Tower, Cairo, at 393.80 meters; Ciel Tower, Dubai, at 373.50 meters; Ping An Finance Center...","cite_index":10,"published_at":1738598400.0,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null},{"url":"https://rri.co.id/bintuhan/berita-lain/2681736/tinggi-menjulang-berikut-7-bangunan-tertinggi-di-dunia#1","title":"Tinggi Menjulang, Berikut 7 Bangunan Tertinggi di Dunia - RRI.co.id - Tinggi Menjulang, Berikut 7 Bangunan Tertinggi di Dunia","snippet":"Bintuhan - Burj Khalifa memang masih menjadi bangunan tertinggi di dunia saat ini dengan ketinggian yang mencapai 828 meter. ... Burj Khalifa, di Dubai, Uni Emirate Arab dengan tinggi 828 meter. Gedung ini masih menempati posisi teratas sebagai bangunan tertinggi di dunia.","cite_index":11,"published_at":1787673600.0,"site_icon":"https://cdn.deepseek.com/site-icons/rri.co.id","site_name":"RRI.co.id","query_indexes":[0],"provider":null},{"url":"https://www.skyscrapercenter.com/company/5528","title":"Learn more about the Council on Vertical Urbanism","snippet":"Buildings ... 1 | Burj Khalifa | Dubai | 2010 | 828 m / 2,717 ft | 163 | Office / Residential / Hotel 2 | Ping An Finance Center | Shenzhen | - |","cite_index":12,"published_at":null,"site_icon":"https://cdn.deepseek.com/site-icons/skyscrapercenter.com","site_name":"Council on Tall Buildings and Urban Habitat – CTBUH","query_indexes":[1],"provider":null}]}
+
+data: {"p":"response/fragments/-1","o":"BATCH","v":[{"p":"status","v":"FINISHED"},{"p":"content","v":"Found 12 web pages"}]}
+
+data: {"p":"response/conversation_mode","o":"SET","v":"SEARCH"}
+
+data: {"p":"response/has_pending_fragment","v":true}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"fragments","o":"APPEND","v":[{"id":3,"type":"RESPONSE","content":"The","references":[],"stage_id":2}]},{"p":"has_pending_fragment","o":"SET","v":false}]}
+
+data: {"p":"response/fragments/-1/content","o":"APPEND","v":" tallest"}
+
+data: {"v":" building"}
+
+data: {"v":" in"}
+
+data: {"v":" the"}
+
+data: {"v":" world"}
+
+data: {"v":" is"}
+
+data: {"v":" the"}
+
+data: {"v":" Bur"}
+
+data: {"v":"j"}
+
+data: {"v":" Khal"}
+
+data: {"v":"ifa"}
+
+data: {"v":" in"}
+
+data: {"v":" Dubai"}
+
+data: {"v":","}
+
+data: {"v":" at"}
+
+data: {"v":" "}
+
+data: {"v":"828"}
+
+data: {"v":" meters"}
+
+data: {"v":" ("}
+
+data: {"v":"2"}
+
+data: {"v":","}
+
+data: {"v":"717"}
+
+data: {"v":" feet"}
+
+data: {"v":")"}
+
+data: {"v":"[citation:1]"}
+
+data: {"v":"[citation:4]"}
+
+data: {"v":"[citation:8]"}
+
+data: {"v":"."}
+
+data: {"p":"response","o":"BATCH","v":[{"p":"accumulated_token_usage","v":75},{"p":"quasi_status","v":"FINISHED"}]}
+
+data: {"p":"response/status","o":"SET","v":"FINISHED"}
+
+event: update_session
+data: {"updated_at":1792533430.948721}
+
+event: title
+data: {"content":"Burj Khalifa tallest"}
+
+event: close
+data: {"click_behavior":"none","auto_resume":false}
+

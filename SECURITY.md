@@ -14,20 +14,41 @@ native JavaScript interface. File/content access, mixed content, popups and page
 grants are disabled; navigation is restricted to the exact DeepSeek and Google account hosts.
 
 The token is stored in separate EncryptedSharedPreferences. Native requests to fixed DeepSeek
-endpoints carry Bearer plus CookieManager cookies; completion also carries a challenge-specific
-PoW header. Redirects, automatic network retries and automatic API/account switching are disabled.
-HTTP/server/worker errors are mapped to fixed messages, with no raw bodies, credentials or headers
-in app diagnostics. Login-page console messages are suppressed. Runtime worker code is trusted
-from DeepSeek's HTTPS CDN, not bundled or independently integrity-pinned; live CSP/worker access
-and authenticated protocol behavior remain unverified. See [validation notes](docs/ACCOUNT_CLIENT_050.md).
+endpoints carry Bearer plus CookieManager cookies; completions and file uploads also carry a
+challenge-specific PoW header solved for that path. Since v1.1.0 the proof of work is solved natively
+(DeepSeekHashV1 in Kotlin, cancellable); no DeepSeek script runs in the app or its WebView. Redirects,
+OkHttp connection retries and automatic API/account switching are disabled. One automatic retry exists
+(v1.1.0): a connection failure, server error, rejected proof of work or interrupted stream before any
+reply text arrives is retried once with a fresh challenge; a send that still fails restores its draft
+and files and offers Retry, which goes through the same confirmation as Send. HTTP/server errors are
+mapped to fixed messages by type (network, server, session, interrupted reply, service changed, file),
+with no raw bodies, credentials or headers in app diagnostics. Login-page console messages are
+suppressed. See [validation notes](docs/ACCOUNT_CLIENT_050.md).
 
 Logout clears the encrypted token, host storage, known-path host cookies and local account chat
 history. It preserves unrelated-site cookies and all legacy API settings/history. The shared
 `.deepseek.com` session cookie, if present, is expired as well. CookieManager cannot enumerate
 all cookie domain/path attributes, so device logout verification remains required. There is no
 server-side revocation claim. Local chat history contains no session secrets and follows the
-app's existing private-files/backup-disabled boundary. Native attachments send extracted text
-only after confirmation; there is no native DeepSeek file upload implementation.
+app's existing private-files/backup-disabled boundary. Attachments are uploaded to DeepSeek
+(`file/upload_file`, then `file/fetch_files` until processed) only after the send confirmation.
+
+### v1.1.0 additions
+
+- **History sync:** the signed-in account's own chat list (`chat_session/fetch_page`) is read at start, after sign-in or an
+  account switch and when the drawer opens (at most every 15 s); a chat's messages (`chat/history_messages`) are read when
+  it is opened. Results are stored in that account's private history file; a chat deleted elsewhere is removed here only
+  when the whole list was read and it has no local files (otherwise it stays, read-only). Imported tool fragments are
+  display data and never run.
+- **Pins and feedback** (`update_pinned`, `message_feedback`) are sent only when the person taps Pin or Like / Dislike.
+- **Site icons** for search steps: HTTPS GETs without cookies or credentials, at most 64 KB, to DeepSeek's icon service
+  named in the search result (`cdn.deepseek.com`) or the result site's `/favicon.ico`, only when the step is shown;
+  cached in the app's cache folder. They reveal to that site only that an icon was fetched.
+- **Photo access** (`READ_MEDIA_IMAGES`, or `READ_EXTERNAL_STORAGE` up to API 32) is a runtime permission asked only when
+  the person taps Recent photos in the attach panel; thumbnails are read locally and a photo is uploaded only when added
+  to a message and the send is confirmed. Without the permission the system photo picker is used.
+- **Create image** renders one chosen turn into a PNG in the app's cache (`share-cards/`, cleared on the next card); it
+  leaves the phone only through the system share sheet the person opens.
 
 The remaining provider/OAuth sections describe the explicit legacy API client.
 
@@ -474,6 +495,7 @@ change between runs. Never commit API keys, account grants, signing keys,
   analytics, new network call or crash-reporting SDK is added. Pattern redaction
   is conservative, not a classifier for arbitrary private prose; review copied text.
 - Instrumentation dependencies and the smoke host are excluded from release.
-  CI verifies the merged release manifest allows only INTERNET and runtime
-  RECORD_AUDIO; existing manifest-removal rules remain intact. Tests use an
+  CI verifies the merged release manifest allows only INTERNET, runtime
+  RECORD_AUDIO and (since v1.1.0) runtime photo access (READ_MEDIA_IMAGES, READ_EXTERNAL_STORAGE up to
+  API 32); existing manifest-removal rules remain intact. Tests use an
   in-process fake LlmClient and never configure a real provider credential.

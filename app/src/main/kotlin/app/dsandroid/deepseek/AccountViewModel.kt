@@ -101,6 +101,8 @@ class AccountViewModel @JvmOverloads constructor(
     private val mutable = MutableStateFlow(AccountUiState())
     val state: StateFlow<AccountUiState> = mutable.asStateFlow()
     private val client = DeepSeekWebClient(origin = baseUrl.toHttpUrl())
+    /** Proof of work for completions and uploads, solved natively off the main thread; tests inject a fixed answer. */
+    private val solver: suspend (PowChallenge) -> Long = powSolver ?: { challenge -> DeepSeekHashV1.solve(challenge) }
     private val balanceClient = DeepSeekBalanceClient(apiBaseUrl, ClientIdentity(BuildConfig.VERSION_NAME, Locale.getDefault().toLanguageTag(),
         TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000))
     private var session: SessionToken? = null
@@ -134,6 +136,12 @@ class AccountViewModel @JvmOverloads constructor(
     private val uploads = mutableListOf<Upload>()
     private var sending: Job? = null
     private var importing: Job? = null
+    /** Reading DeepSeek's chat list (drawer) and loading one server chat's messages. */
+    private var historyRefresh: Job? = null
+    private var lastHistoryRefresh = 0L
+    private var loading: Job? = null
+    /** Think and Search of a send that failed before any reply; Retry sends the restored draft with them. */
+    private var retryFlags: Pair<Boolean, Boolean>? = null
     private var sessionChanging = false
     /** Agent files live under workspace/account/<chat id> (accounts/<id>/<chat id> for added accounts); the FileProvider exposes workspace/. */
     val agentWorkspace = WorkspacePath(File(application.filesDir, "workspace"))
@@ -170,6 +178,7 @@ class AccountViewModel @JvmOverloads constructor(
                     publishAccounts()
                     mutable.update { it.copy(ready = true, signedIn = session != null, history = summaries()) }
                     revalidate()
+                    refreshHistory(force = true)
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -199,8 +208,10 @@ class AccountViewModel @JvmOverloads constructor(
         appearancePrefs.edit().putBoolean("terms_agreed", agreed).apply()
         mutable.update { it.copy(termsAgreed = agreed) }
     }
-    fun dismissNotice() { mutable.update { it.copy(error = null, offerSwitchAccount = false) } }
-    private fun notice(message: String, offerSwitchAccount: Boolean) { mutable.update { it.copy(error = message, offerSwitchAccount = offerSwitchAccount) } }
+    fun dismissNotice() { mutable.update { it.copy(error = null, offerSwitchAccount = false, canRetry = false) } }
+    private fun notice(message: String, offerSwitchAccount: Boolean) {
+        mutable.update { it.copy(error = message, offerSwitchAccount = offerSwitchAccount, canRetry = false) }
+    }
     fun appearance(value: Appearance) {
         appearancePrefs.edit().putString("theme", value.name).apply()
         mutable.update { it.copy(appearance = value) }
@@ -354,6 +365,9 @@ class AccountViewModel @JvmOverloads constructor(
             mutable.update { it.copy(signedIn = true, logoutPending = false, page = AccountPage.CHAT, error = null, offerSwitchAccount = false,
                 messages = displayMessages(), history = summaries(), title = current.title, conversationId = current.id, requiresNewChat = current.blocked,
                 draft = "", attachments = emptyList(), profileEmail = user.email, profilePhone = user.phone) }
+            // Chats from DeepSeek (other devices, the website) join the drawer.
+            historyRefresh?.cancel()
+            refreshHistory(force = true)
             true
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The session could not be stored securely. Login was not completed."); false }
@@ -409,6 +423,8 @@ class AccountViewModel @JvmOverloads constructor(
     /** Clears the active DeepSeek account's session, chats, agent files and artifact versions, then the browser's cookies. */
     private suspend fun clearSessionData() {
         val id = webAccount
+        historyRefresh?.cancel(); loading?.cancel()
+        retryFlags = null
         session = null
         chats = emptyList(); current = emptyChat(); clearUploads()
         drafts.clear()
@@ -442,16 +458,88 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun newChat() {
         if (!available()) return
+        loading?.cancel()
         clearUploads(); current = emptyChat()
         mutable.update { it.copy(page = AccountPage.CHAT, title = current.title, conversationId = current.id, messages = emptyList(), draft = "", attachments = emptyList(),
             requiresNewChat = false, error = null, offerSwitchAccount = false, pane = null, chatFiles = null, editorOutput = null) }
     }
     fun open(id: String) {
         if (!available() || locked()) return
-        current = chats.firstOrNull { it.id == id } ?: return
+        val chat = chats.firstOrNull { it.id == id } ?: return
+        loading?.cancel()
+        current = chat
         clearUploads()
         mutable.update { it.copy(page = AccountPage.CHAT, title = current.title, conversationId = current.id, messages = displayMessages(), draft = "", attachments = emptyList(),
-            requiresNewChat = current.blocked, error = null, offerSwitchAccount = false, pane = null, chatFiles = null, editorOutput = null) }
+            requiresNewChat = current.blocked, error = null, offerSwitchAccount = false, pane = null, chatFiles = null, editorOutput = null, loadingChat = false) }
+        // A chat listed by DeepSeek but never opened here loads its messages; one continued on another device reloads them.
+        val continuedElsewhere = chat.remoteUpdatedAt > chat.syncedAt + RELOAD_SLACK_MS && chat.messages.none { it.agent || it.steps.isNotEmpty() }
+        if (chat.sessionId != null && !chat.blocked && (chat.remote || continuedElsewhere)) loadServerChat(chat)
+    }
+
+    /** history_messages for one chat: its current branch replaces the stored copy; files, runs and artifacts made here stay. */
+    private fun loadServerChat(chat: WebChat) {
+        val remote = chat.sessionId ?: return
+        mutable.update { it.copy(loadingChat = true) }
+        loading = viewModelScope.launch {
+            try {
+                val server = client.fetchHistory(credentials(), remote)
+                if (current.id != chat.id || state.value.busy) return@launch
+                val local = current.messages.filter { it.serverId != null }.associateBy { it.serverId to it.user }
+                val messages = server.messages.map { message ->
+                    val mine = local[message.serverId to message.user] ?: return@map message
+                    message.copy(id = mine.id, artifacts = mine.artifacts, codeRuns = mine.codeRuns, revisionOf = mine.revisionOf,
+                        files = message.files.ifEmpty { mine.files }, feedback = message.feedback ?: mine.feedback)
+                }
+                current = current.copy(title = server.session.title.ifBlank { current.title }, messages = messages, parentId = server.currentMessageId,
+                    pinned = server.session.pinned, remote = false, blocked = server.currentMessageId == null,
+                    syncedAt = server.session.updatedAt, remoteUpdatedAt = server.session.updatedAt)
+                persist()
+                mutable.update { it.copy(title = current.title, messages = displayMessages(), requiresNewChat = current.blocked, history = summaries()) }
+                if (server.currentMessageId == null) notice("This chat could not be read completely from DeepSeek, so it can't be continued here. Start a new chat.")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { if (current.id == chat.id) reportFailure(error) }
+            finally { if (current.id == chat.id) mutable.update { it.copy(loadingChat = false) } }
+        }
+    }
+
+    /**
+     * Reads DeepSeek's chat list into the drawer (chats from every device), at most every 15 seconds unless [force]d.
+     * Being offline keeps what is stored here; nothing local is lost.
+     */
+    fun refreshHistory(force: Boolean = false) {
+        val token = session ?: return
+        if (historyRefresh?.isActive == true || (!force && System.currentTimeMillis() - lastHistoryRefresh < HISTORY_REFRESH_MS)) return
+        val account = webAccount
+        historyRefresh = viewModelScope.launch {
+            try {
+                val (sessions, complete) = client.fetchSessions(WebCredentials(token, DeepSeekCookies.read()))
+                if (session?.bearer() != token.bearer() || webAccount != account) return@launch
+                lastHistoryRefresh = System.currentTimeMillis()
+                val removed = persistence.withLock {
+                    val before = chats
+                    val merged = ServerHistory.merge(before, sessions, complete, openId = current.id) { server ->
+                        if (server.id.matches(SERVER_ID)) "srv-${server.id}" else UUID.randomUUID().toString()
+                    }
+                    if (merged == before) return@launch
+                    withContext(Dispatchers.IO) { history.save(merged) }
+                    chats = merged
+                    before.filter { old -> merged.none { it.id == old.id } }
+                }
+                // Chats deleted on another device take their local files with them.
+                if (removed.isNotEmpty()) withContext(Dispatchers.IO) {
+                    removed.forEach { File(agentWorkspace.root, chatDir(it.id)).deleteRecursively(); workbench.deleteChat(it.id) }
+                }
+                // The open chat takes only what the list owns (title, pin, DeepSeek's time); its messages and parent stay as
+                // loaded, unless DeepSeek no longer has it (deleted on another device), which makes it read-only.
+                chats.firstOrNull { it.id == current.id }?.let { listed ->
+                    if (!state.value.busy) current = if (listed.sessionId == null && current.sessionId != null)
+                        current.copy(sessionId = null, parentId = null, blocked = true, pinned = false)
+                    else current.copy(title = listed.title, pinned = listed.pinned, remoteUpdatedAt = listed.remoteUpdatedAt)
+                }
+                mutable.update { it.copy(history = summaries(), title = current.title, requiresNewChat = current.blocked) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Offline, signed out meanwhile or service trouble: the drawer keeps what is stored here. */ }
+        }
     }
     fun rename(id: String, title: String) {
         val name = title.trim().take(100)
@@ -514,91 +602,118 @@ class AccountViewModel @JvmOverloads constructor(
         uploads.getOrNull(index)?.let { it.file.delete(); uploads.removeAt(index) }
         mutable.update { it.copy(attachments = uploads.map(Upload::name)) }
     }
-    fun send(think: Boolean, search: Boolean, solve: suspend (PowChallenge) -> Long) {
-        if (!available() || current.blocked) return
+    fun send(think: Boolean, search: Boolean) {
+        if (!available() || current.blocked || current.remote) return
         val prompt = state.value.draft.trim()
         if (prompt.isEmpty() && uploads.isEmpty()) return
         val files = uploads.toList()
-        val display = listOf(prompt, files.joinToString("\n") { "Attached: ${it.name}" }).filter(String::isNotBlank).joinToString("\n\n")
-        val user = WebMessage(UUID.randomUUID().toString(), true, display, parentId = current.parentId,
-            prompt = prompt, thinkingEnabled = think, searchEnabled = search, agent = state.value.agent)
-        if (user.agent) runAgentTurn(current.messages, user, files, solve) else runTurn(current.messages, user, files, solve)
+        // Files show as chips above the message (official layout); the bubble holds only the typed text.
+        val user = WebMessage(UUID.randomUUID().toString(), true, prompt, parentId = current.parentId,
+            prompt = prompt, thinkingEnabled = think, searchEnabled = search, agent = state.value.agent,
+            files = files.map { WebAttachment(it.name) })
+        if (user.agent) runAgentTurn(current.messages, user, files) else runTurn(current.messages, user, files)
     }
+    /** Retry on the error banner: the draft and files restored from a send that failed before any reply, with its Think and Search. */
+    fun retryRequest(): Pair<Boolean, Boolean>? = retryFlags.takeIf { state.value.canRetry }
     /** Reuse the selected prompt's predecessor, never the reply that is being replaced. */
-    fun regenerate(solve: suspend (PowChallenge) -> Long) {
-        if (!available()) return
+    fun regenerate() {
+        if (!available() || current.remote) return
         val last = current.messages.lastOrNull() ?: return
         if (last.user) return
         val userIndex = current.messages.indexOfLast { it.user }
         if (userIndex < 0) return
         val user = current.messages[userIndex]
         if (user.prompt == null) { notice("This older message cannot be regenerated. Send its text again."); return }
-        if (user.agent) runAgentTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList(), solve)
-        else runTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList(), solve)
+        if (user.agent) runAgentTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList())
+        else runTurn(current.messages.take(userIndex), user.copy(serverId = null), emptyList())
     }
-    fun edit(id: String, text: String, solve: suspend (PowChallenge) -> Long) {
-        if (!available()) return
+    fun edit(id: String, text: String) {
+        if (!available() || current.remote) return
         val index = current.messages.indexOfFirst { it.id == id && it.user }
         if (index < 0 || text.isBlank()) return
         val user = current.messages[index]
         if (user.prompt == null) { notice("This older message cannot be edited. Send its text again."); return }
         val edited = user.copy(id = UUID.randomUUID().toString(), text = text.trim().take(20_000), prompt = text.trim().take(20_000), serverId = null)
-        if (edited.agent) runAgentTurn(current.messages.take(index), edited, emptyList(), solve)
-        else runTurn(current.messages.take(index), edited, emptyList(), solve)
+        if (edited.agent) runAgentTurn(current.messages.take(index), edited, emptyList())
+        else runTurn(current.messages.take(index), edited, emptyList())
     }
     fun messageNeedsConfirmation(id: String? = null): Boolean {
         val user = if (id == null) current.messages.lastOrNull { it.user } else current.messages.firstOrNull { it.id == id && it.user }
         return user?.let { it.searchEnabled || it.refFileIds.isNotEmpty() } == true
     }
     /** [keepDraft] leaves the composer alone (artifact revisions are not typed there). */
-    private fun runTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>, solve: suspend (PowChallenge) -> Long, keepDraft: Boolean = false) {
+    private fun runTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>, keepDraft: Boolean = false) {
         if (session == null) { mutable.update { it.copy(page = AccountPage.LOGIN, signedIn = false) }; return }
         val replyId = UUID.randomUUID().toString()
         val before = current
-        val displayedTitle = if (before.messages.isEmpty()) user.text.replace('\n', ' ').take(60) else current.title
+        val displayedTitle = if (before.messages.isEmpty()) titleFor(user) else current.title
         current = current.copy(title = displayedTitle, messages = prefix + user + WebMessage(replyId, false, "", revisionOf = user.revisionOf), parentId = user.parentId, blocked = true)
         // Ownership of pending files moves to this job until upload finishes or it is cancelled.
         uploads.clear()
+        retryFlags = null
         mutable.update { it.copy(busy = true, draft = if (keepDraft) it.draft else "", attachments = emptyList(), title = current.title, conversationId = current.id,
-            messages = displayMessages(), error = null, offerSwitchAccount = false) }
+            messages = displayMessages(), error = null, offerSwitchAccount = false, canRetry = false) }
         sending = viewModelScope.launch {
             var receivedId: Long? = null
+            var receivedText = false
             var revisionReply: String? = null
+            var keepFiles = false
             try {
                 persist()
                 val credentials = credentials()
-                val remoteId = current.sessionId ?: client.createSession(credentials).also { current = current.copy(sessionId = it) }
-                val refs = user.refFileIds + files.map { file ->
-                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
-                    client.uploadFile(credentials, file.file, file.name, mime)
-                }
-                val sent = user.copy(refFileIds = refs)
+                val remoteId = current.sessionId ?: retryOnce { client.createSession(credentials) }.also { current = current.copy(sessionId = it) }
+                val sentFiles = upload(credentials, files)
+                val refs = user.refFileIds + sentFiles.mapNotNull { it.id }
+                val sent = user.copy(refFileIds = refs, files = sentFiles.ifEmpty { user.files })
                 current = current.copy(messages = prefix + sent + WebMessage(replyId, false, "", revisionOf = user.revisionOf))
                 var final: WebReply? = null
-                client.complete(credentials, CompletionInput(remoteId, user.parentId, user.prompt.orEmpty(), user.thinkingEnabled, user.searchEnabled, refs), powSolver ?: solve).collect { reply ->
-                    final = reply
-                    receivedId = reply.responseMessageId ?: receivedId
-                    current = current.copy(messages = prefix + sent.copy(serverId = reply.requestMessageId) +
-                        WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf,
-                            thinkingSeconds = reply.thinkingSeconds, citations = reply.citations))
-                    mutable.update { it.copy(messages = displayMessages()) }
+                var attempt = 0
+                while (true) {
+                    try {
+                        client.complete(credentials, CompletionInput(remoteId, user.parentId, user.prompt.orEmpty(), user.thinkingEnabled, user.searchEnabled, refs), solver).collect { reply ->
+                            final = reply
+                            receivedId = reply.responseMessageId ?: receivedId
+                            if (reply.response.isNotEmpty() || reply.thinking.isNotEmpty()) receivedText = true
+                            current = current.copy(messages = prefix + sent.copy(serverId = reply.requestMessageId) +
+                                WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf,
+                                    thinkingSeconds = reply.thinkingSeconds, citations = reply.citations, timeline = reply.timeline))
+                            mutable.update { it.copy(messages = displayMessages()) }
+                        }
+                        break
+                    } catch (error: Exception) {
+                        // One automatic retry, with a fresh proof of work, for a transient failure before any reply text arrived.
+                        if (error is CancellationException || receivedText || attempt > 0 || !error.isTransientWebFailure()) throw error
+                        attempt++
+                        receivedId = null
+                        delay(RETRY_DELAY_MS)
+                    }
                 }
                 val completed = final?.takeIf { it.finished && it.responseMessageId != null } ?: throw EndpointChanged()
-                current = current.copy(parentId = completed.responseMessageId, blocked = false)
+                current = current.copy(parentId = completed.responseMessageId, blocked = false,
+                    title = completed.title?.takeIf { before.messages.isEmpty() } ?: current.title,
+                    syncedAt = completed.sessionUpdatedAt ?: current.syncedAt,
+                    remoteUpdatedAt = maxOf(current.remoteUpdatedAt, completed.sessionUpdatedAt ?: 0L))
                 revisionReply = completed.response
             } catch (cancelled: CancellationException) {
                 // Keep the partial reply. A known reply id is a valid predecessor for the next turn.
                 current = current.copy(parentId = receivedId ?: user.parentId, blocked = false)
                 throw cancelled
             } catch (error: Exception) {
-                if (receivedId == null && error !is SessionExpired) {
-                    // Failed edits/regenerations do not destroy the old branch; ordinary sends can be retried.
+                if (receivedId == null && !receivedText && error !is SessionExpired) {
+                    // Failed edits/regenerations do not destroy the old branch; an ordinary send comes back with its files for Retry.
                     current = before.copy(sessionId = current.sessionId)
-                    mutable.update { it.copy(draft = if (prefix == before.messages && !keepDraft) user.prompt.orEmpty() else it.draft) }
+                    val plainSend = prefix == before.messages && !keepDraft
+                    if (plainSend) {
+                        keepFiles = true
+                        uploads.addAll(files)
+                        retryFlags = user.thinkingEnabled to user.searchEnabled
+                    }
+                    mutable.update { it.copy(draft = if (plainSend) user.prompt.orEmpty() else it.draft, attachments = uploads.map(Upload::name)) }
                 } else current = current.copy(parentId = receivedId ?: user.parentId, blocked = false)
-                reportFailure(error)
+                reportFailure(error, partial = receivedText)
+                if (retryFlags != null) mutable.update { it.copy(canRetry = true) }
             } finally {
-                files.forEach { it.file.delete() }
+                if (!keepFiles) files.forEach { it.file.delete() }
                 withContext(NonCancellable) {
                     if (session != null) {
                         try { persist() } catch (_: Exception) { notice("Local history could not be saved. This conversation may be lost when the app closes.") }
@@ -610,15 +725,30 @@ class AccountViewModel @JvmOverloads constructor(
             }
         }
     }
+    /** A new chat's working title until DeepSeek names it: the first words, or the first file of a files-only message. */
+    private fun titleFor(user: WebMessage) = user.text.replace('\n', ' ').take(60).ifBlank { user.files.firstOrNull()?.name ?: "New chat" }
+    /** Each file goes up with its own proof of work and counts once DeepSeek has processed it; transient failures retry once. */
+    private suspend fun upload(credentials: WebCredentials, files: List<Upload>): List<WebAttachment> = files.map { file ->
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+        val uploaded = retryOnce { client.uploadFile(credentials, file.file, file.name, mime, solver) }
+        WebAttachment(file.name, uploaded.bytes ?: withContext(Dispatchers.IO) { file.file.length() }, uploaded.id)
+    }
+    private suspend fun <T> retryOnce(block: suspend () -> T): T = try { block() } catch (error: Exception) {
+        if (error is CancellationException || !error.isTransientWebFailure()) throw error
+        delay(RETRY_DELAY_MS)
+        block()
+    }
     private fun credentials() = WebCredentials(session ?: throw SessionExpired(), DeepSeekCookies.read())
-    private suspend fun reportFailure(error: Exception) {
+    /** [partial]: text of the reply had arrived, so a dropped connection reads as an interrupted reply. */
+    private suspend fun reportFailure(error: Exception, partial: Boolean = false) {
         when (error) {
             is SessionExpired -> {
                 try { expireSession() } catch (_: Exception) { /* expireSession already publishes the safe cleanup state. */ }
             }
-            is EndpointChanged, is WebRateLimited, is WebConnectionFailed -> {
+            is WebFailure -> {
+                val shown: Exception = if (partial && (error is WebConnectionFailed || error is WebServiceBusy)) WebReplyInterrupted() else error
                 // Quota and rate errors keep the account in use; the banner can only open the account list (docs/ACCOUNTS.md).
-                val outcome = AccountFailurePolicy.handle(registry, AccountFailurePolicy.fromError(error), error.message.orEmpty())
+                val outcome = AccountFailurePolicy.handle(registry, AccountFailurePolicy.fromError(shown), shown.message.orEmpty())
                 registry = outcome.registry
                 notice(outcome.message, outcome.offerSwitchAccount)
             }
@@ -628,9 +758,12 @@ class AccountViewModel @JvmOverloads constructor(
     fun stop() { sending?.cancel() }
     private suspend fun persist() {
         current = current.copy(updatedAt = System.currentTimeMillis())
-        val next = (listOf(current) + chats.filterNot { it.id == current.id }).take(100)
-        withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
-        chats = next
+        // The list is read and written under the lock, so a drawer refresh in between is not undone.
+        persistence.withLock {
+            val next = (listOf(current) + chats.filterNot { it.id == current.id }).take(WebHistory.MAX_CHATS)
+            withContext(Dispatchers.IO) { history.save(next) }
+            chats = next
+        }
     }
     private fun summaries() = chats.map { chat ->
         // The drawer searches chat content, as the official app does ("Search chat content...").
@@ -638,8 +771,8 @@ class AccountViewModel @JvmOverloads constructor(
         AccountHistory(chat.id, chat.title, chat.updatedAt, chat.pinned, content)
     }
     private fun displayMessages() = current.messages.map {
-        AccountMessage(it.id, it.user, if (it.user) it.text else CITATION.replace(it.text) { match -> "[${match.groupValues[1]}]" }, it.thinking, it.prompt,
-            it.steps, it.artifacts, it.codeRuns, it.revisionOf, it.thinkingSeconds, it.citations)
+        AccountMessage(it.id, it.user, it.text, it.thinking, it.prompt, it.steps, it.artifacts, it.codeRuns, it.revisionOf, it.thinkingSeconds, it.citations,
+            files = it.files, feedback = it.feedback, timeline = it.timeline, rateable = !it.user && it.serverId != null && current.sessionId != null)
     }
 
     // ---- Settings (docs/reference/SCREEN_SPEC.md "settings"): stored in the encrypted settings shared with the API-key client. ----
@@ -734,6 +867,14 @@ class AccountViewModel @JvmOverloads constructor(
         }
     }
 
+    /** Create image: the question and the reply of one turn, nothing else of the chat. */
+    fun shareTurn(replyId: String): Pair<String, String>? {
+        val index = current.messages.indexOfFirst { it.id == replyId && !it.user && it.text.isNotBlank() }
+        if (index < 0) return null
+        val question = current.messages.take(index).lastOrNull { it.user }
+        return (question?.text?.ifBlank { question.files.joinToString { it.name } }.orEmpty()) to current.messages[index].text
+    }
+
     /** The open chat as Markdown, for Share chat. AI replies are marked as such. */
     fun chatMarkdown(): String = buildString {
         appendLine("# ${current.title}")
@@ -775,19 +916,47 @@ class AccountViewModel @JvmOverloads constructor(
         }
     }
 
-    /** Pinning is local to this phone; pinned chats lead the drawer. */
+    /** Pinned chats lead the drawer; a chat DeepSeek keeps is pinned there first (update_pinned), so every device agrees. */
     fun pin(id: String, pinned: Boolean) {
         if (!available() || locked()) return
-        val next = chats.map { if (it.id == id) it.copy(pinned = pinned) else it }
-        if (next == chats) return
+        val chat = chats.firstOrNull { it.id == id } ?: return
+        if (chat.pinned == pinned) return
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
-                chats = next
+                chat.sessionId?.let { remote -> client.setPinned(credentials(), remote, pinned) }
+                persistence.withLock {
+                    val next = chats.map { if (it.id == id) it.copy(pinned = pinned) else it }
+                    withContext(Dispatchers.IO) { history.save(next) }
+                    chats = next
+                }
                 if (current.id == id) current = current.copy(pinned = pinned)
                 mutable.update { it.copy(history = summaries()) }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { notice("The chat could not be pinned. Try again.") }
+            catch (error: Exception) { if (error is WebFailure) reportFailure(error) else notice("The chat could not be pinned. Try again.") }
+        }
+    }
+
+    /**
+     * Like ("GOOD") or Dislike ("BAD") on a reply, sent to DeepSeek (message_feedback) and kept with the message; tapping the
+     * chosen one again clears it. A reply DeepSeek has no id for keeps the rating on this phone only.
+     */
+    fun setFeedback(messageId: String, feedback: String?) {
+        if (!available() || locked()) return
+        val message = current.messages.firstOrNull { it.id == messageId && !it.user } ?: return
+        val value = feedback?.takeIf { it == "GOOD" || it == "BAD" }?.takeIf { it != message.feedback }
+        val chatId = current.id
+        viewModelScope.launch {
+            try {
+                val remote = current.sessionId
+                val serverId = message.serverId
+                if (remote != null && serverId != null) client.sendFeedback(credentials(), remote, serverId, value)
+                else notice("This reply has no DeepSeek message id, so the rating stays on this phone.")
+                if (current.id != chatId) return@launch
+                current = current.copy(messages = current.messages.map { if (it.id == messageId) it.copy(feedback = value) else it })
+                persist()
+                mutable.update { it.copy(messages = displayMessages()) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { if (error is WebFailure) reportFailure(error) else notice("The rating could not be saved. Try again.") }
         }
     }
     private fun clearUploads() { uploads.forEach { it.file.delete() }; uploads.clear() }
@@ -812,15 +981,18 @@ class AccountViewModel @JvmOverloads constructor(
      * fenced JSON in the chat (WebToolProtocolClient). Every round trip is a message in this chat's
      * parent chain; tool results go back as the next message. The partial timeline survives Stop and errors.
      */
-    private fun runAgentTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>, solve: suspend (PowChallenge) -> Long) {
+    private fun runAgentTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>) {
         if (session == null) { mutable.update { it.copy(page = AccountPage.LOGIN, signedIn = false) }; return }
         val replyId = UUID.randomUUID().toString()
         val before = current
-        val displayedTitle = if (before.messages.isEmpty()) user.text.replace('\n', ' ').take(60) else current.title
+        val displayedTitle = if (before.messages.isEmpty()) titleFor(user) else current.title
         current = current.copy(title = displayedTitle, messages = prefix + user + WebMessage(replyId, false, ""), parentId = user.parentId, blocked = true)
         uploads.clear()
-        mutable.update { it.copy(busy = true, draft = "", attachments = emptyList(), title = current.title, conversationId = current.id, messages = displayMessages(), error = null) }
+        retryFlags = null
+        mutable.update { it.copy(busy = true, draft = "", attachments = emptyList(), title = current.title, conversationId = current.id, messages = displayMessages(),
+            error = null, canRetry = false) }
         sending = viewModelScope.launch {
+            var keepFiles = false
             var parent = user.parentId
             var lastSeen: Long? = null
             var answered = false
@@ -839,28 +1011,42 @@ class AccountViewModel @JvmOverloads constructor(
             try {
                 persist()
                 val credentials = credentials()
-                val remoteId = current.sessionId ?: client.createSession(credentials).also { current = current.copy(sessionId = it) }
-                val refs = user.refFileIds + files.map { file ->
-                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
-                    client.uploadFile(credentials, file.file, file.name, mime)
-                }
-                sent = user.copy(refFileIds = refs)
+                val remoteId = current.sessionId ?: retryOnce { client.createSession(credentials) }.also { current = current.copy(sessionId = it) }
+                val sentFiles = upload(credentials, files)
+                val refs = user.refFileIds + sentFiles.mapNotNull { it.id }
+                sent = user.copy(refFileIds = refs, files = sentFiles.ifEmpty { user.files })
                 publish()
                 val transport = WebChatTransport { prompt, kind ->
                     flow {
                         val first = kind == WebPromptKind.USER
                         var final: WebReply? = null
-                        try {
-                            client.complete(credentials(), CompletionInput(remoteId, parent, prompt, user.thinkingEnabled, user.searchEnabled && first,
-                                if (first) refs else emptyList()), powSolver ?: solve).collect { reply ->
-                                final = reply
-                                lastSeen = reply.responseMessageId ?: lastSeen
-                                if (first && sent.serverId == null && reply.requestMessageId != null) sent = sent.copy(serverId = reply.requestMessageId)
-                                emit(reply)
+                        var attempt = 0
+                        while (true) {
+                            var shown = false
+                            val sentBefore = sent
+                            val seenBefore = lastSeen
+                            try {
+                                client.complete(credentials(), CompletionInput(remoteId, parent, prompt, user.thinkingEnabled, user.searchEnabled && first,
+                                    if (first) refs else emptyList()), solver).collect { reply ->
+                                    final = reply
+                                    lastSeen = reply.responseMessageId ?: lastSeen
+                                    if (first && sent.serverId == null && reply.requestMessageId != null) sent = sent.copy(serverId = reply.requestMessageId)
+                                    if (reply.response.isNotEmpty() || reply.thinking.isNotEmpty()) shown = true
+                                    emit(reply)
+                                }
+                                break
+                            } catch (error: Exception) {
+                                // One automatic retry for a transient failure before this round showed any text.
+                                if (error !is CancellationException && !shown && attempt == 0 && error.isTransientWebFailure()) {
+                                    attempt++
+                                    sent = sentBefore
+                                    lastSeen = seenBefore
+                                    delay(RETRY_DELAY_MS)
+                                    continue
+                                }
+                                if (error !is CancellationException) transportFailure = error
+                                throw error
                             }
-                        } catch (error: Exception) {
-                            if (error !is CancellationException) transportFailure = error
-                            throw error
                         }
                         val done = final?.takeIf { it.finished && it.responseMessageId != null }
                         if (done == null) {
@@ -870,7 +1056,9 @@ class AccountViewModel @JvmOverloads constructor(
                         }
                         parent = done.responseMessageId
                         answered = true
-                        current = current.copy(parentId = parent)
+                        // DeepSeek's generated title would describe this app's tool instructions, so agent chats keep their own.
+                        current = current.copy(parentId = parent, syncedAt = done.sessionUpdatedAt ?: current.syncedAt,
+                            remoteUpdatedAt = maxOf(current.remoteUpdatedAt, done.sessionUpdatedAt ?: 0L))
                     }
                 }
                 val toolkit = AgentToolkit.get(getApplication())
@@ -906,11 +1094,18 @@ class AccountViewModel @JvmOverloads constructor(
             } catch (error: Exception) {
                 if (!answered && lastSeen == null && error !is SessionExpired) {
                     current = before.copy(sessionId = current.sessionId)
-                    mutable.update { it.copy(draft = if (prefix == before.messages) user.prompt.orEmpty() else it.draft) }
+                    val plainSend = prefix == before.messages
+                    if (plainSend) {
+                        keepFiles = true
+                        uploads.addAll(files)
+                        retryFlags = user.thinkingEnabled to user.searchEnabled
+                    }
+                    mutable.update { it.copy(draft = if (plainSend) user.prompt.orEmpty() else it.draft, attachments = uploads.map(Upload::name)) }
                 } else current = current.copy(parentId = lastSeen ?: parent, blocked = false)
-                reportFailure(error)
+                reportFailure(error, partial = answered || lastSeen != null)
+                if (retryFlags != null) mutable.update { it.copy(canRetry = true) }
             } finally {
-                files.forEach { it.file.delete() }
+                if (!keepFiles) files.forEach { it.file.delete() }
                 withContext(NonCancellable) {
                     if (session != null) {
                         try { persist() } catch (_: Exception) { notice("Local history could not be saved. This conversation may be lost when the app closes.") }
@@ -1187,6 +1382,8 @@ class AccountViewModel @JvmOverloads constructor(
                         title = current.title, conversationId = current.id, messages = emptyList(), history = summaries(), draft = "",
                         attachments = emptyList(), requiresNewChat = false, pane = null, chatFiles = null, profileEmail = null, profilePhone = null) }
                     revalidate()
+                    historyRefresh?.cancel()
+                    refreshHistory(force = true)
                 } else {
                     val settings = settings()
                     val hasKey = withContext(Dispatchers.IO) {
@@ -1446,7 +1643,7 @@ class AccountViewModel @JvmOverloads constructor(
      * "Ask DeepSeek to change this": the edited source (saved first as a version) and the instruction go to DeepSeek as
      * the next message in this chat; the code block in its reply becomes the next version (finishRevision).
      */
-    fun askArtifactChange(id: String, baseVersion: Int, source: String, instruction: String, solve: suspend (PowChallenge) -> Long) {
+    fun askArtifactChange(id: String, baseVersion: Int, source: String, instruction: String) {
         if (!available() || current.blocked) { notice("Wait for the current reply to finish, then try again."); return }
         if (uploads.isNotEmpty()) { notice("Send or remove the attached files first."); return }
         if (session == null) { mutable.update { it.copy(page = AccountPage.LOGIN, signedIn = false) }; return }
@@ -1466,7 +1663,7 @@ class AccountViewModel @JvmOverloads constructor(
                 drafts.remove(id)
                 mutable.update { it.copy(pane = WorkbenchPane.Panel(artifact, revising = true)) }
                 val user = WebMessage(UUID.randomUUID().toString(), true, display, parentId = current.parentId, prompt = prompt, revisionOf = id)
-                runTurn(current.messages, user, emptyList(), solve, keepDraft = true)
+                runTurn(current.messages, user, emptyList(), keepDraft = true)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: IllegalArgumentException) { notice(error.message ?: "Describe the change, then try again.") }
             catch (_: Exception) { notice("This artifact is no longer available.") }
@@ -1571,8 +1768,14 @@ class AccountViewModel @JvmOverloads constructor(
         const val QUICK_KEY_ID = "api-key"
         /** Pages that exist while signed out; everything else waits for a confirmed session. */
         val SIGNED_OUT_PAGES = setOf(AccountPage.CHAT, AccountPage.LOGIN, AccountPage.ACCOUNTS)
-        /** DeepSeek's Search replies cite pages as [citation:N]; the chat shows [N]. */
+        /** DeepSeek's Search replies cite pages as [citation:N]; shared text shows [N]. */
         private val CITATION = Regex("\\[citation:(\\d{1,3})]")
+        /** DeepSeek session ids (UUIDs) double as stable local ids for chats listed from the server. */
+        private val SERVER_ID = Regex("[A-Za-z0-9-]{1,64}")
+        private const val RETRY_DELAY_MS = 1_200L
+        private const val HISTORY_REFRESH_MS = 15_000L
+        /** A chat DeepSeek reports as changed this much after its last load here was continued elsewhere. */
+        private const val RELOAD_SLACK_MS = 2_000L
         private const val SEARCH_TEXT_LIMIT = 4000
         private const val MAX_REMOTE_SERVERS = 8
         private const val MAX_EDITOR_BYTES = 1024 * 1024

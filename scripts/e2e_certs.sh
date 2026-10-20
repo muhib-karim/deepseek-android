@@ -13,7 +13,7 @@ cat > leaf.ext <<'EXT'
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
-subjectAltName=DNS:chat.deepseek.com,DNS:fe-static.deepseek.com,DNS:api.deepseek.com,DNS:html.duckduckgo.com,DNS:example.com,DNS:www.example.com,DNS:cdn.jsdelivr.net
+subjectAltName=DNS:chat.deepseek.com,DNS:fe-static.deepseek.com,DNS:api.deepseek.com,DNS:html.duckduckgo.com,DNS:example.com,DNS:www.example.com,DNS:cdn.jsdelivr.net,DNS:cdn.deepseek.com
 EXT
 openssl req -newkey rsa:2048 -nodes -subj "/CN=chat.deepseek.com" -keyout leaf.key -out leaf.csr 2>/dev/null
 openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 7 -extfile leaf.ext -out leaf.pem 2>/dev/null

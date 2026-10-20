@@ -23,7 +23,8 @@ class WebViewBoundaryTest {
         </script></body></html>""", "text/html", "UTF-8", origin)
         browser
     }
-    @Test fun exactOriginCaptureAndBlockedWorkerFailWithoutNetwork() = runBlocking<Unit> {
+    /** Only the session is read from the page; proof of work is solved natively, never by DeepSeek's scripts in this WebView. */
+    @Test fun exactOriginCaptureWithoutNetwork() = runBlocking<Unit> {
         val browser = page(DeepSeekOrigin.URL)
         try {
             val captured = withTimeout(10_000) {
@@ -32,10 +33,6 @@ class WebViewBoundaryTest {
                 checkNotNull(token)
             }
             assertEquals("synthetic-boundary-token", captured.bearer())
-            try {
-                browser.solve(PowChallenge("DeepSeekHashV1", "abcdef", "salt", 64, 9999999999999, "signature"))
-                fail("Expected a visible worker error")
-            } catch (error: UpdateRequired) { assertTrue(error.message!!.contains("update")) }
         } finally {
             withContext(Dispatchers.Main) { browser.destroy() }
             DeepSeekCookies.clear()

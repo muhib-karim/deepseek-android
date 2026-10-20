@@ -12,12 +12,6 @@ class PowTest {
         assertEquals(Json.parseToJsonElement("""{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"盐","answer":7,"signature":"signature","target_path":"/api/v0/chat/completion"}"""), Json.parseToJsonElement(decoded))
         assertFalse(challenge.header(7).contains('\n'))
     }
-    @Test fun workerInputUsesCamelCaseExpiryAndTypedEnvelope() {
-        val message = challenge.workerMessage()
-        assertEquals("pow-challenge", message["type"]!!.jsonPrimitive.content)
-        assertEquals(2000, message["challenge"]!!.jsonObject["expireAt"]!!.jsonPrimitive.int)
-        assertFalse(message.toString().contains("expire_at"))
-    }
     @Test fun changedAlgorithmsInvalidAnswersAndExpiredChallengesFailVisibly() {
         assertThrows(UpdateRequired::class.java) { challenge.copy(algorithm = "Unknown").header(1) }
         assertThrows(UpdateRequired::class.java) { challenge.header(-1) }
