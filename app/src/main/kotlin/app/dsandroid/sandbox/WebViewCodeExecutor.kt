@@ -30,9 +30,9 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                 if (!ready) return@withLock CodeExecution(stderr = context.getString(R.string.python_download_denied), failed = true)
             }
             val key = "result" + UUID.randomUUID().toString().replace("-", "")
-            val document = withContext(Dispatchers.Default) {
-                if (python) CodeSandboxDocument.python(request.code, key)
-                else CodeSandboxDocument.javascript(request.code, key)
+            val page = withContext(Dispatchers.Default) {
+                if (python) CodeSandboxDocument.pythonPage(request.code, key)
+                else CodeSandboxDocument.javascriptPage(request.code, key)
             }
             withContext(Dispatchers.Main.immediate) {
                 var rendererFailed = false
@@ -41,6 +41,7 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                 val events = ArrayList<String>()
                 var finished = false
                 var unanswered = 0
+                var bootstrapped = false
                 val view = SandboxWebViews.create(context, javaScriptEnabled = true,
                     cachedResource = if (python) runtime::resource else null, onFailure = { rendererFailed = true },
                     onConsole = { line -> if (messages.size < 8) messages += line.take(300) },
@@ -48,7 +49,7 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                 try {
                     withTimeoutOrNull(CodeLimits.WALL_TIME_MS) {
                         // A real https origin (never resolved, every request intercepted), so the blob worker is same-origin.
-                        view.loadDataWithBaseURL(CodeSandboxDocument.BASE_URL, document, "text/html", "UTF-8", null)
+                        view.loadDataWithBaseURL(CodeSandboxDocument.BASE_URL, page.shell, "text/html", "UTF-8", null)
                         val loadStarted = SystemClock.uptimeMillis()
                         var result: CodeExecution? = null
                         while (result == null) {
@@ -58,6 +59,12 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                             // Poll only once the page has committed: a script sent to the outgoing document while the
                             // navigation swaps frames never answers. Each poll is bounded, so a lost answer is just retried.
                             if (!finished && !started && SystemClock.uptimeMillis() - loadStarted < 3_000) { delay(50); continue }
+                            // The trusted bootstrap is run by the host once the (script-free) shell has loaded, rather than
+                            // inline, so the page cannot be up without it. It defines the poll function first.
+                            if (!bootstrapped) {
+                                bootstrapped = true
+                                view.evaluateJavascript(page.bootstrap, null)
+                            }
                             val raw = withTimeoutOrNull(POLL_TIMEOUT_MS) {
                                 suspendCancellableCoroutine<String> { reply ->
                                     view.evaluateJavascript("typeof window.$key === 'function' ? window.$key() : null") {
@@ -72,7 +79,8 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
                     } ?: CodeExecution(timedOut = true, failed = true, stderr = when {
                         // A page that never started is a sandbox fault, not slow code: say so, with what the page reported.
                         !started -> "The sandbox page did not start (page: " + events.joinToString("; ").ifEmpty { "no load events" } +
-                            "; unanswered polls: $unanswered)." + if (messages.isEmpty()) "" else " Page messages:\n" + messages.joinToString("\n")
+                            "; unanswered polls: $unanswered; probe: ${probe(view)})." +
+                            if (messages.isEmpty()) "" else " Page messages:\n" + messages.joinToString("\n")
                         else -> messages.joinToString("\n")
                     })
                 } finally {
@@ -85,6 +93,15 @@ class WebViewCodeExecutor(context: Context, approvePythonDownload: suspend () ->
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { CodeExecution(stderr = context.getString(R.string.interpreter_failed), failed = true) }
     }
+
+    /** What the page looks like from the host when it never started: script support, document state and origin. */
+    private suspend fun probe(view: android.webkit.WebView): String = withTimeoutOrNull(POLL_TIMEOUT_MS) {
+        suspendCancellableCoroutine<String> { reply ->
+            view.evaluateJavascript("[1 + 1, document.readyState, document.scripts.length, location.origin, typeof Worker].join(',')") {
+                if (reply.isActive) reply.resume(it ?: "null")
+            }
+        }
+    } ?: "no answer"
 
     private companion object { const val POLL_TIMEOUT_MS = 1_000L }
 }

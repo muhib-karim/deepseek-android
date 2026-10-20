@@ -20,7 +20,18 @@ object CodeSandboxDocument {
     /** The platform serves exact pinned runtime files from cache, never from the network. */
     fun python(code: String, pollKey: String): String = document(code, pollKey, true)
 
-    private fun document(code: String, pollKey: String, python: Boolean): String {
+    /** The page: a script-free shell (carrying the CSP) and the trusted bootstrap the host runs in it once it has loaded. */
+    class Page(val shell: String, val bootstrap: String)
+
+    fun javascriptPage(code: String, pollKey: String): Page = page(code, pollKey, false)
+
+    fun pythonPage(code: String, pollKey: String): Page = page(code, pollKey, true)
+
+    /** The same page as one self-contained document, with the bootstrap inline. */
+    private fun document(code: String, pollKey: String, python: Boolean): String =
+        page(code, pollKey, python).let { it.shell.replace("<body></body>", "<body><script>\n" + it.bootstrap + "\n</script></body>") }
+
+    private fun page(code: String, pollKey: String, python: Boolean): Page {
         require(code.isNotBlank() && code.length <= CodeLimits.MAX_CODE_CHARS)
         require(pollKey.matches(Regex("[A-Za-z][A-Za-z0-9]{8,80}")))
         val source = """
@@ -90,7 +101,8 @@ object CodeSandboxDocument {
         val policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:$cached; worker-src blob:; " +
             "connect-src ${if (python) PythonRuntime.CACHE_BASE_URL else "'none'"}; style-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; " +
             "object-src 'none'; base-uri 'none'; form-action 'none'"
-        return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$policy"></head><body><script>
+        val shell = "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"></head><body></body></html>"
+        val bootstrap = """
             (() => {
               'use strict';
               let result = null;
@@ -122,6 +134,7 @@ object CodeSandboxDocument {
               };
               worker.onerror = event => finish({stdout:'',stderr:'Worker execution failed' + (event && event.message ? ': ' + event.message : ''),failed:true});
             })();
-            </script></body></html>""".trimIndent()
+            """.trimIndent()
+        return Page(shell, bootstrap)
     }
 }
