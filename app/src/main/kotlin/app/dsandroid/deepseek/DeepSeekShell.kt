@@ -176,6 +176,7 @@ fun DeepSeekShell(
     onTheme: (Appearance) -> Unit = {}, onLogout: () -> Unit = {}, onError: (String) -> Unit = {},
     onAttachment: (String) -> Unit = {}, onRemoveAttachment: (Int) -> Unit = {},
     onFinishLogin: () -> Unit = {}, loginContent: @Composable () -> Unit = {},
+    onBrowserSignIn: () -> Unit = {}, onPasteSession: () -> Unit = {},
     onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
@@ -344,6 +345,10 @@ fun DeepSeekShell(
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = onLogin) { Text("Reload login") }
                             TextButton(onClick = onFinishLogin) { Text("Finish login") }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = onBrowserSignIn, modifier = Modifier.testTag("browser-sign-in")) { Text("Sign in with Google") }
+                            TextButton(onClick = onPasteSession, modifier = Modifier.testTag("paste-session")) { Text("Paste session") }
                         }
                         Box(Modifier.weight(1f).fillMaxWidth()) { loginContent() }
                     }

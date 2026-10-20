@@ -12,8 +12,8 @@ android {
         applicationId = "app.dsandroid"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.7.0"
+        versionCode = 9
+        versionName = "0.7.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Chaquopy ships native Python per ABI: current phones and x86_64 emulators (CI) only.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }

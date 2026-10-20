@@ -15,6 +15,12 @@
     <queries>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <!-- Finds the default browser for "Sign in with Google in your browser". -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
     <application
         android:name=".DsAndroidApplication"
@@ -45,6 +51,17 @@
                 <data android:mimeType="text/*" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/pdf" />
+            </intent-filter>
+        </activity>
+        <!-- Receives the browser sign-in hand-off (intent://session with this package). Shows nothing; the account screen asks to confirm. -->
+        <activity android:name=".deepseek.SessionLinkActivity" android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dsandroid" android:host="session" />
             </intent-filter>
         </activity>
         <service android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"

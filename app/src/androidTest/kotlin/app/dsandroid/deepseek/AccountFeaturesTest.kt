@@ -441,7 +441,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { browser.view.evaluateJavascript("document.getElementById('google').click()", null) }
         compose.waitUntil(10_000) { vm.state.value.error == DeepSeekWebView.SSO_NOTICE }
         compose.onNodeWithTag("account-error").assertTextEquals(DeepSeekWebView.SSO_NOTICE)
-        assertEquals("Google sign-in isn't allowed inside apps. Use phone number or email on this page.", DeepSeekWebView.SSO_NOTICE)
+        assertEquals("Google sign-in can't run inside apps. For a Google account, tap Sign in with Google to use your browser.", DeepSeekWebView.SSO_NOTICE)
+        compose.onNodeWithTag("browser-sign-in").assertIsDisplayed()
+        compose.onNodeWithTag("paste-session").assertIsDisplayed()
         compose.runOnIdle { assertFalse(browser.view.url.orEmpty().contains("accounts.google.com")) }
         screenshot("feature12-login")
     }
