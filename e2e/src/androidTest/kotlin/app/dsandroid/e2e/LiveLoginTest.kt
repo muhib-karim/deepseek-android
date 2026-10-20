@@ -50,6 +50,7 @@ class LiveLoginTest {
         val handlers = e2e.shell("cmd package query-activities --brief -a android.intent.action.VIEW -d https://example.com/ -c android.intent.category.BROWSABLE")
         check(handlers.contains(browser)) { "The app opened $browser, which is not a browser" }
         e2e.waitUntil("chat.deepseek.com in the address bar", 45_000) {
+            dismissBrowserFirstRun()
             e2e.device.findObjects(By.textContains("chat.deepseek.com")).isNotEmpty() ||
                 e2e.device.findObjects(By.descContains("chat.deepseek.com")).isNotEmpty()
         }
@@ -64,6 +65,12 @@ class LiveLoginTest {
 
     private companion object {
         val PAGE_TEXT: Pattern = Pattern.compile("(?i).*(log ?in|sign ?in|password|email|phone|verify|security).*")
+    }
+
+    /** Chrome's first-run screens on a fresh image ("Use without an account", "No thanks") stand between the hand-off and the page. */
+    private fun dismissBrowserFirstRun() {
+        (e2e.device.findObject(By.res("com.android.chrome:id/signin_fre_dismiss_button"))
+            ?: e2e.device.findObject(By.text(Pattern.compile("(?i)(use without an account|no,? thanks)"))))?.click()
     }
 
     private fun chooseBrowserIfAsked() {
