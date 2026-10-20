@@ -11,7 +11,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import app.dsandroid.SmokeActivity
 import app.dsandroid.core.deepseek.SessionToken
+import app.dsandroid.core.deepseek.WebAttachment
 import app.dsandroid.core.deepseek.WebCitation
+import app.dsandroid.core.deepseek.WebStep
 import app.dsandroid.data.Appearance
 import org.junit.Assert.*
 import org.junit.Rule
@@ -47,6 +49,8 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     @Test fun emptyChat() {
         launch(AccountUiState(ready = true, signedIn = true))
         compose.onNodeWithText("How can I help you?").assertIsDisplayed()
+        // Official: an empty new chat has no title in the top bar.
+        compose.onNodeWithTag("chat-title").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open navigation").assertWidthIsAtLeast(48.dp)
         compose.onNodeWithContentDescription("New Chat").assertHeightIsAtLeast(48.dp)
         screenshot("empty-chat")
@@ -145,8 +149,49 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     @Test fun attachmentTrayShowsAllThreeActions() {
         launch(AccountUiState(ready = true, signedIn = true))
         compose.onNodeWithContentDescription("Add attachment").performClick()
+        // Inline under the composer: the recent-photos strip (asks for gallery access first) above the three tiles.
+        compose.onNodeWithTag("attachment-panel").assertIsDisplayed()
+        compose.onNodeWithTag("recent-photos-allow").assertIsDisplayed()
         listOf("Camera", "Photo", "Document").forEach { compose.onNodeWithText(it).assertIsDisplayed() }
         screenshot("attachment-tray")
+        compose.onNodeWithContentDescription("Add attachment").performClick()
+        compose.onNodeWithTag("attachment-panel").assertDoesNotExist()
+    }
+    @Test fun thinkingTimelineWithSearchStepsAndCitationChips() {
+        val pages = listOf(WebCitation("Example notes", "https://www.example.com/notes", "Example notes"),
+            WebCitation("Example report", "https://example.com/report", "Example"))
+        val answer = AccountMessage("a3", false, "Revenue grew 12%[citation:2].", "Plan a search.\n\nRead the pages.", thinkingSeconds = 4.0,
+            citations = pages, timeline = listOf(WebStep.Think("Plan a search.", 1.5), WebStep.Search("Found 2 web pages", listOf("revenue"), pages),
+                WebStep.Think("Read the pages.", 2.0), WebStep.Read(pages), WebStep.Think("Answer briefly.", 0.5)))
+        launch(AccountUiState(ready = true, signedIn = true, title = "Revenue", messages = listOf(AccountMessage("u3", true, "How did revenue do?"), answer)))
+        compose.onNodeWithText("Thought for 4 seconds").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Source 2").assertExists()
+        compose.onAllNodes(hasText("[citation:", substring = true)).assertCountEquals(0)
+        compose.onNodeWithTag("thinking-a3").performClick()
+        compose.onNodeWithText("Found 2 web pages").assertIsDisplayed()
+        compose.onNodeWithText("Read 2 pages").assertIsDisplayed()
+        compose.onNodeWithText("Plan a search.").assertIsDisplayed()
+        screenshot("thinking-timeline")
+        compose.onNodeWithTag("read-step", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Example report").assertIsDisplayed()
+        screenshot("read-pages")
+    }
+    @Test fun filesShowAsChipsAboveTheMessageAndRepliesHaveTheOfficialActions() {
+        val user = AccountMessage("u4", true, "Summarise this", files = listOf(WebAttachment("notes.txt", 1_258_291, "file-1")))
+        val reply = AccountMessage("a4", false, "A short summary.", feedback = "GOOD", rateable = true)
+        launch(AccountUiState(ready = true, signedIn = true, title = "Notes", messages = listOf(user, reply)))
+        compose.onNodeWithTag("file-chip-notes.txt").assertIsDisplayed()
+        compose.onNodeWithText("TXT 1.2MB", useUnmergedTree = true).assertIsDisplayed()
+        listOf("Copy assistant message", "Regenerate response", "Like", "Dislike", "Share answer").forEach {
+            compose.onNodeWithContentDescription(it).assertIsDisplayed()
+        }
+        compose.onNodeWithTag("like-a4").assertIsSelected()
+        compose.onNodeWithTag("dislike-a4").assertIsNotSelected()
+        screenshot("file-chip-actions")
+        compose.onNodeWithContentDescription("Share answer").performClick()
+        compose.onNodeWithText("Create image").assertIsDisplayed()
+        compose.onNodeWithText("Share as text").assertIsDisplayed()
+        screenshot("share-reply")
     }
     @Test fun drawerGroupsChatsByDateAndHidesActionsBehindTheMenu() {
         val now = System.currentTimeMillis()
