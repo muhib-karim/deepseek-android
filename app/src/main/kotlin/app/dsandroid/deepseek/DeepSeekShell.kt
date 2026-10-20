@@ -51,6 +51,7 @@ import app.dsandroid.ui.LightChatColors
 import app.dsandroid.ui.LightOfficialColors
 import app.dsandroid.ui.LocalOfficialColors
 import app.dsandroid.ui.OfficialTypography
+import app.dsandroid.ui.scaled
 import app.dsandroid.ui.Glyph
 import app.dsandroid.ui.MarkdownText
 import app.dsandroid.workbench.WorkbenchPane
