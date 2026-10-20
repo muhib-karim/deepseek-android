@@ -213,6 +213,23 @@ results come from CI (see [RELEASE_NOTES_100.md](RELEASE_NOTES_100.md)).
 | 74 | File cards: Open, Edit, Download, Save as, Share with the file's own name and type | v1.0.0 |
 | 75 | Release E2E suite on the signed release APK: video, step screenshots, required tool coverage; releases are published only after it passes ([EVIDENCE_v1.md](EVIDENCE_v1.md)) | v1.0.0 |
 
+## v1.1.0 plan: live service and official parity
+
+A signed-in run against the live service found what the mocked backend hid; see [RELEASE_NOTES_110.md](RELEASE_NOTES_110.md).
+Implemented on feature/v1.1.0; nothing was compiled locally, and the results come from CI.
+
+| # | Item | Release |
+|---|---|---|
+| 76 | Native proof of work (DeepSeekHashV1, Kotlin, cancellable, off the main thread) for chats and uploads; no DeepSeek script runs in the app | v1.1.0 |
+| 77 | Uploads with their own proof of work that wait for DeepSeek's processing (fetch_files); files as chips with type and size | v1.1.0 |
+| 78 | Live Search streams (negative indices, batches, TOOL_SEARCH / TOOL_OPEN): thinking timeline with "Found N web pages" / "Read N pages", site icons, numbered citation chips | v1.1.0 |
+| 79 | DeepSeek's chat history in the drawer, merged by session id; open and continue chats from other devices; pins synced | v1.1.0 |
+| 80 | Honest errors (network, server, session, service changed, file) with one automatic retry and a Retry button | v1.1.0 |
+| 81 | Like / Dislike on replies, sent to DeepSeek | v1.1.0 |
+| 82 | Official-parity details: empty-chat top bar, outlined composer buttons, atom-like Think mark, inline attach panel with recent photos, magnifier, neutral 20 dp dialogs, Saved to Downloads with Open | v1.1.0 |
+| 83 | Share a reply as an image card ("Create image") | v1.1.0 |
+| 84 | Release E2E fixture in the live service's shapes (real PoW, upload processing, Search shapes, history) with journeys for each | v1.1.0 |
+
 ## v0.7.0 delivery status
 
 Rows **65-67**: released in v0.7.0 (2026-10-20, PR #23). CI green (JVM and app unit tests, lint, debug and
@@ -236,5 +253,6 @@ release builds) and 68/68 emulator tests; see [RELEASE_NOTES_070.md](RELEASE_NOT
 | v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
 | v0.7.0 (released) | 3 (rows 65-67), see [RELEASE_NOTES_070.md](RELEASE_NOTES_070.md) |
 | v0.7.1 (released) | sign-in fix, see [RELEASE_NOTES_071.md](RELEASE_NOTES_071.md) |
-| v1.0.0 (pending CI) | 8 (rows 68-75), see [RELEASE_NOTES_100.md](RELEASE_NOTES_100.md) |
+| v1.0.0 (released) | 8 (rows 68-75), see [RELEASE_NOTES_100.md](RELEASE_NOTES_100.md) |
+| v1.1.0 (pending CI) | 9 (rows 76-84), see [RELEASE_NOTES_110.md](RELEASE_NOTES_110.md) |
 | **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |

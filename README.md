@@ -5,16 +5,34 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Latest release: **v0.7.1 "Sign-in fix"**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.7.1)).
-Not independently audited. Each GitHub release carries a debug APK, a signed
-minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitHub Actions.
+Latest release: **v1.0.0**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v1.0.0)).
+Not independently audited. From v1.0.0 a GitHub release carries the signed, minified release APK and SHA256SUMS.txt
+(earlier releases also carried a debug APK). Builds, unit tests and lint run on GitHub Actions.
 Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
 emulators.
 
-## v1.0.0 (in progress, not released)
+## v1.1.0 (in progress, not released)
 
-On branch `feature/v1.0.0`; versionCode 10, versionName 1.0.0. Nothing has been compiled locally: GitHub Actions builds
-and tests it, and [docs/RELEASE_NOTES_100.md](docs/RELEASE_NOTES_100.md) records each result (all PENDING CI for now).
+On branch `feature/v1.1.0`; versionCode 11, versionName 1.1.0. Fixes what a signed-in run against the live service found,
+and closes the remaining differences from the official app. Nothing has been compiled locally: GitHub Actions builds and
+tests it, and [docs/RELEASE_NOTES_110.md](docs/RELEASE_NOTES_110.md) records each result (PENDING for now).
+
+- **Works with the live service again:** uploads (each with its own proof of work, sent once DeepSeek has processed the
+  file), Search and DeepThink + Search replies (live stream shapes), and the first message after signing in. The proof of
+  work is solved natively; no DeepSeek script runs in the app.
+- **Your DeepSeek history in the drawer:** chats from other devices and the website, merged with this phone's; open one
+  and continue it. Pins are shared with DeepSeek.
+- **Like the official app:** thinking timeline with "Found N web pages" / "Read N pages" and site icons, numbered citation
+  chips, file chips with type and size, Copy / Regenerate / Like / Dislike / Share under replies, "Create image" sharing,
+  an inline attach panel with recent photos, outlined composer buttons, neutral dialogs, and no title on an empty chat.
+- **Honest errors:** network, server, session and file problems say so; a transient failure is retried once and then
+  offers Retry with your draft and files kept.
+- **The mocked release suite now speaks the live service's shapes** (real proof of work, upload processing, Search
+  streams, history), so the failures found on the live service would fail CI.
+
+## v1.0.0
+
+Released 2026-10-20; versionCode 10, versionName 1.0.0. [docs/RELEASE_NOTES_100.md](docs/RELEASE_NOTES_100.md).
 
 - **Looks like the official DeepSeek app**, screen by screen, in light and dark: welcome screen with DeepSeek's terms
   box, drawer with content search and date groups, "Thought for N seconds", "Read N web pages", the Think and Search
@@ -394,9 +412,10 @@ are refused to avoid forwarding credentials to a different origin.
 ## Safety and permissions
 
 **INTERNET is the only install-time permission.** RECORD_AUDIO
-is declared and requested at first dictation use. ACCESS_NETWORK_STATE is explicitly
-removed during manifest merging. There are no storage, notification, install,
-location or broad package-query permissions.
+is declared and requested at first dictation use. Since v1.1.0, photo access (READ_MEDIA_IMAGES;
+READ_EXTERNAL_STORAGE up to Android 12L) is declared for the attach panel's recent-photos strip and
+requested only when you tap Recent photos. ACCESS_NETWORK_STATE is explicitly removed during manifest
+merging. There are no write-storage, notification, install, location or broad package-query permissions.
 Artifacts live under the app's private `filesDir/workspace` directory. The
 non-exported FileProvider exposes only artifact directories and a narrow camera
 cache directory. Camera uses the system intent without CAMERA permission. Uploads
