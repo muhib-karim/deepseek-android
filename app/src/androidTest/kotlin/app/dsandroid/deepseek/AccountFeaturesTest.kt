@@ -504,6 +504,27 @@ class AccountFeaturesTest(private val dark: Boolean) {
         }
     }
 
+    @Test fun feature15_transientFailuresRetryOnceThenOfferRetry() {
+        launch()
+        // A server error before any reply text is retried once automatically, with a fresh proof of work.
+        queue(COMPLETION, MockResponse().setResponseCode(503))
+        send("Retry me"); finished()
+        assertEquals(2, bodies(COMPLETION).size)
+        assertEquals(2, requests.count { it.path == "/api/v0/chat/create_pow_challenge" })
+        // Twice in a row: the draft comes back, the banner says what happened and Retry sends it again.
+        queue(COMPLETION, MockResponse().setResponseCode(503))
+        queue(COMPLETION, MockResponse().setResponseCode(503))
+        send("Retry me later")
+        compose.waitUntil(15_000) { vm.state.value.canRetry && !vm.state.value.busy }
+        compose.onNodeWithTag("account-error").assertTextEquals("DeepSeek is having trouble right now. Tap Retry in a moment.")
+        assertEquals("Retry me later", vm.state.value.draft)
+        screenshot("feature15-retry")
+        compose.onNodeWithTag("retry-send").performClick()
+        compose.waitUntil(15_000) { !vm.state.value.busy && vm.state.value.error == null && vm.state.value.messages.size == 4 }
+        assertEquals("Retry me later", bodies(COMPLETION).last()["prompt"]!!.jsonPrimitive.content)
+        assertEquals(5, bodies(COMPLETION).size)
+    }
+
     @Test fun feature14_endpointChange() {
         launch(); queue(CREATE, MockResponse().setResponseCode(404)); send()
         compose.waitUntil(10_000) { vm.state.value.error == CHANGED && !vm.state.value.busy }
