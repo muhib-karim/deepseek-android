@@ -18,7 +18,8 @@ import org.junit.runner.RunWith
  * The release build's chat and agent journey against the fixture: DeepThink and Search replies, then one agent turn per
  * account tool case in e2e/coverage.json (the fixture's "E2E-TOOL:<name>" marker makes the model call that tool). A PDF
  * goes through the system share sheet to the E2E receiver, which checks the bytes it got; Charts is switched off in
- * Plugins & tools and then refused. check_e2e_evidence.py --coverage verifies every case from the fixture's own log.
+ * Plugins & tools and then refused; finally the session expires mid-chat and the app stays locked after a restart.
+ * check_e2e_evidence.py --coverage verifies every case from the fixture's own log.
  */
 @RunWith(AndroidJUnit4::class)
 class AgentJourneyTest {
@@ -69,6 +70,16 @@ class AgentJourneyTest {
         e2e.device.pressBack()
         e2e.waitFor(E2eDriver.res("account-composer"), "the chat", 10_000)
         agent("create_chart", ok = false, step = "create-chart-switched-off")
+
+        // DeepSeek rejects the session mid-chat: the app locks back to the welcome screen and stays there after a restart.
+        send("E2E-EXPIRE now")
+        e2e.waitFor(E2eDriver.res("welcome-screen"), "the welcome screen after the session expired", 60_000)
+        e2e.assertAbsent(E2eDriver.res("account-composer"), "a composer after expiry")
+        e2e.step("session-expired")
+        e2e.restart()
+        e2e.waitFor(E2eDriver.res("welcome-screen"), "the welcome screen after a restart", 60_000)
+        e2e.assertAbsent(E2eDriver.res("account-composer"), "a composer after a restart")
+        e2e.step("restarted-signed-out")
     }
 
     private fun send(text: String) {

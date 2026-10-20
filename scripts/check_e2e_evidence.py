@@ -85,13 +85,14 @@ def coverage_problems(log_path, coverage_path):
             pending[entry["requested"]] = entry["requested"] in (entry.get("tools") or [])
         elif entry.get("kind") == "tool_result" and entry.get("tool") in pending:
             observed.append((entry["tool"], pending.pop(entry["tool"]), bool(entry.get("ok"))))
-    problems = []
+    problems = [f"coverage: no '{journey}' journey in the fixture's log" for journey in spec.get("journeys", [])
+                if not any(entry.get("scenario") == journey for entry in entries)]
     for case in spec["cases"]:
         wanted = (case["tool"], case["offered"], case["ok"])
         if wanted not in observed:
             problems.append(f"coverage: no {'successful' if case['ok'] else 'refused or declined'} {case['tool']} call "
                             f"({'offered' if case['offered'] else 'not offered'})")
-    return problems, len(spec["cases"])
+    return problems, len(spec["cases"]) + len(spec.get("journeys", []))
 
 
 def main(argv):

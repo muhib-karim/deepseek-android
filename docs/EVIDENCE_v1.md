@@ -43,7 +43,8 @@ Journeys: `BaselineJourneyTest` (welcome, terms, rejected and accepted session, 
 PowerPoint, PNG, chart, ZIP, code sandbox, skill, web search approved, web fetch declined, native Python and skill
 functions refused while trusted execution is off, Charts refused after it is switched off in Plugins & tools; the PDF
 travels through the system share sheet to a test-only receiver in the driver app, which checks its type, header and
-pages). WASM Python in the sandbox is covered by the emulator test `SandboxPythonTest` (real pinned runtime), not by
+pages; at the end DeepSeek rejects the session mid-chat and the app must lock to the welcome screen and stay there after
+a restart, a journey the coverage table also requires). WASM Python in the sandbox is covered by the emulator test `SandboxPythonTest` (real pinned runtime), not by
 the fixture.
 
 Matrix: API 35 light (all journeys, coverage enforced), API 35 dark and API 26 light (baseline journey).

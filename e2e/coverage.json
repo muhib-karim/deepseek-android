@@ -1,6 +1,7 @@
 {
   "about": "Required account-route tool cases for the full mocked release E2E run (AgentJourneyTest). check_e2e_evidence.py --coverage matches them against the fixture's own request log: for each case, an agent turn that requested the tool (with or without it in the offered list) followed by that tool's result with the expected ok flag. ToolCatalogCoverageTest keeps this list in step with ToolCatalog's account route.",
   "route": "account",
+  "journeys": ["expire"],
   "cases": [
     {"tool": "write_file", "ok": true, "offered": true, "note": "CSV, then Word and Markdown through the same tool"},
     {"tool": "write", "ok": true, "offered": true},
