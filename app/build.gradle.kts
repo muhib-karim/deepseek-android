@@ -61,6 +61,8 @@ chaquopy {
     defaultConfig {
         version = "3.13"
         pip {
+            // PyPI read timeouts on the release runner failed one v0.6.0 build; retry instead.
+            options("--timeout", "120", "--retries", "10")
             install("numpy==1.26.2")
             install("matplotlib==3.8.4")
         }

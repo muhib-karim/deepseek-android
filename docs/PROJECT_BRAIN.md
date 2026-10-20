@@ -4,13 +4,13 @@
 v0.6.0 "Agent": one AgentLoop + ToolRegistry with two backends (native tool_calls on the API-key client; fenced ```tool JSON protocol on account-mode web chat), on-device Python (Chaquopy), PDF/DOCX/CSV files with artifact cards, installable skills. CI validates.
 
 ## Status
-- v0.6.0 "Agent" implemented on branch feature/agent-060 (versionCode 7, versionName 0.6.0); not pushed.
+- v0.6.0 "Agent" released 2026-10-18 (PR #18, merge 63897c9; tag v0.6.0; versionCode 7). Signed release APK, debug APK and SHA256SUMS.txt on the release.
 - :core: ToolCallProtocol + WebToolProtocolClient (web backend), AgentLoop per-tool timeout, PdfLayoutEngine + DocumentModel (images, tables, lists, page breaks), DocxWriter/CsvWriter, write/read/present/write_file, run_python/pip_install + WheelInstaller, skills. JVM tests written for all.
 - :app: Chaquopy 17.1.0 / Python 3.13 (numpy, matplotlib) in a :python worker process, account-mode agent UI (toggle, tool rows, artifact cards, Export PDF, Run, Skills page, approvals), API-mode agent tools, built-in skills, emulator tests AgentModeTest + PythonRuntimeTest. CI workflows install Python 3.13.
-- Nothing compiled or executed locally; all features PENDING CI (docs/AGENT_MODE.md table).
+- CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-Push the branch, open a PR to main, run CI (unit tests, lint, debug/release) and the emulator workflow; fix any compile/lint/test failures; record results in docs/AGENT_MODE.md; then a live agent run on chat.deepseek.com before tagging v0.6.0.
+v0.7.0: see the open milestone issues on GitHub (editor + artifacts panel with edit-and-rerun, account manager with manual switching, share target). Release-build Chaquopy pip now retries (PyPI timeouts broke the first v0.6.0 release run).
 
 ## Decisions
 - Keep Kotlin/Compose and the existing two modules; preserve SDK levels and permissions.
@@ -46,3 +46,4 @@ Push the branch, open a PR to main, run CI (unit tests, lint, debug/release) and
 - 2026-10-18 08:27Z Codex: added fourteen account feature paths, test-first mocked coverage, review fixes and screenshot completeness checks; next: CI compilation/tests/captures. No local build, commit or push.
 - v0.5.0 released: account mode merged; CI and 54 emulator tests green (light and dark); version 0.5.0 (versionCode 5); debug APK, signed release APK and SHA256SUMS.txt on the v0.5.0 GitHub release. Open: live app-originated completion on a device.
 - 2026-10-18 Claude Code (Opus 5.5): v0.6.0 Agent implemented (core protocol/loop/PDF/writers/Python/skills, Chaquopy worker, account-mode agent UI, API wiring, emulator tests, docs); nothing compiled locally; next: push, CI, fix, record results.
+- 2026-10-20 maintainer: README/PROJECT_BRAIN updated to the released v0.6.0 state; Chaquopy pip given --timeout/--retries for release builds.
