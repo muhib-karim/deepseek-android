@@ -1,4 +1,4 @@
-# Accounts (v0.7.0)
+# Accounts (v0.7.1)
 
 **Settings → Accounts** lists every DeepSeek account and API-key profile kept on the phone. Each row shows
 its label, sign-in type, balance (where a documented endpoint returns one) and when that figure was last
@@ -60,6 +60,25 @@ the same list.
 Logging out of, or removing, a DeepSeek account deletes its session, chats, agent files and artifact
 versions from the phone (the DeepSeek account itself is not changed). Removing an API-key profile deletes
 the saved key.
+
+## Signing in with Google (v0.7.1)
+
+Google does not allow its sign-in inside an app's embedded browser, so a DeepSeek account that uses Google
+signs in through the phone's browser. On the sign-in page tap **Continue with Google**:
+
+1. **Copy the helper.** In Chrome, bookmark any page, edit that bookmark, name it `dsandroid` and paste the
+   helper as its address.
+2. **Open DeepSeek in your browser** and sign in with Google.
+3. In the address bar type `dsandroid` and tap the bookmark. Tap **Open in DeepSeek Android** at the bottom of
+   the page, then **Sign in** in the app.
+
+If the browser does not switch back, tap **Copy session instead** on the page and use **Paste session** in the
+app. Either way the session is checked and stored like a normal sign-in (encrypted, per account).
+
+Safety rules: the helper runs only on chat.deepseek.com and reads only `localStorage.userToken`; it sends
+nothing over the network. The hand-off is an intent addressed to this package, carried as an extra rather than
+in the link. The app takes it only within 30 minutes of starting a browser sign-in from the app and asks before
+signing in; anything else is ignored with a notice.
 
 ## Not included
 

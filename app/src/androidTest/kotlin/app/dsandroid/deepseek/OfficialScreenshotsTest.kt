@@ -76,7 +76,8 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     }
     @Test fun loginLoggedOut() {
         launch(AccountUiState(ready = true, page = AccountPage.LOGIN))
-        compose.onNodeWithText("Google", substring = true).assertExists()
+        compose.onNodeWithTag("browser-sign-in").assertIsDisplayed()
+        compose.onNodeWithText("Continue with Google").assertIsDisplayed()
         screenshot("login-logged-out")
     }
     @Test fun noSessionHasOneTapLoginAndNeverAnApiKeyPrompt() {
@@ -85,6 +86,9 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, logins) }
         compose.onAllNodes(hasText("API key", substring = true, ignoreCase = true)).assertCountEquals(0)
+        // Signed out, the composer takes no typing and says why.
+        compose.onNodeWithTag("account-composer").assertIsNotEnabled()
+        compose.onNodeWithText("Log in to chat", useUnmergedTree = true).assertExists()
     }
     @Test fun apiFallbackRequiresAnExplicitSettingsAction() {
         var fallbacks = 0

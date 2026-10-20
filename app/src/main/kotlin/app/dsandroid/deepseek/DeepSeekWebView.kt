@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Message
+import android.util.Log
 import android.webkit.*
 import app.dsandroid.core.deepseek.*
 import app.dsandroid.BuildConfig
@@ -44,6 +45,21 @@ class DeepSeekWebView(
     private var destroyed = false
     private var generation = 0
     private val solverLock = Mutex()
+    private val traceLines = java.util.ArrayDeque<String>()
+    /** Debug builds only: page addresses (no query), main-frame errors, other hosts contacted and console lines, for diagnosis. */
+    fun diagnostics(): List<String> = synchronized(traceLines) { traceLines.toList() }
+    private fun record(line: String) {
+        if (!BuildConfig.DEBUG) return
+        synchronized(traceLines) {
+            if (traceLines.size >= 400) traceLines.pollFirst()
+            traceLines.addLast("${System.currentTimeMillis()} $line")
+        }
+        Log.d(TAG, line)
+    }
+    private fun safe(url: String?): String {
+        if (url == null) return "null"
+        return runCatching { Uri.parse(url).let { "${it.scheme}://${it.host}${it.path.orEmpty()}" } }.getOrDefault("unparsable")
+    }
     val view = WebView(context).apply {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -56,7 +72,10 @@ class DeepSeekWebView(
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean = true
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                consoleMessage?.let { record("console ${it.messageLevel()} ${it.message().take(300)} (${safe(it.sourceId())}:${it.lineNumber()})") }
+                return true
+            }
             override fun onPermissionRequest(request: PermissionRequest?) { request?.deny() }
             override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                 notice(SSO_NOTICE); return false
@@ -65,6 +84,7 @@ class DeepSeekWebView(
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
+                record("navigate ${if (request.isForMainFrame) "main" else "frame"} ${safe(uri.toString())}")
                 if (isGoogle(uri)) {
                     view.stopLoading(); notice(SSO_NOTICE); return true
                 }
@@ -73,17 +93,19 @@ class DeepSeekWebView(
                 return !allowed
             }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
-                // Also block embedded Google frames; never hand this session to an external browser.
-                if (isGoogle(request.url)) {
-                    view?.post { notice(SSO_NOTICE) }
-                    return WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
-                }
+                if (!DeepSeekOrigin.isTrusted(request.url.toString())) record("request ${safe(request.url.toString())}")
+                // Google's sign-in scripts and frames fail like a blocked network (as they do where Google is unreachable),
+                // so the page keeps working without them. An empty "successful" script left the page half-initialised.
+                if (isGoogle(request.url)) return blocked()
                 val debugFixture = isDebugLoopback(loginUrl) && isLoginPage(request.url.toString())
+                // Anything else that is not https (local data such as loadDataWithBaseURL documents included) keeps the
+                // empty response it always had; a 403 here turned local documents into an error page.
                 return if (request.url.scheme == "https" || debugFixture) null
                     else WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
             }
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 loaded = false; navigationFailed = false; generation++
+                record("started ${safe(url)}")
                 if (url != null && isGoogle(Uri.parse(url))) {
                     view.stopLoading(); navigationFailed = true; notice(SSO_NOTICE)
                 } else if (url != null && url != "about:blank" && !isLoginPage(url)) {
@@ -91,6 +113,7 @@ class DeepSeekWebView(
                 }
             }
             override fun onPageFinished(view: WebView, url: String?) {
+                record("finished ${safe(url)}")
                 loaded = !navigationFailed && DeepSeekOrigin.isTrusted(url) && DeepSeekOrigin.isTrusted(view.url)
                 if (url != null && isGoogle(Uri.parse(url))) notice(SSO_NOTICE)
                 if (loaded) view.evaluateJavascript(HIDE_GOOGLE_JS, null)
@@ -100,9 +123,16 @@ class DeepSeekWebView(
                 handler.cancel(); loaded = false; navigationFailed = true; notice("DeepSeek's secure connection could not be verified. Login was stopped.")
             }
             override fun onReceivedError(view: WebView?, request: WebResourceRequest, error: WebResourceError?) {
+                record("error ${if (request.isForMainFrame) "main" else "sub"} ${safe(request.url.toString())} ${error?.errorCode} ${error?.description}")
                 if (request.isForMainFrame) { loaded = false; navigationFailed = true; notice("The DeepSeek login page could not load. Check your connection and try again.") }
             }
             override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest, errorResponse: WebResourceResponse?) {
+                val waf = errorResponse?.responseHeaders?.entries?.firstOrNull { it.key.equals("x-amzn-waf-action", ignoreCase = true) }?.value
+                record("http ${if (request.isForMainFrame) "main" else "sub"} ${safe(request.url.toString())} ${errorResponse?.statusCode} waf=$waf")
+                // DeepSeek's security check (a CAPTCHA) is a page the person completes here, not a failed login.
+                if (request.isForMainFrame && waf != null && DeepSeekOrigin.isTrusted(request.url.toString())) {
+                    notice(SECURITY_CHECK_NOTICE); return
+                }
                 if (request.isForMainFrame) {
                     loaded = false; navigationFailed = true
                     notice(if (isGoogle(request.url)) SSO_NOTICE else "DeepSeek refused this page request. Login or the web protocol may require an app update.")
@@ -123,6 +153,16 @@ class DeepSeekWebView(
         if (destroyed) { notice("Reopen the app to restart the login browser."); return }
         loaded = false; navigationFailed = false
         view.loadUrl(loginUrl)
+    }
+
+    /** True when the trusted page has finished loading yet shows no text at all (the reported blank sign-in screen). */
+    suspend fun looksBlank(): Boolean = withContext(Dispatchers.Main.immediate) {
+        if (destroyed || !DeepSeekOrigin.isTrusted(view.url)) return@withContext false
+        val length = withTimeoutOrNull(2000) {
+            evaluate("""(() => document.body ? document.body.innerText.trim().length : 0)()""")
+        }?.toIntOrNull() ?: return@withContext false
+        record("text length $length")
+        length == 0
     }
 
     suspend fun captureSession(): SessionToken? = withContext(Dispatchers.Main.immediate) {
@@ -213,21 +253,25 @@ class DeepSeekWebView(
         if (destroyed) { continuation.resume(null); return@suspendCancellableCoroutine }
         view.evaluateJavascript(script) { result -> if (continuation.isActive) continuation.resume(result) }
     }
+    private fun blocked() = WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", mapOf("Cache-Control" to "no-store"), "".byteInputStream())
     private fun isGoogle(uri: Uri) = uri.scheme == "https" && uri.host == "accounts.google.com" && uri.userInfo == null && uri.port in setOf(-1, 443)
     companion object {
-        /** Google OAuth cannot hand a session back to an app, so its button is hidden on the sign-in page instead of left as a dead end. */
+        private const val TAG = "DeepSeekLogin"
+        /** Google sign-in cannot finish inside an app, so its button is hidden here; the app offers the browser route instead. */
         const val HIDE_GOOGLE_JS = """(function(){
   function hide(){
-    var nodes = document.querySelectorAll(button,a,[role=button],div[class*=button],div[class*=btn]);
+    var nodes = document.querySelectorAll('button,a,[role="button"],div[class*="button"],div[class*="btn"]');
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      var t = (n.innerText || n.textContent || ).trim().toLowerCase();
-      if (t.length < 40 && t.indexOf(google) !== -1) { n.style.setProperty(display,none,important); n.setAttribute(aria-hidden,true); }
+      var t = (n.innerText || n.textContent || '').trim().toLowerCase();
+      if (t.length < 40 && t.indexOf('google') !== -1) { n.style.setProperty('display', 'none', 'important'); n.setAttribute('aria-hidden', 'true'); }
     }
   }
   hide();
-  if (!window.__dsHideGoogle) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList:true, subtree:true}); }
+  if (!window.__dsHideGoogle && document.documentElement) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList: true, subtree: true}); }
 })();"""
-        const val SSO_NOTICE = "Google sign-in isn't allowed inside apps. Use phone number or email on this page."
+        const val BLANK_NOTICE = "The sign-in page isn't showing in this app. Tap Continue with Google: it signs in through your browser and works for any DeepSeek account. Updating Android System WebView and Chrome in the Play Store may also help."
+        const val SECURITY_CHECK_NOTICE = "DeepSeek is running a security check. Complete it on this page if one is shown."
+        const val SSO_NOTICE = "Google sign-in can't run inside apps. For a Google account, tap Continue with Google to use your browser."
     }
 }

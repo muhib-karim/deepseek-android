@@ -2,6 +2,11 @@ name: Emulator smoke and account screenshots
 
 on:
   workflow_dispatch:
+    inputs:
+      live_login:
+        description: 'Run only the opt-in live check of the real DeepSeek sign-in page (diagnostic, uploads a trace and a screenshot)'
+        type: boolean
+        default: false
   pull_request:
     paths: ['app/**', 'core/**', 'gradle/**', 'scripts/**', '.github/workflows/emulator.yml']
 
@@ -40,12 +45,14 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: bash scripts/ci_emulator_screenshots.sh
+        env:
+          LIVE_LOGIN: ${{ inputs.live_login && 'true' || 'false' }}
       - name: Validate capture completeness and credential safety
         id: screenshot_safety
-        if: always()
+        if: always() && !inputs.live_login
         run: python3 scripts/check_screenshot_artifacts.py official-ui-screenshots
       - name: Upload light and dark account screenshots
-        if: always() && steps.screenshot_safety.outcome == 'success'
+        if: always() && !inputs.live_login && steps.screenshot_safety.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: official-ui-screenshots
@@ -61,3 +68,10 @@ jobs:
             app/build/outputs/androidTest-results/
             smoke-screenshots/
           if-no-files-found: ignore
+      - name: Upload the live sign-in page trace
+        if: always() && inputs.live_login
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: live-login-diagnostics
+          path: live-login/
+          if-no-files-found: warn

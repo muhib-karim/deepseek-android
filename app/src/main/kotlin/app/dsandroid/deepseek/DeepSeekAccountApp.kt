@@ -2,6 +2,8 @@ package app.dsandroid.deepseek
 
 import android.app.Activity
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -9,6 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -19,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -43,7 +48,9 @@ import app.dsandroid.ui.ArtifactViewer
 import app.dsandroid.ui.DsAndroidApp
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.accounts.AccountType
+import app.dsandroid.core.deepseek.BrowserSignIn
 import app.dsandroid.core.deepseek.PowChallenge
+import app.dsandroid.core.deepseek.SessionToken
 import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.workbench.ArtifactPanel
 import app.dsandroid.workbench.CreateTextDocument
@@ -62,6 +69,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val BIRTHDAY_NOTICE = "Confirm your date of birth on the DeepSeek page to finish signing in."
+private const val LINK_IGNORED_NOTICE = "A sign-in link arrived that this app didn't ask for, so it was ignored. Start with Continue with Google here first."
+private const val BROWSER_STEPS = "Google doesn't allow its sign-in inside apps, so this uses your browser once.\n\n" +
+    "1. Copy the helper. In Chrome, bookmark any page, then edit that bookmark: name it dsandroid and paste the helper as its address.\n" +
+    "2. Open DeepSeek in your browser and sign in with Google.\n" +
+    "3. In the browser's address bar type dsandroid and tap the bookmark. Tap Open in DeepSeek Android at the bottom of the page, then confirm here.\n\n" +
+    "The helper only reads your DeepSeek session on chat.deepseek.com and hands it to this app. It sends nothing anywhere else."
+private const val PASTE_STEPS = "If the Open in DeepSeek Android button doesn't come back to this app, tap Copy session instead on that page and paste it here. " +
+    "The session is stored encrypted on this phone, like a normal sign-in."
 
 @Composable
 fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
@@ -77,6 +92,19 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     var pendingSend by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
     var pendingResend by remember { mutableStateOf<(() -> Unit)?>(null) }
     var voiceTrigger by remember { mutableIntStateOf(0) }
+    var browserGuide by rememberSaveable { mutableStateOf(false) }
+    var pasteOpen by rememberSaveable { mutableStateOf(false) }
+    var browserToken by remember { mutableStateOf<SessionToken?>(null) }
+    val incomingSession by BrowserSessionInbox.incoming.collectAsStateWithLifecycle()
+    val ignoredLink by BrowserSessionInbox.ignored.collectAsStateWithLifecycle()
+    LaunchedEffect(incomingSession) { if (incomingSession != null) browserToken = BrowserSessionInbox.take() }
+    LaunchedEffect(ignoredLink) { if (ignoredLink) { BrowserSessionInbox.ignored.value = false; vm.notice(LINK_IGNORED_NOTICE) } }
+    // A session from the browser (link or paste) goes through the same checks as one captured on the sign-in page.
+    fun useSession(token: SessionToken) = scope.launch {
+        BrowserSessionInbox.clearStarted(context)
+        if (vm.needsBirthday(token)) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
+        else if (!vm.acceptSession(token)) vm.notice("DeepSeek did not accept this session. Sign in again in your browser and send it again.")
+    }
     val dark = state.appearance == Appearance.DARK || (state.appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     DisposableEffect(context, dark) {
         (context as? Activity)?.let { activity ->
@@ -232,8 +260,15 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         if (state.page == AccountPage.LOGIN) {
             browser.openLogin()
             var birthdayChecked = 0L
+            val opened = System.currentTimeMillis()
+            var blankChecked = false
             while (true) {
                 delay(1000)
+                // Point to the browser route once if the page is still blank after 15 seconds.
+                if (!blankChecked && System.currentTimeMillis() - opened > 15_000) {
+                    blankChecked = true
+                    if (browser.looksBlank()) vm.notice(DeepSeekWebView.BLANK_NOTICE)
+                }
                 val token = browser.captureSession() ?: continue
                 // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
                 if (System.currentTimeMillis() - birthdayChecked < 3000) continue
@@ -323,6 +358,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                             val token = browser.captureSession()
                             if (token == null || !vm.acceptSession(token)) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
                         } },
+                        onBrowserSignIn = { browserGuide = true }, onPasteSession = { pasteOpen = true },
                         onApiFallback = { apiFallback = true }, onApiKey = vm::saveApiKey, onNavigate = vm::navigate, onNew = vm::newChat, onOpen = vm::open,
                         onDraft = vm::draft, onStop = vm::stop, onTheme = vm::appearance, onError = vm::notice,
                         onRename = vm::rename, onDelete = vm::delete, speechInput = speechInput, voiceTrigger = voiceTrigger, onVoiceHandled = { voiceTrigger = 0 },
@@ -351,6 +387,58 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             }
             // Blocks touches to the chat underneath the full-screen pane.
             if (!wide && pane != null) Box(Modifier.fillMaxSize().pointerInput(Unit) {}) { workbenchPane(pane, state) }
+        }
+        if (browserGuide) AlertDialog(
+            onDismissRequest = { browserGuide = false },
+            title = { Text("Continue with Google") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(BROWSER_STEPS, style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = {
+                        context.getSystemService(ClipboardManager::class.java)
+                            ?.setPrimaryClip(ClipData.newPlainText("DeepSeek Android helper", BrowserSignIn.bookmarklet(context.packageName)))
+                        Toast.makeText(context, "Helper copied", Toast.LENGTH_SHORT).show()
+                    }, modifier = Modifier.fillMaxWidth().testTag("copy-helper")) { Text("Copy the helper") }
+                    Button(onClick = {
+                        BrowserSessionInbox.markStarted(context)
+                        try { context.startActivity(BrowserSessionInbox.browserIntent(context)) }
+                        catch (_: Exception) { vm.notice("No browser is available on this phone.") }
+                    }, modifier = Modifier.fillMaxWidth().testTag("open-browser")) { Text("Open DeepSeek in your browser") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { browserGuide = false; pasteOpen = true }) { Text("Paste session") } },
+            dismissButton = { TextButton(onClick = { browserGuide = false }) { Text("Close") } },
+        )
+        if (pasteOpen) {
+            var pasted by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { pasteOpen = false },
+                title = { Text("Paste session") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(PASTE_STEPS, style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(pasted, { pasted = it }, Modifier.fillMaxWidth().testTag("session-field"), label = { Text("Session") },
+                            singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val token = BrowserSignIn.fromPaste(pasted, System.currentTimeMillis())
+                        if (token == null) vm.notice("That isn't a usable DeepSeek session. Copy it again from the helper on chat.deepseek.com.")
+                        else { pasteOpen = false; pasted = ""; useSession(token) }
+                    }, enabled = pasted.isNotBlank(), modifier = Modifier.testTag("use-session")) { Text("Sign in") }
+                },
+                dismissButton = { TextButton(onClick = { pasteOpen = false }) { Text("Cancel") } },
+            )
+        }
+        browserToken?.let { token ->
+            AlertDialog(
+                onDismissRequest = { browserToken = null },
+                title = { Text("Sign in with your browser's session?") },
+                text = { Text("Your browser sent a DeepSeek session to this app. Continue only if you just used the helper bookmark.") },
+                confirmButton = { TextButton(onClick = { browserToken = null; useSession(token) }, modifier = Modifier.testTag("confirm-browser-session")) { Text("Sign in") } },
+                dismissButton = { TextButton(onClick = { browserToken = null; BrowserSessionInbox.clearStarted(context) }) { Text("Cancel") } },
+            )
         }
         viewing?.let { artifact ->
             Dialog(onDismissRequest = { viewing = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {

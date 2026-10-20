@@ -176,6 +176,7 @@ fun DeepSeekShell(
     onTheme: (Appearance) -> Unit = {}, onLogout: () -> Unit = {}, onError: (String) -> Unit = {},
     onAttachment: (String) -> Unit = {}, onRemoveAttachment: (Int) -> Unit = {},
     onFinishLogin: () -> Unit = {}, loginContent: @Composable () -> Unit = {},
+    onBrowserSignIn: () -> Unit = {}, onPasteSession: () -> Unit = {},
     onRename: (String, String) -> Unit = { _, _ -> }, onDelete: (String) -> Unit = {},
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
@@ -344,6 +345,10 @@ fun DeepSeekShell(
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = onLogin) { Text("Reload login") }
                             TextButton(onClick = onFinishLogin) { Text("Finish login") }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Button(onClick = onBrowserSignIn, modifier = Modifier.testTag("browser-sign-in"), shape = RoundedCornerShape(20.dp)) { Text("Continue with Google") }
+                            TextButton(onClick = onPasteSession, modifier = Modifier.testTag("paste-session")) { Text("Paste session") }
                         }
                         Box(Modifier.weight(1f).fillMaxWidth()) { loginContent() }
                     }
@@ -565,6 +570,8 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
     onAgent: (Boolean) -> Unit = {}) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
+    // Signed out (no DeepSeek session; an API-key profile uses its own screen): no typing, and a tap opens sign-in.
+    val locked = state.ready && !state.signedIn
     val pillColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -575,9 +582,11 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
         color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             BasicTextField(state.draft, draft, Modifier.fillMaxWidth().heightIn(min = 36.dp).padding(top = 8.dp).testTag("account-composer")
-                .semantics { contentDescription = "Type a message" }, maxLines = 6, enabled = !state.busy && state.ready,
+                .semantics { contentDescription = if (locked) "Log in to chat" else "Type a message" }
+                .then(if (locked) Modifier.clickable(onClickLabel = "Log in") { send(false, false) } else Modifier),
+                maxLines = 6, enabled = !state.busy && state.ready && !locked,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { inner -> Box { if (state.draft.isEmpty()) Text("Type a message or hold to speak", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp); inner() } })
+                decorationBox = { inner -> Box { if (state.draft.isEmpty()) Text(if (locked) "Log in to chat" else "Type a message or hold to speak", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp); inner() } })
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.Center) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     FilterChip(selected = think, onClick = { think = !think }, label = { Text("Think", fontSize = 12.sp) },
@@ -594,10 +603,10 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = attach, enabled = !state.busy && !state.importing) { OutlinedCircle { AppIcon(Glyph.PLUS, "Add attachment", Modifier.size(14.dp)) } }
                     key(state.conversationId) {
-                        AccountDictation(!state.busy && state.ready, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
+                        AccountDictation(!state.busy && state.ready && !locked, { draft(listOf(state.draft, it).filter(String::isNotBlank).joinToString(" ")) }, error,
                             speechInput, voiceTrigger, onVoiceHandled)
                     }
-                    IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy ||
+                    IconButton(onClick = { if (state.busy) stop() else send(think, search) }, enabled = state.busy || locked ||
                         (state.ready && !state.importing && !state.requiresNewChat && (state.draft.isNotBlank() || state.attachments.isNotEmpty()))) {
                         val canSend = state.busy || state.draft.isNotBlank() || state.attachments.isNotEmpty()
                         if (canSend) Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
