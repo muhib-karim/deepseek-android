@@ -1,5 +1,6 @@
 package app.dsandroid.e2e
 
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -133,8 +134,19 @@ class E2eDriver(journey: String) {
         index++
         val base = "%02d-%s".format(index, name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(60))
         device.waitForIdle()
-        device.takeScreenshot(File(steps, "$base.png"))
+        screenshot(File(steps, "$base.png"))
         runCatching { File(steps, "$base.xml").outputStream().use { device.dumpWindowHierarchy(it) } }
+    }
+
+    /** UiAutomation's screenshot; where it returns nothing (seen on API 26 emulators), the shell's screencap instead. */
+    private fun screenshot(file: File) {
+        if (runCatching { device.takeScreenshot(file) }.getOrDefault(false) && file.length() > 0) return
+        runCatching {
+            ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("screencap -p")).use { input ->
+                file.outputStream().use { input.copyTo(it) }
+            }
+        }
+        if (file.length() < 8) { file.delete(); println("E2E step screenshot failed: ${file.name}") }
     }
 
     companion object {
