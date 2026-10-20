@@ -36,6 +36,9 @@ CHAT_MARKERS = [r"^Type a message", r"^New chat$", r"^Message DeepSeek"]
 CHAT_DESCRIPTIONS = [r"^Open sidebar$", r"^New chat$"]
 FIRST_LAUNCH_SECONDS = 90  # splash under ARM translation can be slow on the first start
 LAUNCH_SECONDS = 45
+# Play builds since versionCode 110 wrap the app in Google's PairIP license check; without a licensed Play install it stops here.
+LICENSE_ACTIVITY = "com.pairip.licensecheck.LicenseActivity"
+LICENSE_REASON = f"license check screen: {LICENSE_ACTIVITY}"
 CHALLENGE = re.compile(r"captcha|verif(y|ication)|slide to|puzzle|security check|robot", re.I)
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
@@ -256,6 +259,7 @@ class Session:
         self.recorder = Recorder(self.device, os.path.join(out, "video"))
         self.entries = []
         self.step = 0
+        self.license_blocked = False
         os.makedirs(os.path.join(out, "screens"), exist_ok=True)
 
     # ---- capture and bookkeeping ----
@@ -367,11 +371,18 @@ class Session:
         """Launches the app and waits for the sign-in screen, accepting first-launch consent sheets on the way."""
         self.device.restart()
         limit = FIRST_LAUNCH_SECONDS if first else LAUNCH_SECONDS
-        start, frames, intros = time.time(), [5, 20, 45], 0
+        start, frames, intros, checked = time.time(), [5, 20, 45], 0, 0.0
         while time.time() - start < limit:
             nodes, xml_text = self.device.dump(attempts=2)
             if first and frames and time.time() - start >= frames[0]:
                 self.frame(f"launch-{frames.pop(0):02d}s", theme, nodes, xml_text)
+            if time.time() - checked > 5:
+                checked = time.time()
+                # The license check never yields to the sign-in screen without a licensed Play install: stop waiting.
+                if LICENSE_ACTIVITY in self.device.top_activity() and time.time() - start > 15:
+                    self.license_blocked = True
+                    self.frame("license-check", theme, nodes, xml_text)
+                    return None
             if self.dismiss_system_dialogs(nodes):
                 continue
             login = self.login_node(nodes)
@@ -410,8 +421,11 @@ class Session:
         self.recorder.start(f"{theme}-signed-out")
         if self.to_login(first=first, theme=theme) is None:
             self.diagnose("login", theme)
-            process = "running" if self.device.pid() else "not running (crashed or never started)"
-            self.missing("login", theme, f"the sign-in screen did not appear; app process {process}; diagnostics saved")
+            if self.license_blocked:
+                self.missing("login", theme, LICENSE_REASON)
+            else:
+                process = "running" if self.device.pid() else "not running (crashed or never started)"
+                self.missing("login", theme, f"the sign-in screen did not appear; app process {process}; diagnostics saved")
             self.recorder.stop()
             return False
         self.capture("login", theme)
@@ -680,13 +694,16 @@ def main(argv):
             signed_in_reason = reason
     session.recorder.stop()
     session.device.shell("cmd uimode night no")
+    if session.license_blocked:
+        # Nothing behind the license check is reachable, signed in or not.
+        signed_in_reason = LICENSE_REASON
     protected = ["chat-empty", "think-on", "search-on", "attach-sheet", "chat-populated", "message-menu", "share",
                  "drawer", "settings", "settings-appearance", "profile", "data-controls"]
     if signed_in_reason:
         for theme in ("light", "dark"):
             for screen in protected:
                 session.missing(screen, theme, signed_in_reason)
-    manifest = {"package": PACKAGE, "version": args.version, "source": "official-reference",
+    manifest = {"package": PACKAGE, "version": args.version, "source": "official-reference", "blocked_by": LICENSE_REASON if session.license_blocked else "",
                 "signed_in": not signed_in_reason, "signed_in_reason": signed_in_reason,
                 "viewport": {"width": 1080, "height": 2200, "density": 440, "font_scale": 1.0},
                 "entries": session.entries}

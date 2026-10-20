@@ -7,8 +7,18 @@ name: Official DeepSeek reference
 on:
   workflow_dispatch:
     inputs:
+      build:
+        description: 'current = 2.6.2 (Play build, wrapped in the PairIP license check); pre-pairip = the pinned 1.4.1 APK without it'
+        type: choice
+        options: [current, pre-pairip]
+        default: current
+      image:
+        description: 'Emulator system image (playstore records Play as the installer, as PairIP builds expect)'
+        type: choice
+        options: [playstore, google_apis]
+        default: playstore
       version_code:
-        description: 'versionCode to fetch (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
+        description: 'versionCode for build=current (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
         default: '282'
       abi:
         description: 'Official build to install (arm64-v8a needs API 32+; armeabi-v7a runs through 32-bit ARM translation)'
@@ -16,8 +26,8 @@ on:
         options: [arm64-v8a, armeabi-v7a]
         default: arm64-v8a
       api_level:
-        description: 'Emulator API level (x86_64 Google APIs image with ARM translation)'
-        default: '34'
+        description: 'Emulator API level (x86_64 image with ARM translation; 33 has Play images and suits both builds)'
+        default: '33'
       require_complete:
         description: 'Fail when signed-in screens are missing (needs the reference-account secrets)'
         type: boolean
@@ -43,6 +53,7 @@ jobs:
         env:
           REFERENCE_VERSION_CODE: ${{ inputs.version_code }}
           REFERENCE_ABI: ${{ inputs.abi }}
+          REFERENCE_BUILD: ${{ inputs.build }}
         run: bash scripts/fetch_verify_reference.sh
       - name: Enable KVM access
         run: |
@@ -53,13 +64,14 @@ jobs:
         uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
         with:
           api-level: ${{ inputs.api_level }}
-          target: google_apis
+          target: ${{ inputs.image }}
           arch: x86_64
           profile: pixel_2
           disable-animations: true
           script: bash scripts/capture_reference.sh
         env:
           REFERENCE_ABI: ${{ inputs.abi }}
+          REFERENCE_BUILD: ${{ inputs.build }}
           # Optional dedicated test account; without it only signed-out screens are captured and the run is marked incomplete.
           DS_REF_EMAIL: ${{ secrets.DEEPSEEK_REFERENCE_EMAIL }}
           DS_REF_PASSWORD: ${{ secrets.DEEPSEEK_REFERENCE_PASSWORD }}
