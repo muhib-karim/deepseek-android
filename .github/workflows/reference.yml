@@ -28,6 +28,11 @@ on:
       api_level:
         description: 'Emulator API level (x86_64 image; the API 34 images translate arm64 code, the API 33 x86_64 images do not)'
         default: '34'
+      network:
+        description: 'offline = airplane mode before the first launch, so 1.4.1 cannot fetch the server minimum version that raises its "Update Required" modal'
+        type: choice
+        options: [offline, online]
+        default: offline
       require_complete:
         description: 'Fail when signed-in screens are missing (needs the reference-account secrets)'
         type: boolean
@@ -72,6 +77,7 @@ jobs:
         env:
           REFERENCE_ABI: ${{ inputs.abi }}
           REFERENCE_BUILD: ${{ inputs.build }}
+          REFERENCE_NETWORK: ${{ inputs.network }}
           # Optional dedicated test account; without it only signed-out screens are captured and the run is marked incomplete.
           DS_REF_EMAIL: ${{ secrets.DEEPSEEK_REFERENCE_EMAIL }}
           DS_REF_PASSWORD: ${{ secrets.DEEPSEEK_REFERENCE_PASSWORD }}

@@ -39,6 +39,8 @@ LAUNCH_SECONDS = 45
 # Play builds since versionCode 110 wrap the app in Google's PairIP license check; without a licensed Play install it stops here.
 LICENSE_ACTIVITY = "com.pairip.licensecheck.LicenseActivity"
 LICENSE_REASON = f"license check screen: {LICENSE_ACTIVITY}"
+# 1.4.1 asks the server for a minimum version and covers the app with this modal; "Update now" is never tapped.
+UPDATE_MODAL = (r"^Update Required$", r"^Update now$")
 CHALLENGE = re.compile(r"captcha|verif(y|ication)|slide to|puzzle|security check|robot", re.I)
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
@@ -260,6 +262,7 @@ class Session:
         self.entries = []
         self.step = 0
         self.license_blocked = False
+        self.update_modal = set()  # themes in which the server's "Update Required" modal appeared
         os.makedirs(os.path.join(out, "screens"), exist_ok=True)
 
     # ---- capture and bookkeeping ----
@@ -383,6 +386,13 @@ class Session:
                     self.license_blocked = True
                     self.frame("license-check", theme, nodes, xml_text)
                     return None
+            if find_any(nodes, texts=UPDATE_MODAL):
+                # Documented once per theme, never dismissed; the sign-in controls under it are not reachable.
+                if theme not in self.update_modal:
+                    self.update_modal.add(theme)
+                    self.frame("update-required-modal", theme, nodes, xml_text)
+                time.sleep(1.0)
+                continue
             if self.dismiss_system_dialogs(nodes):
                 continue
             login = self.login_node(nodes)
@@ -671,6 +681,8 @@ def main(argv):
     parser.add_argument("--out", required=True)
     parser.add_argument("--version", default="unknown")
     parser.add_argument("--diagnostics", default="diagnostics", help="text diagnostics directory (verification artifact)")
+    parser.add_argument("--network", default="online", choices=("online", "offline"),
+                        help="whether the emulator had internet access during the capture (recorded in the manifest)")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.diagnostics, exist_ok=True)
@@ -705,6 +717,7 @@ def main(argv):
                 session.missing(screen, theme, signed_in_reason)
     manifest = {"package": PACKAGE, "version": args.version, "source": "official-reference", "blocked_by": LICENSE_REASON if session.license_blocked else "",
                 "signed_in": not signed_in_reason, "signed_in_reason": signed_in_reason,
+                "network": args.network, "update_modal_themes": sorted(session.update_modal),
                 "viewport": {"width": 1080, "height": 2200, "density": 440, "font_scale": 1.0},
                 "entries": session.entries}
     with open(os.path.join(args.out, "manifest.json"), "w") as handle:
