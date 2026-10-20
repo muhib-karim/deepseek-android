@@ -234,15 +234,17 @@ class AgentLoop(
                             preview != null && confirmer.confirm(call.function.name, preview)
                         }
                     }
-                    denied = !allowed
+                    // Looked up again after any approval: a tool switched off meanwhile is never run.
+                    val tool = if (allowed) registry[call.function.name] else null
+                    denied = !allowed || tool == null
                     if (!allowed) ToolResult(if (decision == Decision.DENY) "Denied by safety policy or unknown tool" else "User declined this tool call", isError = true)
+                    else if (tool == null) ToolResult("This tool was switched off before it ran", isError = true)
                     else {
                         coroutineContext.ensureActive()
                         budget?.tool()
                         emit(AgentEvent.ToolStarted(call.id, call.function.name))
                         timeline[position] = (timeline[position] as TurnStep.ToolCall).copy(status = ToolStatus.RUNNING)
                         publish()
-                        val tool = requireNotNull(registry[call.function.name])
                         suspend fun executeTool(): ToolResult {
                             val completed = try {
                                 // The timeout runs on the IO dispatcher's real clock, never a test scheduler's virtual time.

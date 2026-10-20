@@ -88,6 +88,42 @@ class AgentLoopTest {
         assertEquals(ToolStatus.DENIED, snapshots.last().steps.filterIsInstance<TurnStep.ToolCall>().single().status)
         assertTrue(client.requests[1].last().content!!.contains("declined", ignoreCase = true))
     }
+    @Test fun aDisabledToolIsLeftOutOfTheSchemaAndDeniedWhenRequestedAnyway() = runTest {
+        val workspace = WorkspacePath(temporary.newFolder())
+        val registry = ToolRegistry(listOf(CreateMarkdownTool(), CreateCsvTool()), disabled = setOf("create_markdown"))
+        assertEquals(listOf("create_csv"), registry.specs().map { it.function.name })
+        val client = FakeLlmClient(listOf(toolTurn("create_markdown", """{"fileName":"note.md","content":"Hello"}"""), answer))
+        val events = AgentLoop(client, registry, GuardPolicy(registry, workspace), ToolContext(workspace), Confirmer { _, _ -> fail("No confirmation for a disabled tool"); false })
+            .run(mutableListOf(ChatMessage("user", "Write a note"))).toList()
+        assertFalse(workspace.resolve("note.md").exists())
+        assertEquals(ToolStatus.DENIED, events.filterIsInstance<AgentEvent.StepsUpdated>().last().steps.filterIsInstance<TurnStep.ToolCall>().single().status)
+        assertTrue(client.requests[1].last().content!!.contains("Denied by safety policy or unknown tool"))
+    }
+
+    @Test fun aToolSwitchedOffWhileItsApprovalIsPendingNeverRuns() = runTest {
+        var ran = false
+        var switchedOn = true
+        val tool = object : Tool {
+            override val name = "action"
+            override val description = "Requires consent"
+            override val schema = JsonObject(emptyMap())
+            override val risk = Risk.CONFIRM
+            override val kind = ToolKind.ACTION
+            override suspend fun run(args: JsonObject, ctx: ToolContext): ToolResult { ran = true; return ToolResult("ran") }
+        }
+        val workspace = WorkspacePath(temporary.newFolder())
+        val registry = ToolRegistry(listOf(tool)) { switchedOn }
+        val client = FakeLlmClient(listOf(toolTurn("action", "{}"), answer))
+        // The person turns the tool off, then taps Allow on the approval that was already showing.
+        val events = AgentLoop(client, registry, GuardPolicy(registry, workspace), ToolContext(workspace), Confirmer { _, _ -> switchedOn = false; true })
+            .run(mutableListOf(ChatMessage("user", "Do it"))).toList()
+        assertFalse(ran)
+        assertFalse(events.any { it is AgentEvent.ToolStarted })
+        assertEquals(ToolStatus.DENIED, events.filterIsInstance<AgentEvent.StepsUpdated>().last().steps.filterIsInstance<TurnStep.ToolCall>().single().status)
+        assertTrue(client.requests[1].last().content!!.contains("switched off"))
+        assertTrue("Switched-off tools leave the schema too", registry.specs().isEmpty())
+    }
+
     @Test fun unknownToolAndInvalidArgumentsReturnToolErrors() = runTest {
         val workspace = WorkspacePath(temporary.newFolder())
         val registry = ToolRegistry(emptyList())
