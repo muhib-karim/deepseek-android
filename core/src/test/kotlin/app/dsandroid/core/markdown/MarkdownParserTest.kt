@@ -42,6 +42,9 @@ class MarkdownParserTest {
         val spans = MarkdownParser.inline("Noted: data_analysis__describe_csv was not run. __bold__")
         assertEquals("Noted: data_analysis__describe_csv was not run. bold", spans.joinToString("") { it.text })
         assertTrue(spans.single { it.bold }.text == "bold")
+        assertTrue(spans.none { it.italic })
+        assertEquals("snake_case_name", MarkdownParser.inline("snake_case_name").single().text)
+        assertTrue(MarkdownParser.inline("an _italic_ word").single { it.italic }.text == "italic")
     }
 
     @Test fun incompleteStreamingMarkupRendersWithoutLeakingMarkers() {

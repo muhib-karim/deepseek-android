@@ -142,14 +142,19 @@ object MarkdownParser {
                     index = urlEnd + 1; continue
                 }
             }
+            // Underscores never open emphasis inside a word (CommonMark): the whole run stays literal, so
+            // data_analysis__describe_csv is not split into "data_analysis_" and an italic "describe".
+            if (char == '_' && index > 0 && text[index - 1].isLetterOrDigit()) {
+                val run = text.substring(index).takeWhile { it == '_' }
+                plain.append(run); index += run.length; continue
+            }
             val marker = when {
                 text.startsWith("**", index) -> "**"
-                // Underscores never open emphasis inside a word (CommonMark): data_analysis__describe_csv stays literal.
-                text.startsWith("__", index) && (index == 0 || !text[index - 1].isLetterOrDigit()) -> "__"
+                text.startsWith("__", index) -> "__"
                 text.startsWith("~~", index) -> "~~"
                 char == '`' -> text.substring(index).takeWhile { it == '`' }
                 char == '*' -> "*"
-                char == '_' && (index == 0 || !text[index - 1].isLetterOrDigit()) -> "_"
+                char == '_' -> "_"
                 char == '$' -> "$"
                 else -> null
             }
