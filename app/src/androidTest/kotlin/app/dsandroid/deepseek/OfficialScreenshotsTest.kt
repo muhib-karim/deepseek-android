@@ -104,7 +104,9 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     }
     @Test fun doubledFontKeepsLoginAndComposerReachable() {
         launch(AccountUiState(ready = true), fontScale = 2f)
-        compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed()
+        // The signed-out sign-in card scrolls at large font sizes; every route must stay reachable.
+        compose.onNodeWithText("Continue with Google").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Log in with DeepSeek").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Send message").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
     }

@@ -264,10 +264,10 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             var blankChecked = false
             while (true) {
                 delay(1000)
-                // Point to the browser route once if the page is still blank after 15 seconds.
-                if (!blankChecked && System.currentTimeMillis() - opened > 15_000) {
+                // A page that has not loaded, or loaded blank, after 10 seconds falls back to the browser route on its own.
+                if (!blankChecked && System.currentTimeMillis() - opened > 10_000) {
                     blankChecked = true
-                    if (browser.looksBlank()) vm.notice(DeepSeekWebView.BLANK_NOTICE)
+                    if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) { vm.notice(DeepSeekWebView.BLANK_NOTICE); browserGuide = true }
                 }
                 val token = browser.captureSession() ?: continue
                 // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
@@ -359,6 +359,11 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                             if (token == null || !vm.acceptSession(token)) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
                         } },
                         onBrowserSignIn = { browserGuide = true }, onPasteSession = { pasteOpen = true },
+                        onCopyDiagnostics = {
+                            context.getSystemService(ClipboardManager::class.java)
+                                ?.setPrimaryClip(ClipData.newPlainText("DeepSeek Android diagnostics", SignInDiagnostics.text(context, browser)))
+                            Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                        },
                         onApiFallback = { apiFallback = true }, onApiKey = vm::saveApiKey, onNavigate = vm::navigate, onNew = vm::newChat, onOpen = vm::open,
                         onDraft = vm::draft, onStop = vm::stop, onTheme = vm::appearance, onError = vm::notice,
                         onRename = vm::rename, onDelete = vm::delete, speechInput = speechInput, voiceTrigger = voiceTrigger, onVoiceHandled = { voiceTrigger = 0 },

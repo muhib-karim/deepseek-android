@@ -40,6 +40,13 @@ class DeepSeekWebView(
         return target.scheme == origin.scheme && target.host == origin.host && target.port == origin.port && target.userInfo == null
     }
     private var loaded = false
+    /** True once the sign-in page has finished loading; false while it is still loading or after it failed. */
+    val pageLoaded: Boolean get() = loaded
+    /** The real DeepSeek sign-in page (not a local test page): only then does a slow or blank page fall back to the browser by itself. */
+    val isProductionLogin: Boolean get() = DeepSeekOrigin.isTrusted(loginUrl)
+    /** The last main-frame failure (code and short description, never a URL query or a session), for Copy diagnostics. */
+    @Volatile var lastError: String? = null
+        private set
     private var navigationFailed = false
     private var rendererGone = false
     private var destroyed = false
@@ -120,15 +127,18 @@ class DeepSeekWebView(
                 CookieManager.getInstance().flush()
             }
             override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler, error: SslError?) {
+                lastError = "SSL error ${error?.primaryError}"
                 handler.cancel(); loaded = false; navigationFailed = true; notice("DeepSeek's secure connection could not be verified. Login was stopped.")
             }
             override fun onReceivedError(view: WebView?, request: WebResourceRequest, error: WebResourceError?) {
                 record("error ${if (request.isForMainFrame) "main" else "sub"} ${safe(request.url.toString())} ${error?.errorCode} ${error?.description}")
+                if (request.isForMainFrame) lastError = "load error ${error?.errorCode} ${error?.description}"
                 if (request.isForMainFrame) { loaded = false; navigationFailed = true; notice("The DeepSeek login page could not load. Check your connection and try again.") }
             }
             override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest, errorResponse: WebResourceResponse?) {
                 val waf = errorResponse?.responseHeaders?.entries?.firstOrNull { it.key.equals("x-amzn-waf-action", ignoreCase = true) }?.value
                 record("http ${if (request.isForMainFrame) "main" else "sub"} ${safe(request.url.toString())} ${errorResponse?.statusCode} waf=$waf")
+                if (request.isForMainFrame) lastError = "HTTP ${errorResponse?.statusCode}${if (waf != null) " (security check: $waf)" else ""}"
                 // DeepSeek's security check (a CAPTCHA) is a page the person completes here, not a failed login.
                 if (request.isForMainFrame && waf != null && DeepSeekOrigin.isTrusted(request.url.toString())) {
                     notice(SECURITY_CHECK_NOTICE); return
@@ -139,7 +149,7 @@ class DeepSeekWebView(
                 }
             }
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                loaded = false; rendererGone = true
+                loaded = false; rendererGone = true; lastError = "WebView renderer stopped"
                 (view?.parent as? android.view.ViewGroup)?.removeView(view)
                 view?.destroy()
                 destroyed = true
@@ -272,6 +282,7 @@ class DeepSeekWebView(
 })();"""
         const val BLANK_NOTICE = "The sign-in page isn't showing in this app. Tap Continue with Google: it signs in through your browser and works for any DeepSeek account. Updating Android System WebView and Chrome in the Play Store may also help."
         const val SECURITY_CHECK_NOTICE = "DeepSeek is running a security check. Complete it on this page if one is shown."
+        const val LOADING_STATUS = "If this page stays blank, tap Continue with Google: it uses your browser and works on every phone."
         const val SSO_NOTICE = "Google sign-in can't run inside apps. For a Google account, tap Continue with Google to use your browser."
     }
 }
