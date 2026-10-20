@@ -121,6 +121,8 @@
     <string name="copied">Copied</string>
     <string name="copy">Copy</string>
     <string name="run_code">Run</string>
+    <string name="code_edit">Edit</string>
+    <string name="switch_account">Switch account</string>
     <string name="export_answer_pdf">Export PDF</string>
     <string name="voice_unavailable">Speech recognition is unavailable on this device.</string>
     <string name="voice_permission">Microphone permission is required for dictation. You can enable it in Android settings.</string>

@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,7 +54,8 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.attachments.SharedInput? = null, sharedConsumed: () -> Unit = {},
-    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}, startDestination: String = "chat") {
+    launchRequest: app.dsandroid.launch.LaunchRequest? = null, launchConsumed: () -> Unit = {}, startDestination: String = "chat",
+    onSwitchAccount: (() -> Unit)? = null) {
     val state by vm.state.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navigation = rememberNavController()
@@ -299,7 +301,11 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                         }
                     }
                 }
-                state.error?.let { message -> ErrorCard(message, vm::dismissError) { navigation.navigate("settings") { launchSingleTop = true }; vm.dismissError() } }
+                state.error?.let { message ->
+                    ErrorCard(message, vm::dismissError, switchAccount = onSwitchAccount?.takeIf { state.errorOffersAccountSwitch }?.let { action -> { vm.dismissError(); action() } }) {
+                        navigation.navigate("settings") { launchSingleTop = true }; vm.dismissError()
+                    }
+                }
             }
         }
         if(runDetailsVisible) ModalBottomSheet(onDismissRequest = { runDetailsVisible = false }) {
@@ -458,11 +464,13 @@ private fun ConversationDrawer(state: ChatUiState, onNew: () -> Unit, onOpen: (S
 private data class DrawerSection(val label: String, val entries: List<ConversationSummary>, val project: ProjectRecord?)
 
 @Composable
-private fun ErrorCard(message: String, dismiss: () -> Unit, settings: () -> Unit) {
+private fun ErrorCard(message: String, dismiss: () -> Unit, switchAccount: (() -> Unit)? = null, settings: () -> Unit) {
     Card(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
         Column(Modifier.padding(12.dp)) {
             Text(message, style = MaterialTheme.typography.bodyMedium)
             Row {
+                // Quota and rate errors never change the account; this only opens the account list.
+                if (switchAccount != null) TextButton(onClick = switchAccount, modifier = Modifier.testTag("api-error-switch-account")) { Text(stringResource(R.string.switch_account)) }
                 TextButton(onClick = settings) { Text(stringResource(R.string.open_settings)) }
                 TextButton(onClick = dismiss) { Text(stringResource(R.string.dismiss)) }
             }
