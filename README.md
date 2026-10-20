@@ -82,7 +82,7 @@ Turn on **Agent** in the composer, next to Think and Search, and DeepSeek can us
 phone in the same chat:
 
 - **On-device Python** (`run_python`): Python 3.13 with numpy and matplotlib, in a private
-  folder per chat. Charts and files it creates appear as cards. Code blocks in answers get a
+  folder per chat (from v1.0.0 only with Trusted execution on, asking every run; see [docs/TOOLS.md](docs/TOOLS.md)). Charts and files it creates appear as cards. Code blocks in answers get a
   **Run** button. Extra pure-Python packages install from PyPI with `pip_install`, after you
   approve each download; **Skills → Python toolsets** lists and removes them.
 - **Files you can keep**: `create_pdf` lays out Markdown (headings, lists, tables, code, page
