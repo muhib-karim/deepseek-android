@@ -120,7 +120,7 @@ private fun MessageItem(message: AccountMessage, working: Boolean, enabled: Bool
         var menu by remember { mutableStateOf(false) }
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             Box(Modifier.align(Alignment.CenterEnd)) {
-                Surface(Modifier.widthIn(max = maxWidth * .8f).clip(RoundedCornerShape(18.dp)).testTag("user-bubble-${message.id}")
+                Surface(Modifier.widthIn(max = this@BoxWithConstraints.maxWidth * .8f).clip(RoundedCornerShape(18.dp)).testTag("user-bubble-${message.id}")
                     .combinedClickable(onClick = {}, onLongClick = { menu = true }, onLongClickLabel = "Message options")
                     .semantics {
                         customActions = listOf(
