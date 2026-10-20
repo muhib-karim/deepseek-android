@@ -22,11 +22,14 @@ a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.
   (cite_index), Think+Search uses TOOL_SEARCH/TOOL_OPEN + [reference:k] into the RESPONSE fragment's references.
   Done: a3dbad7 native solver; b1e23c5 reducer (negative indices, batches, citations, timeline, typed errors); b1987f8
   client (upload PoW + polling, history paging, history_messages, pin, feedback, ServerHistory.merge); 5f128a8 app wiring
-  (native PoW, WebView solver removed, one retry + Retry, server history refresh/open/continue, pin/feedback sync) - CI and
-  emulator smoke green on it; 76a13e6 UI parity (empty-chat title, outlined composer, inline attach panel + recent photos
-  with runtime READ_MEDIA_IMAGES, file chips, citation chips, thinking timeline + site icons, Like/Dislike, share card,
-  neutral 20 dp dialogs, Saved-to-Downloads snackbar); 3db716f E2E fixture with live shapes (real PoW at difficulty 144000,
-  upload PENDING->SUCCESS, Think+Search shape, per-account history with a seeded "other device" chat) + 3 new journeys.
+  (native PoW, WebView solver removed, one retry + Retry, server history refresh/open/continue, pin/feedback sync); 76a13e6
+  UI parity (empty-chat title, outlined composer, inline attach panel + recent photos with runtime READ_MEDIA_IMAGES, file
+  chips, citation chips, thinking timeline + site icons, Like/Dislike, share card, neutral 20 dp dialogs, Saved-to-Downloads
+  snackbar); 3db716f E2E fixture with live shapes (real PoW at difficulty 144000, upload PENDING->SUCCESS, Think+Search
+  shape, per-account history with a seeded "other device" chat) + 3 new journeys; 9b25644 / 6fc275d UI and retry tests;
+  fbf91eb / e6aaa41 docs + 1.1.0/11; 9e332ea lint fix (produceState); 7ab2fd1 chip accessibility action. CI runs: on
+  3db716f Release E2E green (2 journeys, 22/22 coverage) and emulator green; on 9e332ea CI and Release E2E green, emulator
+  failed only on the new chip test (fixed in 7ab2fd1).
 - v1.0.0 released (PR #29, merge be88037, tag v1.0.0; versionCode 10): reference workflow + SCREEN_SPEC, official-style UI,
   welcome + sign-in gate, ToolCatalog + Plugins & tools, verified Pyodide sandbox + trusted execution, file cards, release E2E
   suite with coverage.json, signed + E2E-gated release workflow. Verified only against the mocked backend.
@@ -38,10 +41,9 @@ a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-Read CI on 3db716f (android, emulator smoke, Release E2E incl. the new journeys) and fix in small commits. Then: instrumented
-UI tests for the new parity items (OfficialScreenshotsTest), docs (SCREEN_SPEC, FEATURE_MATRIX 76+, README, SECURITY,
-RELEASE_NOTES_110 with PENDING rows), versionCode 11 / 1.1.0, CI green on the PR head, then DONE_110.md outside the repo.
-Never merge or tag. Do not edit scripts/capture_reference.sh, e2e/reference/driver.py, scripts/check_reference.py or
+Confirm CI, emulator smoke and Release E2E green on 7ab2fd1 (PR #31); then write DONE_110.md in the task folder (outside the
+repo) and stop. The supervising lane merges, tags and runs the signed-in live check; RELEASE_NOTES_110 rows stay PENDING
+for it. Do not edit scripts/capture_reference.sh, e2e/reference/driver.py, scripts/check_reference.py or
 .github/workflows/reference.yml (reviewer's).
 Reference facts (verified 2026-10-20): APKPure's API (api.pureapk.com, as used by EFF's apkeep) serves com.deepseek.chat 2.6.2 (versionCode 282) as an XAPK (base + armeabi-v7a + language/density splits, minSdk 29, targetSdk 36). Its signer certificate SHA-256 digests (v2/v3 for API 24-32: 1E:EC:C4:6F:..., rotated v3.1 for API 33+: C6:89:3C:53:...) equal the two DeepSeek publishes in https://chat.deepseek.com/.well-known/assetlinks.json. The same API with x-sv 34 also lists an arm64-v8a build of 2.6.2 (token com.deepseek.chat_282_19557999: base + config.arm64_v8a + config.hdpi, minSdk 32, same signers); reference.yml now defaults to it on an API 34 x86_64 image (ARM translation). First dispatch (run 39436094511, API 30, armeabi-v7a) installed the app but found no sign-in screen and saved no diagnostics; the driver now saves diagnostics and tolerates consent sheets and slow first launches. Run 39440391796 found the real block: Play builds from versionCode 110 wrap the app in PairIP (com.pairip.licensecheck.LicenseActivity, 'Check that Google Play is enabled'). reference.yml now defaults to build=pre-pairip on an API 34 google_apis image (API 33 x86_64 images have no ARM translation: runs 39444214055/39444218498 failed with INSTALL_FAILED_NO_MATCHING_ABIS); build=current (Play image, Play as installer) stays selectable. pre-pairip = pinned 1.4.1 APK (versionCode 107, file token com.deepseek.chat_107_d7d7af11, sha256 a7d1dba5..., signer C6:89 only, arm64-v8a, no PairIP; 100 and 107 lack com/pairip, 110/134/154/200/284 have it).
 Design: web account "default" keeps legacy slots (session key "session", deepseek-web-chats.json, workspace/account); others use session_<id>, deepseek-web-chats-<id>.json, workspace/accounts/<id>, workbench/<id>. One active id across both kinds; API-key profiles stay in SettingsStore.accounts (Settings key = profile "api-key"); API chats in conversations[-<profile>]. See docs/ACCOUNTS.md.
@@ -90,3 +92,4 @@ Design: web account "default" keeps legacy slots (session key "session", deepsee
 - 2026-10-20 16:05Z Claude Code (Opus 5.5): S9 (coverage table + checker, AgentJourneyTest with share read-back, expiry and restart, TOOLS.md) and S10 (1.0.0 / 10, signed + E2E-gated release, release notes, README, matrix) committed; nothing compiled locally; next: CI results from the reviewer, fixes, release.
 - 2026-10-20 16:10Z Claude Code (Opus 5.5): sandbox fix for UPDATE 15 (a1f8ee2), expiry journey (c6e8c09), removed tracked .pyc (e7176f6); next: CI results.
 - 2026-10-20 22:55Z Claude Code (Opus 5.5): v1.1.0 core + app + UI parity + live-shape E2E fixture committed and pushed (PR #31); next: CI results, UI tests, docs, version.
+- 2026-10-20 23:30Z Claude Code (Opus 5.5): v1.1.0 complete on PR #31 (live fixes A1-A8, parity B2-B7/B9/B12/B13/B18, live-shape E2E fixture, tests, docs, 1.1.0/11); next: final CI confirmation, DONE_110.md, supervisor merges/tags.
