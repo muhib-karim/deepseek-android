@@ -48,6 +48,11 @@ data class AppSettings(
     val customInstructions: String = "",
     val disabledTools: Set<String> = emptySet(),
     val remoteServers: List<RemoteServer> = emptyList(),
+    /**
+     * Plugins & tools > Trusted execution: run_python, pip_install and skill functions run native code with this app's rights,
+     * so agents are offered them only when this is on, and each call still asks. Off by default; never part of a backup.
+     */
+    val trustedExecution: Boolean = false,
 ) {
     val accountConfigured: Boolean get() = authorizeUrl.isNotBlank() && exchangeUrl.isNotBlank() && clientId.isNotBlank()
     fun guardSettings() = GuardSettings(shellEnabled, installEnabled)
@@ -103,6 +108,7 @@ class SettingsStore(context: Context) {
         customInstructions = preferences.getString("custom_instructions", "")!!.take(8000),
         disabledTools = preferences.getStringSet("disabled_tools", emptySet())!!.toSet(),
         remoteServers = runCatching { LlmJson.decodeFromString<List<RemoteServer>>(preferences.getString("remote_servers", "[]")!!) }.getOrDefault(emptyList()),
+        trustedExecution = preferences.getBoolean("trusted_execution", false),
     )
 
     fun connectorToken(id: String): String? = preferences.getString("connector_token_$id", null)
@@ -135,6 +141,7 @@ class SettingsStore(context: Context) {
             .putString("search_backend", value.searchBackend).putString("searxng_url", value.searxngUrl)
             .putBoolean("memory_upkeep", value.memoryUpkeep).putBoolean("memory_enabled", value.memoryEnabled).putString("custom_instructions", value.customInstructions.take(8000))
             .putStringSet("disabled_tools", value.disabledTools).putString("remote_servers", LlmJson.encodeToString(value.remoteServers))
+            .putBoolean("trusted_execution", value.trustedExecution)
             .commit()) { "Could not save encrypted settings" }
     }
 }

@@ -34,10 +34,17 @@ internal fun PluginsToolsPage(state: AccountUiState, actions: AgentActions, onNa
         Text("Agent mode can use these tools in your DeepSeek chats. A switched-off tool is not offered to DeepSeek and is refused if " +
             "DeepSeek asks for it. Tools that reach the network or other apps ask before each use. The switches also apply to the API-key client.",
             Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.bodySmall, color = muted)
+        SettingsGroup("Trusted execution") {
+            ToolSwitchRow("Native Python and skill code", "Lets the agent run Python, Python packages and skill functions on this phone with this " +
+                "app's rights. This is not a sandbox: switch it on only for code you trust. The code sandbox below needs no such permission.",
+                "Each run asks first", state.trustedExecution, "trusted-execution", enabled) { actions.setTrustedExecution(it) }
+        }
         ToolCatalog.forRoute(ToolRoute.ACCOUNT).groupBy { it.group }.forEach { (group, tools) ->
             SettingsGroup(group.label) {
                 tools.forEach { tool ->
-                    ToolSwitchRow(tool.label, tool.summary, tool.approval, ToolCatalog.isEnabled(tool.name, state.disabledTools), "tool-${tool.name}", enabled) {
+                    val allowed = !tool.trusted || state.trustedExecution
+                    ToolSwitchRow(tool.label, tool.summary, if (allowed) tool.approval else NEEDS_TRUSTED,
+                        allowed && ToolCatalog.isEnabled(tool.name, state.disabledTools), "tool-${tool.name}", enabled && allowed) {
                         actions.setToolEnabled(tool.name, it)
                     }
                 }
@@ -47,8 +54,11 @@ internal fun PluginsToolsPage(state: AccountUiState, actions: AgentActions, onNa
             val functions = state.skills.filter { it.enabled }.flatMap { skill -> skill.functions.map { it to skill.name } }
             if (functions.isEmpty()) Text("No enabled skill has functions.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = muted)
             functions.forEach { (function, skill) ->
-                ToolSwitchRow(function.substringAfter("__"), "From the $skill skill; runs as Python on this phone.", null,
-                    ToolCatalog.isEnabled(function, state.disabledTools), "tool-$function", enabled) { actions.setToolEnabled(function, it) }
+                ToolSwitchRow(function.substringAfter("__"), "From the $skill skill; runs as Python on this phone with this app's rights.",
+                    if (state.trustedExecution) "Asks before each run" else NEEDS_TRUSTED,
+                    state.trustedExecution && ToolCatalog.isEnabled(function, state.disabledTools), "tool-$function", enabled && state.trustedExecution) {
+                    actions.setToolEnabled(function, it)
+                }
             }
             SettingsRow("Manage skills", tag = "plugins-skills") { onNavigate(AccountPage.SKILLS) }
         }
@@ -98,6 +108,8 @@ internal fun PluginsToolsPage(state: AccountUiState, actions: AgentActions, onNa
             dismissButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } })
     }
 }
+
+private const val NEEDS_TRUSTED = "Needs trusted execution (above)"
 
 @Composable
 private fun ToolSwitchRow(label: String, summary: String, approval: String?, checked: Boolean, tag: String, enabled: Boolean, onChange: (Boolean) -> Unit) {

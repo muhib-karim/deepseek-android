@@ -304,6 +304,8 @@
     <string name="tools">টুল</string>
     <string name="tools_notice">বিল্ট-ইন টুল চালু বা বন্ধ করুন, এবং নিজের HTTPS টুল সার্ভার যোগ করুন। রিমোট টুল চালানোর আগে সবসময় জিজ্ঞেস করে।</string>
     <string name="tools_builtin">বিল্ট-ইন টুল</string>
+    <string name="tools_trusted_execution">বিশ্বস্ত এক্সিকিউশন: নেটিভ পাইথন ও স্কিল কোড</string>
+    <string name="tools_trusted_notice">এই অ্যাপের অধিকার নিয়ে এই ফোনে পাইথন, পাইথন প্যাকেজ ও স্কিল ফাংশন চালায়। এটি স্যান্ডবক্স নয়: শুধু ভরসাযোগ্য কোডের জন্য চালু করুন। প্রতিবার চালানোর আগে জিজ্ঞেস করে।</string>
     <string name="tools_custom">কাস্টম টুল সার্ভার</string>
     <string name="tools_empty">কোনো টুল সার্ভার যোগ করা হয়নি।</string>
     <string name="tools_add_server">টুল সার্ভার যোগ করুন</string>

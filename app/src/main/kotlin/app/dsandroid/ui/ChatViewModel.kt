@@ -412,8 +412,8 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
     /** v0.6.0 agent tools shared with account mode (dsh names); skill function tools are added per run. */
     private fun agentTools(): List<Tool> {
         val toolkit = AgentToolkit.get(getApplication())
-        return listOf(RunPythonTool(toolkit.python), PipInstallTool(toolkit.installer), WriteTool(), ReadTool(), PresentTool(), WriteFileTool(),
-            SkillTool({ toolkit.enabledSkills() }, toolkit.skills::instructions))
+        return listOf(TrustedTool(RunPythonTool(toolkit.python)), TrustedTool(PipInstallTool(toolkit.installer)), WriteTool(), ReadTool(), PresentTool(),
+            WriteFileTool(), SkillTool({ toolkit.enabledSkills() }, toolkit.skills::instructions))
     }
 
     fun builtInToolNames(): List<String> = builtInTools(AppSettings()).map { it.name } + listOf("parallel_agents", "schedule_prompt")
@@ -433,8 +433,11 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
         }.toMutableList()
         val toolkit = AgentToolkit.get(getApplication())
         val skills = if (run.agentEnabled) withContext(Dispatchers.IO) { runCatching { toolkit.enabledSkills() }.getOrDefault(emptyList()) } else emptyList()
-        skills.flatMap { entry -> entry.manifest.tools.map { SkillFunctionTool(entry, it, toolkit.python) } }
+        skills.flatMap { entry -> entry.manifest.tools.map { TrustedTool(SkillFunctionTool(entry, it, toolkit.python)) } }
             .filter { skillTool -> tools.none { it.name == skillTool.name } }.distinctBy { it.name }.forEach { tools.add(it) }
+        // Native Python and skill code run with the app's rights: offered only with trusted execution on, and each call asks.
+        val trustedNames = tools.filter { it is TrustedTool }.map { it.name }.toSet()
+        if (!config.trustedExecution) tools.removeAll { it is TrustedTool }
         val chatDir = "chats/${conversation.id}"
         config.remoteServers.forEach { server ->
             val remoteClient = McpClient(server.url)
@@ -477,7 +480,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
         val selectedTools = tools.filter { conversation.assistant == null || it.name in conversation.assistant.defaultTools }
         // Aliases share their catalog switch; a tool switched off during the run (even while its approval shows) is not run.
         val registry = ToolRegistry(if (run.agentEnabled) selectedTools else emptyList(), ToolCatalog.disabledNames(config.disabledTools)) {
-            ToolCatalog.isEnabled(it, settings.value.disabledTools)
+            ToolCatalog.isEnabled(it, settings.value.disabledTools) && (it !in trustedNames || settings.value.trustedExecution)
         }
         val confirmer = Confirmer { name, args ->
             val remote = registry[name] as? RemoteTool

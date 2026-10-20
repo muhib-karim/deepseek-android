@@ -66,7 +66,7 @@ class PluginsToolsTest {
         File(app.filesDir, "workspace/account").deleteRecursively()
         app.getSharedPreferences("deepseek_web_appearance", 0).edit().clear().commit()
         val settings = SettingsStore(app)
-        settings.save(settings.load().copy(disabledTools = emptySet(), remoteServers = servers))
+        settings.save(settings.load().copy(disabledTools = emptySet(), remoteServers = servers, trustedExecution = false))
     }
 
     @Before fun setup() {
@@ -151,18 +151,23 @@ class PluginsToolsTest {
         compose.onNodeWithTag("tool-web_search").performScrollTo().assertIsOn().performClick()
         compose.waitUntil(5_000) { "web_search" in vm.state.value.disabledTools }
         compose.onNodeWithTag("tool-web_search").assertIsOff()
-        // A skill's functions have their own switches once the skills are read.
+        // Native Python and skill functions stay off until trusted execution is switched on; then each has its own switch.
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("tool-data_analysis__describe_csv").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("tool-data_analysis__describe_csv").performScrollTo().assertIsOff().assertIsNotEnabled()
+        compose.onNodeWithTag("trusted-execution").performScrollTo().assertIsOff().performClick()
+        compose.waitUntil(5_000) { vm.state.value.trustedExecution }
         compose.onNodeWithTag("tool-data_analysis__describe_csv").performScrollTo().assertIsOn().performClick()
         compose.waitUntil(5_000) { "data_analysis__describe_csv" in vm.state.value.disabledTools }
         capture("plugins-tools")
 
         // A new ViewModel (what an app restart creates) reads the same switches back.
         assertEquals(setOf("web_search", "data_analysis__describe_csv"), SettingsStore(app).load().disabledTools)
+        assertTrue(SettingsStore(app).load().trustedExecution)
         lateinit var restarted: AccountViewModel
         compose.runOnUiThread { restarted = AccountViewModel(app, baseUrl = baseUrl, powSolver = { 0L }).also { owners.put("restarted", it) } }
         compose.waitUntil(15_000) { restarted.state.value.ready }
         assertEquals(setOf("web_search", "data_analysis__describe_csv"), restarted.state.value.disabledTools)
+        assertTrue(restarted.state.value.trustedExecution)
 
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitUntil(5_000) { vm.state.value.page == AccountPage.CHAT }
@@ -173,6 +178,7 @@ class PluginsToolsTest {
         assertFalse(offered.contains("- data_analysis__describe_csv("))
         assertTrue(offered.contains("- web_fetch("))
         assertTrue(offered.contains("- data_analysis__chart_csv("))
+        assertTrue(offered.contains("- run_python("))
     }
 
     @Test fun aSwitchedOffToolRequestedAnywayIsRefusedAndTheRoutesDiffer() {
@@ -187,9 +193,11 @@ class PluginsToolsTest {
         val offered = prompts.first()
         assertFalse(offered.contains("- create_pdf("))
         // The account route offers the document generators and web tools, never the API-key client's phone, browser or memory tools.
-        listOf("write_file", "create_xlsx", "create_pptx", "create_chart", "create_image", "zip_files", "web_search", "web_fetch", "run_python")
+        listOf("write_file", "create_xlsx", "create_pptx", "create_chart", "create_image", "zip_files", "code_interpreter", "web_search", "web_fetch")
             .forEach { assertTrue(it, offered.contains("- $it(")) }
-        listOf("remember", "open_url", "draft_sms", "schedule_prompt", "code_interpreter").forEach { assertFalse(it, offered.contains("- $it(")) }
+        // Native code waits for trusted execution, which is off by default.
+        listOf("run_python", "pip_install", "data_analysis__describe_csv", "remember", "open_url", "draft_sms", "schedule_prompt")
+            .forEach { assertFalse(it, offered.contains("- $it(")) }
         val result = prompts.toList()[1]
         assertTrue(result.startsWith("${FENCE}tool_result\n"))
         assertTrue(result.contains("\"ok\":false") && result.contains("Denied by safety policy or unknown tool"))
@@ -197,6 +205,30 @@ class PluginsToolsTest {
         assertTrue(reply.artifacts.isEmpty())
         assertEquals(ToolStatus.DENIED, reply.steps.filterIsInstance<TurnStep.ToolCall>().single().status)
         assertTrue(File(app.filesDir, "workspace/account").walkTopDown().none { it.name.endsWith(".pdf") })
+    }
+
+    @Test fun nativePythonNeedsTrustedExecutionAndThenAsksBeforeEveryRun() {
+        start()
+        replies += "Running it.\n" + toolBlock("run_python", buildJsonObject { put("code", "print(2 + 2)") })
+        replies += "Python is not available here."
+        sendInAgentMode("Use Python for 2 + 2")
+        compose.waitUntil(45_000) { !vm.state.value.busy && prompts.size == 2 }
+        assertFalse(prompts.first().contains("- run_python("))
+        assertTrue(prompts.toList()[1].contains("Denied by safety policy or unknown tool"))
+
+        compose.runOnUiThread { vm.setTrustedExecution(true) }
+        compose.waitUntil(5_000) { vm.state.value.trustedExecution }
+        replies += "Running it.\n" + toolBlock("run_python", buildJsonObject { put("code", "print(2 + 2)") })
+        replies += "You declined the run."
+        sendInAgentMode("Use Python for 2 + 2 again")
+        compose.waitUntil(45_000) { vm.state.value.confirmation != null }
+        assertTrue(prompts.toList()[2].contains("- run_python("))
+        assertEquals("run_python", vm.state.value.confirmation!!.tool)
+        compose.onNodeWithTag("tool-confirmation").assertTextContains("trusted execution, not a sandbox", substring = true)
+            .assertTextContains("print(2 + 2)", substring = true)
+        compose.onNodeWithText("Deny").performClick()
+        compose.waitUntil(45_000) { !vm.state.value.busy && prompts.size == 4 }
+        assertTrue(prompts.toList()[3].contains("\"ok\":false") && prompts.toList()[3].contains("declined"))
     }
 
     @Test fun remoteToolsAreOfferedAndAskBeforeEveryCall() {

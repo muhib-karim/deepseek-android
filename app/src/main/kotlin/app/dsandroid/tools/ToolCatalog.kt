@@ -10,11 +10,12 @@ enum class ToolGroup(val label: String) {
 /**
  * One switch in Plugins & tools. [names] are the tool names the switch covers: the first is the main name, the rest are
  * aliases with the same capability (an older name, or a set of steps that only work together). [approval] says when the
- * tool asks first; null means it works on this phone's private chat folder without asking.
+ * tool asks first; null means it works on this phone's private chat folder without asking. A [trusted] tool runs native
+ * code with the app's rights: it is offered only while trusted execution is on, and then every call asks first.
  */
 data class CatalogTool(
     val names: List<String>, val label: String, val summary: String, val group: ToolGroup, val routes: Set<ToolRoute>,
-    val approval: String? = null,
+    val approval: String? = null, val trusted: Boolean = false,
 ) {
     val name: String get() = names.first()
 }
@@ -48,11 +49,12 @@ object ToolCatalog {
         CatalogTool(listOf("list_zip"), "Look inside ZIP files", "Lists the entries of a ZIP without extracting it.", ToolGroup.FILES, API),
         CatalogTool(listOf("create_artifact"), "Artifact canvas", "HTML, SVG, Mermaid, Markdown, CSV or JSON in the preview canvas.", ToolGroup.FILES, API),
         CatalogTool(listOf("create_web_project"), "Web projects", "Multi-file websites and HTML slide decks, previewed offline.", ToolGroup.FILES, API),
-        CatalogTool(listOf("run_python"), "Python on this phone", "Runs Python 3.13 with numpy and matplotlib in this app's Python worker.", ToolGroup.CODE, BOTH),
+        CatalogTool(listOf("code_interpreter"), "Code sandbox", "JavaScript, or Python after a one-time verified download, in a disposable WebView worker with no network, app files or Android access.",
+            ToolGroup.CODE, BOTH, approval = "Asks before downloading the Python runtime"),
+        CatalogTool(listOf("run_python"), "Python on this phone", "Python 3.13 with numpy and matplotlib in this app's Python worker, with the app's file access.",
+            ToolGroup.CODE, BOTH, approval = "Asks before each run", trusted = true),
         CatalogTool(listOf("pip_install"), "Python packages", "Installs pure-Python packages from PyPI into this app.", ToolGroup.CODE, BOTH,
-            approval = "Asks before each download"),
-        CatalogTool(listOf("code_interpreter"), "Code sandbox", "JavaScript (and Python after a one-time download) in a disposable WebView worker without network or app files.",
-            ToolGroup.CODE, API, approval = "Asks before downloading the Python runtime"),
+            approval = "Asks before each download", trusted = true),
         CatalogTool(listOf("skill"), "Skills", "Loads the instructions of an enabled skill when a task matches it.", ToolGroup.CODE, BOTH),
         CatalogTool(listOf("web_search"), "Web search", "Searches the web and returns result pages with their links.", ToolGroup.WEB, BOTH,
             approval = "Asks before each search"),

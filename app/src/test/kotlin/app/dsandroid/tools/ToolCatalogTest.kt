@@ -34,10 +34,16 @@ class ToolCatalogTest {
     @Test fun theAccountRouteOffersOnlyToolsItCanRun() {
         val account = ToolCatalog.forRoute(ToolRoute.ACCOUNT).flatMap { it.names }.toSet()
         assertTrue(account.containsAll(listOf("write", "read", "present", "write_file", "create_pdf", "create_xlsx", "create_pptx", "create_chart",
-            "create_image", "zip_files", "run_python", "pip_install", "skill", "web_search", "web_fetch")))
+            "create_image", "zip_files", "code_interpreter", "run_python", "pip_install", "skill", "web_search", "web_fetch")))
         // Phone actions, the in-app browser, memory and scheduling need the API-key client's screens.
         listOf("draft_sms", "open_url", "remember", "schedule_prompt", "parallel_agents").forEach { assertFalse(it, it in account) }
         assertTrue(ToolCatalog.forRoute(ToolRoute.API).flatMap { it.names }.containsAll(account))
+    }
+
+    @Test fun nativeCodeIsTrustedExecutionAndTheSandboxIsNot() {
+        assertEquals(setOf("run_python", "pip_install"), ToolCatalog.entries.filter { it.trusted }.flatMap { it.names }.toSet())
+        assertFalse(ToolCatalog.entry("code_interpreter")!!.trusted)
+        listOf("run_python", "pip_install").forEach { assertNotNull(it, ToolCatalog.entry(it)!!.approval) }
     }
 
     @Test fun networkAndDeviceActionsSayWhenTheyAskFirst() {

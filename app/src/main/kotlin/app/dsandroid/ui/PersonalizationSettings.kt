@@ -66,6 +66,8 @@ fun ToolsSettings(draft: AppSettings, builtIns: List<String>, busy: Boolean, upd
     }
     Text(stringResource(R.string.tools_notice), style = MaterialTheme.typography.bodySmall)
     Text(stringResource(R.string.tools_builtin), style = MaterialTheme.typography.titleMedium)
+    ToolSwitch(stringResource(R.string.tools_trusted_execution), draft.trustedExecution, !busy) { update(draft.copy(trustedExecution = it)) }
+    Text(stringResource(R.string.tools_trusted_notice), style = MaterialTheme.typography.bodySmall)
     // One switch per catalog entry (aliases share it, as in the account's Plugins & tools); other names keep their own switch.
     builtIns.distinctBy { ToolCatalog.entry(it)?.name ?: it }.forEach { id ->
         val entry = ToolCatalog.entry(id)

@@ -5,6 +5,7 @@ import android.os.Build
 import app.dsandroid.core.python.PipInstallTool
 import app.dsandroid.core.python.RunPythonTool
 import app.dsandroid.core.python.WheelInstaller
+import app.dsandroid.core.sandbox.CodeExecutor
 import app.dsandroid.core.skills.SkillEntry
 import app.dsandroid.core.skills.SkillFunctionTool
 import app.dsandroid.core.skills.SkillPack
@@ -70,17 +71,21 @@ class AgentToolkit private constructor(context: Context) {
 
     /**
      * The account route's tools (app.dsandroid.tools.ToolCatalog, route ACCOUNT): dsh-named file tools, documents, Excel,
-     * PowerPoint, charts, PNG images, ZIP, Python, skills and their functions, web_fetch and web search. [search] is null when
-     * the configured search service is not usable. The API-key client builds its list from the same tool classes.
+     * PowerPoint, charts, PNG images, ZIP, the code sandbox, skills and web_fetch and web search, plus native Python and skill
+     * functions as TrustedTool (the caller offers those only with trusted execution on). [search] is null when the configured
+     * search service is not usable. The API-key client builds its list from the same tool classes.
      */
-    fun accountTools(search: WebSearchTool?): List<Tool> {
+    fun accountTools(search: WebSearchTool?, sandbox: CodeExecutor): List<Tool> {
         val base = listOf(
-            RunPythonTool(python), PipInstallTool(installer), WriteTool(), ReadTool(), PresentTool(),
+            TrustedTool(RunPythonTool(python)), TrustedTool(PipInstallTool(installer)), WriteTool(), ReadTool(), PresentTool(),
             CreatePdfTool(), WriteFileTool(), SkillTool({ enabledSkills() }, skills::instructions), WebFetchTool(),
-            CreateXlsxTool(), CreatePptxTool(), CreateChartTool(), CreateImageTool(), ZipFilesTool(),
+            CreateXlsxTool(), CreatePptxTool(), CreateChartTool(), CreateImageTool(), ZipFilesTool(), CodeInterpreterTool(sandbox),
         ) + listOfNotNull(search)
-        val skillTools = enabledSkills().flatMap { entry -> entry.manifest.tools.map { SkillFunctionTool(entry, it, python) } }
-            .filter { tool -> base.none { it.name == tool.name } }.distinctBy { it.name }
-        return base + skillTools
+        return base + skillFunctions(base.map { it.name }.toSet())
     }
+
+    /** Enabled skills' functions as TrustedTool (Python with the app's rights), skipping names already in [taken]. */
+    fun skillFunctions(taken: Set<String>): List<Tool> = enabledSkills()
+        .flatMap { entry -> entry.manifest.tools.map { TrustedTool(SkillFunctionTool(entry, it, python)) } }
+        .filter { it.name !in taken }.distinctBy { it.name }
 }

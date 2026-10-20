@@ -41,6 +41,7 @@ import app.dsandroid.core.mcp.McpEndpoint
 import app.dsandroid.core.mcp.RemoteServer
 import app.dsandroid.core.mcp.RemoteTool
 import app.dsandroid.core.skills.SkillDownloader
+import app.dsandroid.core.sandbox.PythonRuntime
 import app.dsandroid.core.skills.SkillFunctionTool
 import app.dsandroid.core.skills.SkillPack
 import app.dsandroid.core.skills.SkillPackReader
@@ -48,6 +49,7 @@ import app.dsandroid.core.skills.SkillPrompt
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.tools.ToolContext
 import app.dsandroid.core.tools.ToolRegistry
+import app.dsandroid.core.tools.TrustedTool
 import app.dsandroid.core.tools.WebSearchTool
 import app.dsandroid.core.tools.MimeTypes
 import app.dsandroid.core.tools.chatRoot
@@ -60,6 +62,7 @@ import app.dsandroid.core.workbench.WorkbenchIds
 import app.dsandroid.core.workbench.WorkbenchStore
 import app.dsandroid.python.AgentToolkit
 import app.dsandroid.tools.CreatePdfTool
+import app.dsandroid.sandbox.WebViewCodeExecutor
 import app.dsandroid.tools.ToolCatalog
 import app.dsandroid.data.AppSettings
 import app.dsandroid.data.Appearance
@@ -118,6 +121,14 @@ class AccountViewModel @JvmOverloads constructor(
     private val settingsWrite = Mutex()
     /** The search service web_search uses in the current agent turn, named in its approval. */
     @Volatile private var searchHost: String? = null
+    /** The code sandbox (code_interpreter); its one-time Python runtime download asks first, like any other download. */
+    private val codeExecutor by lazy {
+        WebViewCodeExecutor(getApplication()) {
+            confirmTool("python_runtime_download", buildJsonObject {
+                put("runtime", "Pyodide ${PythonRuntime.VERSION}"); put("url", PythonRuntime.BASE_URL); put("maximumBytes", PythonRuntime.MAX_BYTES)
+            })
+        }
+    }
     private var chats = emptyList<WebChat>()
     private var current = emptyChat()
     private val uploads = mutableListOf<Upload>()
@@ -648,13 +659,17 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** What the account screens show of the settings (Settings, Plugins & tools); keys and other secrets never enter UI state. */
     private fun AccountUiState.withSettings(config: AppSettings) = copy(textScale = config.fontScale, collapseThinking = config.collapseThinking,
-        audioLanguage = config.audioLanguage, disabledTools = config.disabledTools, remoteServers = config.remoteServers)
+        audioLanguage = config.audioLanguage, disabledTools = config.disabledTools, remoteServers = config.remoteServers,
+        trustedExecution = config.trustedExecution)
 
     // ---- Plugins & tools (app.dsandroid.tools.ToolCatalog). The switches are the API-key client's too: one setting per tool. ----
 
     fun setToolEnabled(name: String, enabled: Boolean) = updateSettings("The tool setting could not be saved.") {
         it.copy(disabledTools = ToolCatalog.switched(it.disabledTools, name, enabled))
     }
+
+    /** Trusted execution: native Python, packages and skill functions are offered to the agent (each call still asks). */
+    fun setTrustedExecution(enabled: Boolean) = updateSettings("The setting could not be saved.") { it.copy(trustedExecution = enabled) }
 
     /** Adds an HTTPS MCP server after reading its tool list. Its tools ask before every call, and their answers go to DeepSeek. */
     fun addRemoteServer(name: String, url: String) {
@@ -859,10 +874,16 @@ class AccountViewModel @JvmOverloads constructor(
                 val search = runCatching { WebSearchTool(config.searchBackend.takeIf { it == "searxng" }?.let { config.searxngUrl }) }.getOrNull()
                 searchHost = search?.let { runCatching { java.net.URI(it.searchUrl("q")).host }.getOrNull() }
                 val remote = config.remoteServers.flatMap { server -> McpClient(server.url).let { client -> server.tools.map { RemoteTool(server, it, client) } } }
-                val (tools, skills) = withContext(Dispatchers.IO) { (toolkit.accountTools(search) + remote).distinctBy { it.name } to toolkit.enabledSkills() }
+                val (all, skills) = withContext(Dispatchers.IO) { (toolkit.accountTools(search, codeExecutor) + remote).distinctBy { it.name } to toolkit.enabledSkills() }
+                // Native Python and skill code (TrustedTool) is offered only with trusted execution on; each call then asks.
+                val trustedNames = all.filter { it is TrustedTool }.map { it.name }.toSet()
+                val tools = if (config.trustedExecution) all else all.filterNot { it is TrustedTool }
                 // Switched-off tools are left out of the prompt; the switches are read again on every lookup, so a tool switched
                 // off during the turn (even while its approval is showing) is neither offered nor run afterwards.
-                val registry = ToolRegistry(tools, ToolCatalog.disabledNames(config.disabledTools)) { name -> ToolCatalog.isEnabled(name, state.value.disabledTools) }
+                val registry = ToolRegistry(tools, ToolCatalog.disabledNames(config.disabledTools)) { name ->
+                    val now = state.value
+                    ToolCatalog.isEnabled(name, now.disabledTools) && (name !in trustedNames || now.trustedExecution)
+                }
                 val llm = WebToolProtocolClient(transport) { specs -> ToolCallProtocol.systemPrompt(specs, SkillPrompt.summaries(skills)) }
                 val loop = AgentLoop(llm, registry, GuardPolicy(registry, agentWorkspace), ToolContext(agentWorkspace, chatDir = chatDir(current.id)),
                     Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = 8)
@@ -916,11 +937,16 @@ class AccountViewModel @JvmOverloads constructor(
                 (arguments["packages"] as? JsonArray).orEmpty().joinToString("\n") { "- " + ((it as? JsonPrimitive)?.contentOrNull ?: it.toString()) }
             "web_fetch" -> "Fetch this web page; its text is then sent to DeepSeek:\n${text("url")}"
             "web_search" -> "Search the web${searchHost?.let { " with $it" }.orEmpty()} for:\n${text("query")}\n\nThe query goes to that search service; the results are then sent to DeepSeek."
+            "run_python" -> "Run this Python on your phone with this app's rights (trusted execution, not a sandbox):\n\n${text("code").take(1500)}"
+            "python_runtime_download" -> "Download the Python runtime for the code sandbox (Pyodide ${PythonRuntime.VERSION}, at most " +
+                "${PythonRuntime.MAX_BYTES / (1024 * 1024)} MB) from cdn.jsdelivr.net? Each file is checked against its pinned SHA-256. Afterwards Python " +
+                "runs in the sandbox without a download."
             else -> state.value.remoteServers.firstNotNullOfOrNull { server ->
                 server.tools.firstOrNull { RemoteTool.registryName(server.id, it.name) == name }?.let { tool ->
                     "Call ${tool.name} on ${server.name} (${server.url}) with:\n${arguments.toString().take(800)}\n\nIts answer is then sent to DeepSeek."
                 }
-            } ?: "$name\n${arguments.toString().take(800)}"
+            } ?: (if ("__" in name) "Run the skill function $name as Python on your phone with this app's rights (trusted execution) with:\n" else "$name\n") +
+                arguments.toString().take(800)
         }
     }
 

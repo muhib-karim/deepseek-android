@@ -109,6 +109,7 @@ interface AgentActions {
     fun openChatFile(row: ChatFileRow) {}
     fun hideChatFiles() {}
     fun setToolEnabled(name: String, enabled: Boolean) {}
+    fun setTrustedExecution(enabled: Boolean) {}
     fun addRemoteServer(name: String, url: String) {}
     fun removeRemoteServer(id: String) {}
     object None : AgentActions
@@ -175,6 +176,8 @@ data class AccountUiState(
     /** Plugins & tools: tool names switched off (app.dsandroid.tools.ToolCatalog) and remote MCP servers, shared with the API-key client. */
     val disabledTools: Set<String> = emptySet(),
     val remoteServers: List<RemoteServer> = emptyList(),
+    /** Plugins & tools > Trusted execution: native Python, packages and skill functions may be offered (each call asks). */
+    val trustedExecution: Boolean = false,
 )
 
 /** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
@@ -413,6 +416,9 @@ private fun SkillsPage(state: AccountUiState, actions: AgentActions, modifier: M
         Text("Skills", style = MaterialTheme.typography.titleMedium)
         Text("Skills add instructions and tools that agent mode can use in any chat. Enabled skills are listed to DeepSeek by name and description; it loads one when a task needs it.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (state.trustedExecution) "Skill tools and Python run with this app's rights and ask before each run (Trusted execution is on in Plugins & tools)."
+            else "Skill tools and Python run with this app's rights, so agent mode uses them only after you switch on Trusted execution in Plugins & tools.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("skills-trusted-note"))
         if (state.toolsetBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         state.skills.forEach { skill ->
             Row(Modifier.fillMaxWidth().testTag("skill-${skill.name}"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
