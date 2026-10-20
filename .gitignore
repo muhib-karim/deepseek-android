@@ -9,5 +9,6 @@ local.properties
 *.keystore
 *.hprof
 captures/
+!/docs/reference/captures/
 .externalNativeBuild/
 .cxx/

@@ -1,0 +1,61 @@
+{
+  "purpose": "Provenance of the official DeepSeek Android app used only as a visual and behavioural reference. The APK is never committed or redistributed; the reference workflow downloads, verifies and installs it on a disposable emulator.",
+  "package": "com.deepseek.chat",
+  "app_name": "DeepSeek",
+  "publisher": "DeepSeek (as listed by APKPure)",
+  "version_name": "2.6.2",
+  "version_code": 282,
+  "min_sdk": 29,
+  "target_sdk": 36,
+  "native_abis": ["armeabi-v7a"],
+  "retrieved": "2026-10-20",
+  "listings": {
+    "google_play": "https://play.google.com/store/apps/details?id=com.deepseek.chat",
+    "apkpure": "https://apkpure.com/deepseek/com.deepseek.chat"
+  },
+  "mirror": {
+    "name": "APKPure",
+    "version_api": "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=com.deepseek.chat",
+    "note": "The same app-version endpoint EFF's apkeep tool uses; the website download page is behind a browser challenge. The download link it returns is short-lived and is not recorded.",
+    "format": "XAPK (split APKs: base, config.armeabi_v7a, config.hdpi and 16 language splits)",
+    "xapk_sha256_observed": "81ef87c1472cc72434613d53434a8f402c6189571e71072281662ad7c0684556"
+  },
+  "apk_sha256": {
+    "com.deepseek.chat.apk": "8dff77c5419bb51d255f184684acc453c6f4055fe683ec2ac68c32ca0bed8171",
+    "config.ar.apk": "8cfdac701a1740d525faadb061fbcb735d5f6c299bee12dcd8e2ed4547e753a4",
+    "config.armeabi_v7a.apk": "7f8a91e9f2455acc48d9261a2e4214dbb573c717925e611e985245f9af4f1459",
+    "config.de.apk": "46e2f67cc1a040051f53d09d27826d5ee554967b9639708af8dd474a6c3ce5ca",
+    "config.es.apk": "69c68bf92c6f96d43d12a825b2cce0657cdbe8436feda38c0aae35148c626de0",
+    "config.fr.apk": "a3e5404dc23394e7e5ae916f592c957f903008ba318b5e26c888b5fec96d207e",
+    "config.hdpi.apk": "073379edc22e501a04780a6e8167360c544207cceb69c80ab1e46e82f632ab7e",
+    "config.hi.apk": "1cfa9c655b2726ae5e2e5d66e0137c722e0bd4dc1d03752d817063216d331e4c",
+    "config.in.apk": "d922b844c2c8288de4ef9dbecf85b748be3e6ad93a6b63d0aa3362b5ab839430",
+    "config.it.apk": "67a3a1f726bd0654ec504b78f76ca91bbf9ab7c00bfd9b9354af577a2267fb51",
+    "config.ja.apk": "e5e86bae1a6eaa1075a5d011b10fe50c21e916a72b33d97b23fd73dd54dcd9db",
+    "config.ko.apk": "a58627278c85d37edc22d26f621b70d10d4aaba556aed439a23ee3d110402735",
+    "config.my.apk": "812336424e7a2b0a973ab57eb09ab85b6e214fd503ffc9c145ceb941014a815b",
+    "config.pt.apk": "4cde65eff51f63aaba10bead60e1eb79be9b34aa24e02c7ea1ca5b9d0b85b241",
+    "config.ru.apk": "a8fd391e36293dca1e3a20999d8e282d3e1b72325d091fa58df7d3493f4bace7",
+    "config.th.apk": "dbe99044e6d4f6e9923dd86491c6d487fea39d64795f6a6abffffd7e167f7edb",
+    "config.tr.apk": "64f81af872f0c6d12aa00e30acdfcd19b7f006f6b47d0a567071ecbc76baa82c",
+    "config.vi.apk": "773047193ea7cf4f120e5b13edde5d620a7a858b809f9c595a110f504588fa2a",
+    "config.zh.apk": "95f306ead497c21e5c89b67a66e8c93fc5ae1096796f492c515c304e900c8430"
+  },
+  "signer": {
+    "sha256_cert_fingerprints": [
+      "1E:EC:C4:6F:DC:21:73:43:7D:70:14:0F:16:3A:AA:97:94:1D:41:B0:4D:91:DA:3E:B6:89:AE:C4:F3:39:AB:EB",
+      "C6:89:3C:53:68:F7:B5:12:2F:EC:DA:FC:6C:4E:CF:49:E0:B3:DC:4E:42:BD:16:6C:DB:64:69:07:78:8C:7F:FA"
+    ],
+    "schemes_observed": {
+      "v2": "1E:EC:C4:6F:DC:21:73:43:7D:70:14:0F:16:3A:AA:97:94:1D:41:B0:4D:91:DA:3E:B6:89:AE:C4:F3:39:AB:EB",
+      "v3 (API 24-32)": "1E:EC:C4:6F:DC:21:73:43:7D:70:14:0F:16:3A:AA:97:94:1D:41:B0:4D:91:DA:3E:B6:89:AE:C4:F3:39:AB:EB",
+      "v3.1 (API 33+, rotated key)": "C6:89:3C:53:68:F7:B5:12:2F:EC:DA:FC:6C:4E:CF:49:E0:B3:DC:4E:42:BD:16:6C:DB:64:69:07:78:8C:7F:FA"
+    },
+    "original_certificate_sha1": "c28e0433b4dcba4a7ba33ad03f9a1798042f6a5e",
+    "independent_evidence": [
+      "The publisher's own Digital Asset Links file, https://chat.deepseek.com/.well-known/assetlinks.json (fetched 2026-10-20), lists exactly these two SHA-256 digests for com.deepseek.chat.",
+      "APKPure's listing shows the signing certificate SHA-1 c28e0433b4dcba4a7ba33ad03f9a1798042f6a5e on every version page; it is the SHA-1 of the original (v2/v3) certificate above.",
+      "Every split in the 2.6.2 XAPK carries the same signer lineage (read with scripts/apk_signers.py on 2026-10-20)."
+    ]
+  }
+}
