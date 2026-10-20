@@ -98,7 +98,10 @@ class DeepSeekWebView(
                 // so the page keeps working without them. An empty "successful" script left the page half-initialised.
                 if (isGoogle(request.url)) return blocked()
                 val debugFixture = isDebugLoopback(loginUrl) && isLoginPage(request.url.toString())
-                return if (request.url.scheme == "https" || debugFixture) null else blocked()
+                // Anything else that is not https (local data such as loadDataWithBaseURL documents included) keeps the
+                // empty response it always had; a 403 here turned local documents into an error page.
+                return if (request.url.scheme == "https" || debugFixture) null
+                    else WebResourceResponse("text/plain", "UTF-8", "".byteInputStream())
             }
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                 loaded = false; navigationFailed = false; generation++
@@ -265,7 +268,7 @@ class DeepSeekWebView(
     }
   }
   hide();
-  if (!window.__dsHideGoogle) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList: true, subtree: true}); }
+  if (!window.__dsHideGoogle && document.documentElement) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList: true, subtree: true}); }
 })();"""
         const val BLANK_NOTICE = "The sign-in page isn't showing in this app. Tap Continue with Google: it signs in through your browser and works for any DeepSeek account. Updating Android System WebView and Chrome in the Play Store may also help."
         const val SECURITY_CHECK_NOTICE = "DeepSeek is running a security check. Complete it on this page if one is shown."
