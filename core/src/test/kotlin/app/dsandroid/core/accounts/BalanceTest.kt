@@ -51,7 +51,7 @@ class BalanceTest {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"Authentication Fails"}}"""))
             server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("{\"surprise\": true}"))
-            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
             server.start()
             val client = DeepSeekBalanceClient(server.url("/").toString(), identity)
             val refused = client.read("synthetic-balance-key") { 7L }
