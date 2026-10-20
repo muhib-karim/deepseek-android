@@ -173,6 +173,10 @@ def main(argv):
         shutil.copy2(device, os.path.join(sanitized, "device-settings.txt"))
 
     coverage["diagnostic_screenshots"] = diagnostics
+    blocked = manifest.get("blocked_by") or next((e.get("reason") for e in entries if "license check screen" in (e.get("reason") or "")), "")
+    if blocked:
+        coverage["blocked_by"] = blocked
+        notes.append(f"BLOCKED: {blocked}. Dispatch with build=pre-pairip (the pinned 1.4.1 APK) to capture the signed-out screens.")
     json.dump(coverage, open(os.path.join(sanitized, "coverage.json"), "w"), indent=2)
     summary = ["## Official DeepSeek reference capture", "",
                f"- Version: {coverage['version']} ({verification.get('abi', 'abi not recorded')}); APK verified: "

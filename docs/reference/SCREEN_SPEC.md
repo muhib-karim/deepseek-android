@@ -17,18 +17,20 @@ Every value carries a source tag:
 
 The reference workflow ([.github/workflows/reference.yml](../../.github/workflows/reference.yml)) installs the verified APK
 on an emulator at the same viewport as our capture tests (1080 x 2200 px, 440 dpi = 392.7 dp wide, font scale 1.0) and
-uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the arm64-v8a
-build on an API 34 x86_64 Google APIs image (ARM translation); the armeabi-v7a build (API 29+) remains selectable.
+uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the 2.6.2 arm64-v8a
+build on an API 33 x86_64 Play image (ARM translation); the armeabi-v7a build and the pre-PairIP 1.4.1 build are selectable.
 Signed-out screens need nothing else; signed-in screens need a dedicated test account in the
 `DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD` repository secrets.
 
-**Status (2026-10-20):** the first dispatch (run 39436094511: API 30, armeabi-v7a build) verified and installed the
-app, but the driver never recognised the sign-in screen and saved no diagnostics, so nothing was captured. The driver
-now waits up to 90 s on the first launch, accepts first-launch consent sheets, matches text and content descriptions
-case-insensitively, keeps screenshots of whatever is on screen, and saves the hierarchy, resumed activity, process
-state and logcat when a required screen does not appear. Until a dispatch captures the screens, every [E] value below
-is an estimate and no official capture is committed. When a run is reviewed, measured values replace [E] here and
-sanitized captures go under [captures/](captures/).
+**Status (2026-10-20):** the first dispatch (run 39436094511: API 30, armeabi-v7a build) installed the app but saved no
+diagnostics. With diagnostics added, run 39440391796 showed why nothing was captured: from versionCode 110 on, the Play
+builds wrap the app in Google's PairIP license check (`com.pairip.licensecheck.LicenseActivity`), which stops with "Check
+that Google Play is enabled on your device" unless Play installed the app. The workflow now defaults to a Play system
+image with Play recorded as the installer (`build=current`), and offers `build=pre-pairip`: the pinned 1.4.1 APK
+(versionCode 107, same signer, no license check). Captures are labelled with the version they came from; screens taken
+from 1.4.1 show an older interface and are compared with that in mind. Until a dispatch captures the screens, every [E]
+value below is an estimate and no official capture is committed. When a run is reviewed, measured values replace [E]
+here and sanitized captures go under [captures/](captures/).
 
 ## Global tokens
 

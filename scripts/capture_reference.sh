@@ -27,15 +27,21 @@ adb shell settings put secure show_ime_with_hard_keyboard 1
   echo "sdk=$(cat "$OUT/device/sdk.txt")"
   echo "abilist=$(cat "$OUT/device/abilist.txt")"
   echo "reference_abi=${REFERENCE_ABI:-arm64-v8a}"
+  echo "reference_build=${REFERENCE_BUILD:-current}"
+  echo "play_store=$(adb shell pm list packages com.android.vending | grep -c vending)"
   echo "viewport=1080x2200@440dpi font_scale=1.0"
 } > "$OUT/device/settings.txt"
 
-# Every split, unchanged and together (the set was verified before this step).
-if ! adb install-multiple -r -g "$APKS"/*.apk > "$OUT/device/install.txt" 2>&1; then
+# Every split, unchanged and together (the set was verified before this step). On a Play image the installer is recorded as
+# Play, which builds wrapped in Google's PairIP license check look for; nothing in the APK is changed.
+installer=()
+if adb shell pm list packages com.android.vending | grep -q 'package:com.android.vending'; then installer=(-i com.android.vending); fi
+if ! adb install-multiple -r -g "${installer[@]}" "$APKS"/*.apk > "$OUT/device/install.txt" 2>&1; then
   echo 'The official APK could not be installed on this emulator (see device/install.txt and device/abilist.txt).' >&2
   exit 1
 fi
 adb shell dumpsys package com.deepseek.chat | grep -E 'versionCode|versionName|primaryCpuAbi|secondaryCpuAbi' > "$OUT/device/package.txt" || true
+adb shell pm list packages -i com.deepseek.chat > "$OUT/device/installer.txt" 2>&1 || true
 adb logcat -c || true
 
 version="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%s (%s)" % (d["version_name"], d["version_code"]))' "$OUT/source/verification.json")"
