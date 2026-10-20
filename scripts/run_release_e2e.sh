@@ -16,8 +16,41 @@ out="${E2E_OUT:-e2e-output/$mode-api$api}"
 release_apk="${RELEASE_APK:?release APK under test}"
 mkdir -p "$out/steps" "$out/video" "$out/logs"
 
+# API 35 images can drop off adb for a few seconds right after boot ("device offline", "device not found"), after the
+# runner has already seen sys.boot_completed. Wait until the device stays online, and retry the adb steps that move APKs.
+wait_device_stable() {
+  local deadline=$((SECONDS + 180)) online=0 state
+  while (( SECONDS < deadline )); do
+    state="$(adb get-state 2>/dev/null | tr -d '\r')"
+    if [[ "$state" == "device" && "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+      online=$((online + 1))
+      (( online >= 3 )) && return 0
+    else
+      online=0
+      [[ "$state" == "offline" ]] && adb reconnect offline > /dev/null 2>&1
+    fi
+    sleep 2
+  done
+  echo "The emulator did not stay online (last adb state: ${state:-none})" >&2
+  return 1
+}
+# adb_retry <tries> <adb args...>: re-run an adb step after the device drops off and comes back.
+adb_retry() {
+  local tries="$1" attempt
+  shift
+  for ((attempt = 1; attempt <= tries; attempt++)); do
+    adb "$@" && return 0
+    (( attempt < tries )) || break
+    echo "adb $1 failed (attempt $attempt of $tries); waiting for the emulator" >&2
+    adb reconnect offline > /dev/null 2>&1
+    wait_device_stable || return 1
+  done
+  return 1
+}
+
 adb wait-for-device
 until [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; do sleep 2; done
+wait_device_stable || exit 1
 adb shell wm size 1080x2200
 adb shell wm density 440
 adb shell settings put system font_scale 1.0
@@ -50,13 +83,23 @@ if [[ "$mode" == "mocked" ]]; then
 fi
 
 # The release APK exactly as supplied; the installed base.apk must have the same bytes.
-if ! adb install -r "$release_apk" > "$out/logs/install.txt" 2>&1; then
+wait_device_stable || exit 1
+if ! adb_retry 3 install -r "$release_apk" > "$out/logs/install.txt" 2>&1; then
   echo 'The release APK did not install' >&2
   cat "$out/logs/install.txt" >&2
   exit 1
 fi
-installed="$(adb shell pm path app.dsandroid | head -1 | sed 's/^package://' | tr -d '\r')"
-adb pull "$installed" "$out/installed.apk" > /dev/null
+installed=""
+for _ in 1 2 3; do
+  installed="$(adb shell pm path app.dsandroid 2>/dev/null | head -1 | sed 's/^package://' | tr -d '\r')"
+  [[ -n "$installed" ]] && break
+  wait_device_stable || break
+done
+if [[ -z "$installed" ]] || ! adb_retry 3 pull "$installed" "$out/installed.apk" > "$out/logs/pull.txt" 2>&1; then
+  echo 'Could not read the installed APK back from the device:' >&2
+  cat "$out/logs/pull.txt" >&2 2>/dev/null
+  exit 1
+fi
 expected="$(sha256sum "$release_apk" | cut -d' ' -f1)"
 actual="$(sha256sum "$out/installed.apk" | cut -d' ' -f1)"
 rm -f "$out/installed.apk"
@@ -71,7 +114,8 @@ if [[ "$expected" != "$actual" ]]; then
   echo 'The installed APK differs from the artifact under test' >&2
   exit 1
 fi
-adb install -r -t "${E2E_APK:?}" > /dev/null && adb install -r -t "${E2E_TEST_APK:?}" > /dev/null || { echo 'Driver install failed' >&2; exit 1; }
+adb_retry 3 install -r -t "${E2E_APK:?}" > /dev/null && adb_retry 3 install -r -t "${E2E_TEST_APK:?}" > /dev/null || { echo 'Driver install failed' >&2; exit 1; }
+wait_device_stable || exit 1
 
 touch "$out/.recording"
 (
