@@ -1,7 +1,10 @@
 package app.dsandroid.e2e
 
+import android.content.ClipData
+import android.content.Intent
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -15,7 +18,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The release build's chat and agent journey against the fixture: DeepThink and Search replies, then one agent turn per
+ * The release build's chat and agent journey against the fixture: DeepThink, Search and DeepThink + Search replies in the
+ * live stream shapes, a file shared into the app and uploaded (its own proof of work, sent once DeepSeek processed it),
+ * the chat "from another device" opened from the drawer and continued, then one agent turn per
  * account tool case in e2e/coverage.json (the fixture's "E2E-TOOL:<name>" marker makes the model call that tool). A PDF
  * goes through the system share sheet to the E2E receiver, which checks the bytes it got; Charts is switched off in
  * Plugins & tools and then refused; finally the session expires mid-chat and the app stays locked after a restart.
@@ -50,8 +55,41 @@ class AgentJourneyTest {
         e2e.waitFor(By.text("Send to DeepSeek?"), "the Search send confirmation", 20_000)
         e2e.tap(By.text("Send"), "Send (confirm Search)")
         e2e.waitFor(By.textContains("web page"), "the searched pages", 60_000)
+        e2e.assertAbsent(By.textContains("[citation:"), "a raw citation marker")
         e2e.step("search")
+
+        // DeepThink + Search as the live service streams it: TOOL_SEARCH / TOOL_OPEN, statuses at -2 and -3, nested batches,
+        // and a [reference:0] marker that must become a citation chip, never raw text.
+        e2e.tap(By.text("Think"), "the Think pill (with Search)")
+        send("Think and search the E2E fixture")
+        e2e.waitFor(By.text("Send to DeepSeek?"), "the Think + Search send confirmation", 20_000)
+        e2e.tap(By.text("Send"), "Send (confirm Think + Search)")
+        e2e.waitFor(By.textContains("revenue grew 12%"), "the Think + Search answer", 90_000)
+        e2e.assertAbsent(By.textContains("[reference:"), "a raw reference marker")
+        e2e.assertAbsent(By.textContains("[citation:"), "a raw citation marker")
+        e2e.step("think-search")
+        e2e.tap(By.text("Think"), "the Think pill (off)")
         e2e.tap(By.text("Search"), "the Search pill (off)")
+
+        // A file shared into the app goes up with its own proof of work and is referenced only after fetch_files said SUCCESS.
+        shareIntoApp("notes.txt", "E2E upload content line\n", "Please read the attached notes")
+        e2e.waitFor(By.textContains("notes.txt"), "the shared file in the composer", 30_000)
+        e2e.tap(By.desc("Send message"), "Send (with the file)")
+        e2e.waitFor(By.text("Send to DeepSeek?"), "the upload send confirmation", 20_000)
+        e2e.tap(By.text("Send"), "Send (confirm the upload)")
+        e2e.waitFor(By.textContains("I read notes.txt"), "the reply about the uploaded file", 90_000)
+        e2e.waitFor(E2eDriver.res("file-chip-notes.txt"), "the file chip above the message", 10_000)
+        e2e.step("upload")
+
+        // The chat started "on another device" is in the drawer (DeepSeek's history); it loads and continues from its last reply.
+        e2e.tap(By.desc("Open navigation"), "the drawer with DeepSeek's history")
+        e2e.tap(By.text("Planets from the web"), "the chat from another device", 30_000)
+        e2e.waitFor(By.text("Which planet is largest?"), "the messages loaded from DeepSeek", 30_000)
+        e2e.step("server-chat-loaded")
+        send("E2E-HISTORY what about its moons?")
+        e2e.waitFor(By.textContains(Fixture.PLAIN_REPLY), "the reply in the continued chat", 90_000)
+        e2e.step("server-chat-continued")
+        e2e.tap(By.desc("New Chat"), "a new chat for the agent cases")
 
         e2e.tap(E2eDriver.res("agent-toggle"), "Agent mode")
         listOf("write_file", "write", "read", "present", "write_file_docx", "write_file_md").forEach { agent(it) }
@@ -83,6 +121,17 @@ class AgentJourneyTest {
         e2e.waitFor(E2eDriver.res("welcome-screen"), "the welcome screen after a restart", 60_000)
         e2e.assertAbsent(E2eDriver.res("account-composer"), "a composer after a restart")
         e2e.step("restarted-signed-out")
+    }
+
+    /** Shares a fixture file into the app with the system's ACTION_SEND, as any other app would. */
+    private fun shareIntoApp(name: String, content: String, text: String) {
+        val file = File(File(e2e.context.cacheDir, "fixtures").apply { mkdirs() }, name).apply { writeText(content) }
+        val uri = FileProvider.getUriForFile(e2e.context, "app.dsandroid.e2e.files", file)
+        val intent = Intent(Intent.ACTION_SEND).setPackage(Fixture.APP).setType("text/plain")
+            .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_TEXT, text)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.clipData = ClipData.newRawUri(name, uri)
+        e2e.context.startActivity(intent)
     }
 
     private fun send(text: String) {

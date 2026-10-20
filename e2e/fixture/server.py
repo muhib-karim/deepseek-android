@@ -7,15 +7,26 @@ authentication bypass and no test receiver exists in the app. Replies are chosen
 SCENARIOS below) so the UiAutomator journey is reproducible. The request log keeps hosts, paths, flags and tool names;
 it never stores Authorization values, cookies, prompts beyond their markers, or uploaded file contents.
 
+Since v1.1.0 it speaks the live service's shapes, so the bugs a real account found would fail here too: every completion
+and every upload must carry a proof of work solved for that path (real DeepSeekHashV1 challenges at the live difficulty,
+answers checked), uploads stay PENDING until fetch_files has been polled, Search streams use negative fragment indices,
+nested BATCH patches with relative paths and TOOL_SEARCH / TOOL_OPEN fragments with [reference:N] markers, and each
+synthetic account has a chat "from another device" in its history (fetch_page, history_messages) that the journey opens
+and continues.
+
 Standard library only. Usage: server.py --cert leaf.pem --key leaf.key --port 8443 --log requests.jsonl
 """
 import argparse
+import base64
 import json
 import os
 import re
+import secrets
 import ssl
+import struct
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -23,9 +34,13 @@ TOKEN_PREFIX = "e2e-synthetic-session-"
 # Synthetic, not a credential: the API-key journey types it and only this fixture accepts it.
 FIXTURE_PROFILE_VALUE = "e2e-synthetic-profile-0123456789"  # gitleaks:allow
 FENCE = "```"
-WORKER_PATH = "/chat/static/76608.8f2a9fa413.js"
-EXPECTED_HOSTS = {"chat.deepseek.com", "fe-static.deepseek.com", "api.deepseek.com", "html.duckduckgo.com",
-                  "example.com", "www.example.com", "cdn.jsdelivr.net"}
+COMPLETION_PATH = "/api/v0/chat/completion"
+UPLOAD_PATH = "/api/v0/file/upload_file"
+# The live difficulty (2026-10-20); the app solves it natively.
+POW_DIFFICULTY = 144000
+EXPECTED_HOSTS = {"chat.deepseek.com", "api.deepseek.com", "html.duckduckgo.com", "example.com", "www.example.com",
+                  "cdn.jsdelivr.net", "cdn.deepseek.com"}
+SEEDED_TITLE = "Planets from the web"
 
 # Agent scenarios: "E2E-TOOL:<name>" in the user's request makes the first reply call that tool with these arguments.
 TOOL_CALLS = {
@@ -52,24 +67,146 @@ TOOL_CALLS = {
 }
 TOOL_ALIASES = {"write_file_docx": "write_file", "write_file_md": "write_file", "code_interpreter_python": "code_interpreter"}
 
+# DeepSeekHashV1: SHA3-256 sponge (rate 136, padding 0x06 ... 0x80) whose Keccak-f[1600] skips round 0.
+_RC = [0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
+       0x8000000080008081, 0x8000000000008009, 0x000000000000008A, 0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
+       0x000000008000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003, 0x8000000000008002, 0x8000000000000080,
+       0x000000000000800A, 0x800000008000000A, 0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008]
+_ROT = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44]
+_LANES = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1]
+_MASK = (1 << 64) - 1
+
+
+def _rotl(value, count):
+    return ((value << count) | (value >> (64 - count))) & _MASK
+
+
+def _permute(a):
+    for round_index in range(1, 24):
+        c = [a[x] ^ a[x + 5] ^ a[x + 10] ^ a[x + 15] ^ a[x + 20] for x in range(5)]
+        for x in range(5):
+            d = c[(x + 4) % 5] ^ _rotl(c[(x + 1) % 5], 1)
+            for y in range(0, 25, 5):
+                a[y + x] ^= d
+        carried = a[1]
+        for step in range(24):
+            lane = _LANES[step]
+            a[lane], carried = _rotl(carried, _ROT[step]), a[lane]
+        for y in range(0, 25, 5):
+            row = a[y:y + 5]
+            for x in range(5):
+                a[y + x] = row[x] ^ ((~row[(x + 1) % 5] & _MASK) & row[(x + 2) % 5])
+        a[0] ^= _RC[round_index]
+
+
+def deepseek_hash(data):
+    padded = bytearray(data) + b"\x06"
+    while len(padded) % 136:
+        padded.append(0)
+    padded[-1] |= 0x80
+    state = [0] * 25
+    for offset in range(0, len(padded), 136):
+        for i in range(17):
+            state[i] ^= int.from_bytes(padded[offset + 8 * i:offset + 8 * i + 8], "little")
+        _permute(state)
+    return b"".join(state[i].to_bytes(8, "little") for i in range(4)).hex()
+
+
+def tiny_png(rgb):
+    """A 16 x 16 single-colour PNG, served as a site icon."""
+    rows = b"".join(b"\x00" + bytes(rgb) * 16 for _ in range(16))
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 16, 16, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+SITE_ICON = tiny_png((66, 110, 254))
+
 
 class State:
     def __init__(self, log_path):
         self.lock = threading.Lock()
-        self.ids = 0
         self.sessions = 0
         self.revoked = set()
         self.log_path = log_path
+        self.challenges = {}
+        self.files = {}
+        # Synthetic account (token) -> its chats, so each journey sees its own history.
+        self.accounts = {}
 
-    def next_ids(self):
+    def challenge(self, target):
+        """A real DeepSeekHashV1 challenge for target, at the live difficulty; the answer is kept to check the header."""
+        salt = secrets.token_hex(10)
+        expire_at = int(time.time() * 1000) + 300_000
+        answer = secrets.randbelow(POW_DIFFICULTY)
+        digest = deepseek_hash(f"{salt}_{expire_at}_{answer}".encode())
+        entry = {"algorithm": "DeepSeekHashV1", "challenge": digest, "salt": salt, "difficulty": POW_DIFFICULTY,
+                 "expire_at": expire_at, "expire_after": 300_000, "signature": secrets.token_hex(16), "target_path": target}
         with self.lock:
-            self.ids += 2
-            return self.ids - 1, self.ids
+            self.challenges[digest] = dict(entry, answer=answer, used=False)
+        return entry
 
-    def next_session(self):
+    def check_pow(self, header, path):
+        """ok, missing, malformed, unknown, wrong-target, wrong-answer, expired or reused."""
+        if not header:
+            return "missing"
+        try:
+            data = json.loads(base64.b64decode(header, validate=True))
+        except (ValueError, TypeError):
+            return "malformed"
+        with self.lock:
+            entry = self.challenges.get(data.get("challenge"))
+            if entry is None:
+                return "unknown"
+            if data.get("target_path") != path or entry["target_path"] != path:
+                return "wrong-target"
+            if (data.get("answer") != entry["answer"] or data.get("salt") != entry["salt"] or data.get("signature") != entry["signature"]
+                    or data.get("algorithm") != "DeepSeekHashV1"):
+                return "wrong-answer"
+            if time.time() * 1000 > entry["expire_at"]:
+                return "expired"
+            if entry["used"]:
+                return "reused"
+            entry["used"] = True
+        return "ok"
+
+    def new_file(self, name, size):
+        with self.lock:
+            file_id = f"file-e2e-{len(self.files) + 1:04d}"
+            self.files[file_id] = {"id": file_id, "status": "PENDING", "file_name": name, "file_size": size, "polls": 0}
+            return dict(self.files[file_id])
+
+    def poll_file(self, file_id):
+        """DeepSeek processes an upload for a few seconds: the first poll still says PENDING, the next SUCCESS."""
+        with self.lock:
+            entry = self.files.get(file_id)
+            if entry is None:
+                return None
+            entry["polls"] += 1
+            if entry["polls"] >= 2:
+                entry["status"] = "SUCCESS"
+            return dict(entry)
+
+    def account(self, token):
+        with self.lock:
+            if token not in self.accounts:
+                now = time.time()
+                seeded = {"id": f"e2e-web-chat-{len(self.accounts) + 1}", "title": SEEDED_TITLE, "pinned": False, "updated_at": now - 3600,
+                          "seeded": True, "messages": [
+                              {"message_id": 1, "parent_id": None, "role": "USER", "fragments": [{"id": 1, "type": "REQUEST", "content": "Which planet is largest?"}]},
+                              {"message_id": 2, "parent_id": 1, "role": "ASSISTANT", "fragments": [{"id": 2, "type": "RESPONSE", "content": "Jupiter is the largest planet in the Solar System."}]},
+                          ]}
+                self.accounts[token] = {seeded["id"]: seeded}
+            return self.accounts[token]
+
+    def new_session(self, token):
+        chats = self.account(token)
         with self.lock:
             self.sessions += 1
-            return f"e2e-session-{self.sessions}"
+            session = {"id": f"e2e-session-{self.sessions}", "title": "", "pinned": False, "updated_at": time.time(), "seeded": False, "messages": []}
+            chats[session["id"]] = session
+            return session["id"]
 
     def record(self, entry):
         entry["t"] = round(time.time(), 3)
@@ -85,43 +222,130 @@ def sse(event):
     return "data: " + json.dumps(event, separators=(",", ":")) + "\n\n"
 
 
-def web_reply(prompt, thinking, search, request_id, response_id):
-    """The live service's patch stream: SET with ids and fragments, APPENDs, elapsed time, FINISHED, [DONE]."""
+def named(name, data):
+    return f"event: {name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+def stream(events, request_id, response_id, updated, title=None):
+    """A complete reply as the live service frames it: ready, update_session, the patches, then update_session, title, close."""
+    head = named("ready", {"request_message_id": request_id, "response_message_id": response_id, "model_type": "default"}) + \
+        named("update_session", {"updated_at": updated})
+    tail = named("update_session", {"updated_at": updated}) + (named("title", {"content": title}) if title else "") + \
+        named("close", {"click_behavior": "none", "auto_resume": False})
+    return head + "".join(sse(e) for e in events) + tail
+
+
+def response_head(request_id, response_id, fragments, thinking=False, search=False):
+    return {"v": {"response": {"message_id": response_id, "parent_id": request_id, "model": "", "role": "ASSISTANT",
+                               "thinking_enabled": thinking, "status": "WIP", "incomplete_message": None, "accumulated_token_usage": 0,
+                               "feedback": None, "search_enabled": search, "fragments": fragments, "conversation_mode": "DEFAULT",
+                               "has_pending_fragment": False, "auto_continue": False, "search_triggered": search}}}
+
+
+SEARCH_RESULTS = [
+    {"url": "https://example.com/report", "title": "Example report", "snippet": "A deterministic page served by the E2E fixture.",
+     "cite_index": 1, "site_icon": "https://cdn.deepseek.com/site-icons/example.com", "site_name": "Example", "query_indexes": [0]},
+    {"url": "https://www.example.com/notes", "title": "Example notes", "snippet": "Notes the fixture serves.",
+     "cite_index": 2, "site_icon": "https://cdn.deepseek.com/site-icons/www.example.com", "site_name": "Example notes", "query_indexes": [0]},
+]
+
+
+def web_reply(thinking, search, request_id, response_id):
+    """Plain, DeepThink and Search replies in the live service's patch shapes (Search: SEARCH fragment and [citation:N])."""
     events = []
     if search:
-        events.append({"v": {"response": {"message_id": response_id, "parent_id": request_id, "status": "WIP", "search_enabled": True,
-                                          "fragments": [{"id": 1, "type": "SEARCH", "status": "WIP", "content": None,
-                                                         "queries": [{"query": "e2e search"}], "results": []}]}}})
-        events.append({"p": "response/fragments/-1/results", "v": [
-            {"url": "https://example.com/report", "title": "Example report", "snippet": "A deterministic page served by the E2E fixture.", "cite_index": 1}]})
-        events.append({"p": "response/fragments/-1", "o": "BATCH", "v": [{"p": "status", "v": "FINISHED"}, {"p": "content", "v": "Found 1 web page"}]})
-        events.append({"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [{"id": 2, "type": "RESPONSE", "content": "Search result:"}]}]})
-        events.append({"p": "response/fragments/-1/content", "o": "APPEND", "v": " the fixture page says hello [citation:1]."})
+        events.append(response_head(request_id, response_id, [{"id": 2, "type": "SEARCH", "status": "WIP", "content": None,
+                                                               "queries": [{"query": "e2e search"}], "results": []}], search=True))
+        events.append({"p": "response/fragments/-1/results", "v": SEARCH_RESULTS})
+        events.append({"p": "response/fragments/-1", "o": "BATCH", "v": [{"p": "status", "v": "FINISHED"}, {"p": "content", "v": "Found 2 web pages"}]})
+        events.append({"p": "response/conversation_mode", "o": "SET", "v": "SEARCH"})
+        events.append({"p": "response/has_pending_fragment", "v": True})
+        events.append({"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [{"id": 3, "type": "RESPONSE", "content": "Search result:",
+                                                                                                 "references": [], "stage_id": 2}]},
+                                                            {"p": "has_pending_fragment", "o": "SET", "v": False}]})
+        events.append({"p": "response/fragments/-1/content", "o": "APPEND", "v": " the fixture page says hello"})
+        events.append({"v": "[citation:1]."})
+        text = "Search result: the fixture page says hello."
     else:
-        first = [{"id": 1, "type": "THINK", "content": "Considering", "elapsed_secs": None}] if thinking else \
-            [{"id": 1, "type": "RESPONSE", "content": "Hello"}]
-        events.append({"v": {"response": {"message_id": response_id, "parent_id": request_id, "status": "WIP",
-                                          "thinking_enabled": thinking, "fragments": first}}})
+        first = [{"id": 2, "type": "THINK", "content": "Considering", "elapsed_secs": None, "references": [], "stage_id": 1}] if thinking else \
+            [{"id": 2, "type": "RESPONSE", "content": "Hello", "references": [], "stage_id": 1}]
+        events.append(response_head(request_id, response_id, first, thinking=thinking))
         if thinking:
             events.append({"p": "response/fragments/-1/content", "o": "APPEND", "v": " the question step by step."})
             events.append({"p": "response/fragments/-1/elapsed_secs", "o": "SET", "v": 3.2})
-            events.append({"p": "response/fragments", "o": "APPEND", "v": [{"id": 2, "type": "RESPONSE", "content": "Thought it"}]})
+            events.append({"p": "response/fragments", "o": "APPEND", "v": [{"id": 3, "type": "RESPONSE", "content": "Thought it", "references": [], "stage_id": 1}]})
             events.append({"p": "response/fragments/-1/content", "o": "APPEND", "v": " through: 17 × 23 = 391."})
+            text = "Thought it through: 17 × 23 = 391."
         else:
             events.append({"p": "response/fragments/-1/content", "o": "APPEND", "v": " from the E2E fixture."})
+            text = "Hello from the E2E fixture."
+    # The live service ends with a value-only batch that inherits BATCH, then FINISHED.
+    events.append({"p": "response", "v": [{"p": "accumulated_token_usage", "v": 42}, {"p": "quasi_status", "v": "FINISHED"}]})
     events.append({"p": "response/status", "o": "SET", "v": "FINISHED"})
-    ready = f"event: ready\ndata: {json.dumps({'request_message_id': request_id, 'response_message_id': response_id})}\n\n"
-    return ready + "".join(sse(e) for e in events) + "data: [DONE]\n\n"
+    return events, text
 
 
-def text_reply(text, request_id, response_id):
+def think_search_reply(request_id, response_id):
+    """DeepThink + Search exactly as the live stream of 2026-10-20 shapes it: stages, TOOL_SEARCH, TOOL_OPEN pages read,
+    statuses patched at -2 and -3, nested batches with relative paths, and a [reference:0] marker resolved through the
+    RESPONSE fragment's references (to the second page read)."""
+    report, notes = SEARCH_RESULTS
+    opened = dict(report, cite_index=None)
+    events = [
+        response_head(request_id, response_id, [{"id": 2, "type": "THINK", "content": "Plan", "elapsed_secs": None, "references": [], "stage_id": 1}],
+                      thinking=True, search=True),
+        {"p": "response/conversation_mode", "v": "DEEP_SEARCH"},
+        {"p": "response/fragments/-1/content", "o": "APPEND", "v": " a search."},
+        {"p": "response/fragments/-1/elapsed_secs", "o": "SET", "v": 1.5},
+        {"p": "response/has_pending_fragment", "v": True},
+        {"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [{"id": 3, "type": "TOOL_SEARCH", "status": "WIP", "content": None,
+                                                                                         "queries": [{"query": "e2e think search"}], "results": [], "stage_id": 1}]},
+                                              {"p": "has_pending_fragment", "o": "SET", "v": False}]},
+        {"p": "response/fragments/-1/results", "o": "SET", "v": [dict(r, cite_index=None) for r in SEARCH_RESULTS]},
+        {"p": "response/fragments/-1", "o": "BATCH", "v": [{"p": "status", "v": "FINISHED"}, {"p": "content", "v": "Found 2 web pages"}]},
+        {"p": "response/has_pending_fragment", "o": "SET", "v": True},
+        {"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [{"id": 4, "type": "THINK", "content": "Read", "elapsed_secs": None,
+                                                                                         "references": [], "stage_id": 2}]},
+                                              {"p": "has_pending_fragment", "o": "SET", "v": False}]},
+        {"p": "response/fragments/-1/content", "o": "APPEND", "v": " the pages."},
+        {"p": "response/fragments/-1/elapsed_secs", "o": "SET", "v": 2.0},
+        {"p": "response/has_pending_fragment", "v": True},
+        {"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [
+            {"id": 5, "type": "TOOL_OPEN", "status": "WIP", "result": dict(notes, cite_index=None), "reference": {"id": 3, "type": "TOOL_SEARCH"}, "stage_id": 2},
+            {"id": 6, "type": "TOOL_OPEN", "status": "WIP", "result": opened, "reference": {"id": 3, "type": "TOOL_SEARCH"}, "stage_id": 2}]},
+            {"p": "has_pending_fragment", "o": "SET", "v": False}]},
+        {"p": "response/fragments/-2/status", "o": "SET", "v": "FINISHED"},
+        {"p": "response/fragments/-1/status", "v": "FINISHED"},
+        {"p": "response/has_pending_fragment", "v": True},
+        {"p": "response", "o": "BATCH", "v": [{"p": "fragments", "o": "APPEND", "v": [{"id": 7, "type": "THINK", "content": "Answer", "elapsed_secs": None,
+                                                                                         "references": [], "stage_id": 3}]},
+                                              {"p": "has_pending_fragment", "o": "SET", "v": False}]},
+        {"p": "response/fragments/-1/content", "o": "APPEND", "v": " briefly."},
+        {"p": "response/fragments/-1/elapsed_secs", "o": "SET", "v": 0.5},
+        {"p": "response/fragments", "o": "APPEND", "v": [{"id": 8, "type": "RESPONSE", "content": "Think and search:", "references": [], "stage_id": 3}]},
+        {"p": "response/fragments/-1/content", "v": " the report says revenue grew 12%"},
+        {"p": "response/fragments/-1", "o": "BATCH", "v": [{"p": "content", "o": "APPEND", "v": "[reference:0]"},
+                                                         {"p": "references", "o": "SET", "v": [{"id": 6, "type": "TOOL_OPEN"}]}]},
+        {"p": "response/fragments/-1/content", "o": "APPEND", "v": "."},
+        # Statuses of earlier fragments at deeper negative indices, as the live stream sends them.
+        {"p": "response/fragments/-3/status", "v": "FINISHED"},
+        {"p": "response", "v": [{"p": "accumulated_token_usage", "v": 78}, {"p": "quasi_status", "v": "FINISHED"}]},
+        {"p": "response/status", "o": "SET", "v": "FINISHED"},
+    ]
+    return events, "Think and search: the report says revenue grew 12%."
+
+
+def file_reply(request_id, response_id, files):
+    names = ", ".join(f"{f['file_name']} ({f['file_size']} bytes)" for f in files)
+    return text_events(f"I read {names}.", request_id, response_id), f"I read {names}."
+
+
+def text_events(text, request_id, response_id):
     cut = min(12, len(text))
-    events = [{"v": {"response": {"message_id": response_id, "parent_id": request_id, "status": "WIP",
-                                  "fragments": [{"id": 1, "type": "RESPONSE", "content": text[:cut]}]}}},
-              {"p": "response/fragments/-1/content", "o": "APPEND", "v": text[cut:]},
-              {"p": "response/status", "o": "SET", "v": "FINISHED"}]
-    ready = f"event: ready\ndata: {json.dumps({'request_message_id': request_id, 'response_message_id': response_id})}\n\n"
-    return ready + "".join(sse(e) for e in events) + "data: [DONE]\n\n"
+    return [response_head(request_id, response_id, [{"id": 2, "type": "RESPONSE", "content": text[:cut], "references": [], "stage_id": 1}]),
+            {"p": "response/fragments/-1/content", "o": "APPEND", "v": text[cut:]},
+            {"p": "response", "o": "BATCH", "v": [{"p": "accumulated_token_usage", "v": 12}, {"p": "quasi_status", "v": "FINISHED"}]},
+            {"p": "response/status", "o": "SET", "v": "FINISHED"}]
 
 
 def listed_tools(prompt):
@@ -161,10 +385,6 @@ SIGN_IN_PAGE = """<!doctype html><html><head><meta name="viewport" content="widt
 <button id="google">Log in with Google</button>
 <p id="state">Fixture sign-in page</p></body></html>"""
 ROOT_PAGE = "<!doctype html><html><head><title>DeepSeek (E2E fixture)</title></head><body><p>E2E fixture root</p></body></html>"
-WORKER = ("self.onmessage = function (event) {\n"
-          "  var data = event.data || {};\n"
-          "  if (data.type === 'pow-challenge') self.postMessage({type: 'pow-answer', answer: {answer: 0}});\n"
-          "};\n")
 REPORT_PAGE = ("<!doctype html><html><head><title>Example report</title></head><body><h1>Example report</h1>"
                "<p>The E2E fixture served this page for web_fetch.</p><p>Revenue grew 12% in the north.</p></body></html>")
 SEARCH_PAGE = ("<!doctype html><html><body>"
@@ -233,9 +453,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if host == "chat.deepseek.com":
                 return self.chat(method, path, raw)
-            if host == "fe-static.deepseek.com" and path == WORKER_PATH:
-                self.note()
-                return self.send(200, WORKER, "application/javascript")
+            if host == "cdn.deepseek.com" and path.startswith("/site-icons/"):
+                self.note(icon=True)
+                return self.send(200, SITE_ICON, "image/png")
             if host == "api.deepseek.com":
                 return self.api(method, path, raw)
             if host == "html.duckduckgo.com" and path.startswith("/html"):
@@ -244,6 +464,9 @@ class Handler(BaseHTTPRequestHandler):
             if host in ("example.com", "www.example.com") and path == "/report":
                 self.note()
                 return self.send(200, REPORT_PAGE, "text/html; charset=utf-8")
+            if host in ("example.com", "www.example.com") and path == "/favicon.ico":
+                self.note(icon=True)
+                return self.send(200, SITE_ICON, "image/png")
             if host == "cdn.jsdelivr.net" and path.startswith("/pyodide/v0.26.4/full/"):
                 return self.pyodide(path.rsplit("/", 1)[-1])
         except (ValueError, KeyError):
@@ -270,50 +493,184 @@ class Handler(BaseHTTPRequestHandler):
             self.note()
             return self.send(200, envelope({"id": "e2e-user", "email": "e2e***@example.com", "mobile_number": "",
                                             "need_birthday": False, "chat": {"is_muted": 0}}))
+        query = parse_qs(urlsplit(self.path).query)
+        if method == "GET" and path == "/api/v0/chat_session/fetch_page":
+            return self.fetch_page(query)
+        if method == "GET" and path == "/api/v0/chat/history_messages":
+            return self.history_messages(query.get("chat_session_id", [""])[0])
+        if method == "GET" and path == "/api/v0/file/fetch_files":
+            ids = [i for value in query.get("file_ids", []) for i in value.split(",") if i]
+            files = [f for f in (self.state.poll_file(i) for i in ids) if f is not None]
+            self.note(fetch_files=len(ids), statuses=[f["status"] for f in files])
+            return self.send(200, envelope({"files": [{k: v for k, v in f.items() if k != "polls"} for f in files]}))
+        if path == UPLOAD_PATH:
+            return self.upload(raw)
         body = json.loads(raw or b"{}")
+        chats = self.state.account(self.token())
         if path == "/api/v0/chat_session/create":
-            session = self.state.next_session()
+            session = self.state.new_session(self.token())
             self.note(session=session)
             return self.send(200, envelope({"chat_session": {"id": session}}))
         if path == "/api/v0/chat/create_pow_challenge":
-            self.note(target=body.get("target_path"))
-            return self.send(200, envelope({"challenge": {"algorithm": "DeepSeekHashV1", "challenge": "e2e", "salt": "e2e-salt",
-                                                          "difficulty": 64, "expire_at": int(time.time() * 1000) + 600_000,
-                                                          "signature": "e2e-signature"}}))
-        if path in ("/api/v0/chat_session/update_title", "/api/v0/chat_session/delete"):
-            self.note()
+            target = body.get("target_path")
+            self.note(target=target)
+            if target not in (COMPLETION_PATH, UPLOAD_PATH):
+                return self.send(200, {"code": 0, "data": {"biz_code": 1, "biz_msg": "unknown target", "biz_data": None}})
+            return self.send(200, envelope({"challenge": self.state.challenge(target)}))
+        session = chats.get(str(body.get("chat_session_id", "")))
+        if path == "/api/v0/chat_session/update_title":
+            if session is not None:
+                session["title"] = str(body.get("title", ""))[:100]
+            self.note(known=session is not None)
             return self.send(200, envelope(None))
-        if path == "/api/v0/file/upload_file":
-            self.note(upload_bytes=len(raw))
-            return self.send(200, envelope({"file": {"id": f"e2e-file-{len(raw)}"}}))
-        if path == "/api/v0/chat/completion":
-            return self.completion(body)
+        if path == "/api/v0/chat_session/delete":
+            chats.pop(str(body.get("chat_session_id", "")), None)
+            self.note(known=session is not None)
+            return self.send(200, envelope(None))
+        if path == "/api/v0/chat_session/update_pinned":
+            if session is not None:
+                session["pinned"] = bool(body.get("pinned"))
+                session["updated_at"] = time.time()
+            self.note(known=session is not None, pinned=bool(body.get("pinned")))
+            return self.send(200, envelope({"chat_session_updated_at": time.time()}))
+        if path == "/api/v0/chat/message_feedback":
+            feedback = body.get("feedback_type")
+            if feedback not in (None, "GOOD", "BAD"):
+                self.note(expected=False, feedback="invalid")
+                return self.send(422, {"detail": [{"loc": "body.feedback_type"}]})
+            message = next((m for m in (session or {}).get("messages", []) if m["message_id"] == body.get("message_id")), None)
+            if message is not None:
+                message["feedback"] = {"feedback_type": feedback} if feedback else None
+            self.note(known=message is not None, feedback=feedback)
+            return self.send(200, envelope(None))
+        if path == COMPLETION_PATH:
+            return self.completion(body, session)
         self.note(expected=False)
         return self.send(404, {"error": "unknown API"})
 
-    def completion(self, body):
+    def pow_rejected(self, state):
+        """The live answers for a missing or wrong proof of work (HTTP 200 with codes 40300 / 40301)."""
+        if state == "missing":
+            return self.send(200, {"code": 40300, "msg": "MISSING_HEADER", "data": None})
+        return self.send(200, {"code": 40301, "msg": "INVALID_POW_RESPONSE", "data": None})
+
+    def upload(self, raw):
+        pow_state = self.state.check_pow(self.headers.get("X-DS-PoW-Response"), UPLOAD_PATH)
+        if pow_state != "ok":
+            self.note(upload_bytes=len(raw), pow=pow_state)
+            return self.pow_rejected(pow_state)
+        head = raw[:4096].decode("latin-1")
+        name = (re.search(r'filename="([^"]{1,200})"', head) or [None, "upload.bin"])[1]
+        start = raw.find(b"\r\n\r\n")
+        end = raw.rfind(b"\r\n--")
+        size = max(0, end - start - 4) if start >= 0 and end > start else len(raw)
+        entry = self.state.new_file(name, size)
+        self.note(upload_bytes=len(raw), pow="ok", file=entry["id"])
+        return self.send(200, envelope({"id": entry["id"], "status": "PENDING", "file_name": name, "from_share": False, "file_size": size,
+                                        "model_kind": "VISION", "token_usage": None, "error_code": None, "is_image": False}))
+
+    def fetch_page(self, query):
+        try:
+            count = int(query.get("count", ["0"])[0])
+        except ValueError:
+            count = 0
+        if not 2 <= count <= 100:
+            self.note(count=count)
+            return self.send(200, {"code": 0, "msg": "", "data": {"biz_code": 1, "biz_msg": "illegal count", "biz_data": None}})
+        chats = sorted(self.state.account(self.token()).values(), key=lambda c: (not c["pinned"], -c["updated_at"]))
+        if "lte_cursor.updated_at" in query:
+            cursor = float(query["lte_cursor.updated_at"][0])
+            pinned = query.get("lte_cursor.pinned", ["false"])[0] == "true"
+            chats = [c for c in chats if (c["pinned"] and pinned and c["updated_at"] <= cursor) or (not c["pinned"] and (pinned or c["updated_at"] <= cursor))]
+        page = chats[:count]
+        self.note(count=count, listed=len(page), cursor="lte_cursor.updated_at" in query)
+        return self.send(200, envelope({"chat_sessions": [{"id": c["id"], "title": c["title"] or "New Chat", "title_type": "SYSTEM", "model_type": "default",
+                                                           "pinned": c["pinned"], "updated_at": c["updated_at"]} for c in page],
+                                        "has_more": len(chats) > count}))
+
+    def history_messages(self, session_id):
+        session = self.state.account(self.token()).get(session_id)
+        self.note(known=session is not None, seeded=bool(session and session["seeded"]))
+        if session is None:
+            return self.send(200, {"code": 0, "msg": "", "data": {"biz_code": 1, "biz_msg": "session not found", "biz_data": None}})
+        messages = session["messages"]
+        current = messages[-1]["message_id"] if messages else None
+        return self.send(200, envelope({
+            "chat_session": {"id": session["id"], "title": session["title"] or "New Chat", "title_type": "SYSTEM", "model_type": "default",
+                             "pinned": session["pinned"], "updated_at": session["updated_at"], "agent": "chat", "version": 2,
+                             "is_empty": not messages, "current_message_id": current},
+            "chat_messages": [dict(m, model="", status="FINISHED", feedback=m.get("feedback"), thinking_enabled=False, search_enabled=False,
+                                   incomplete_message=None, accumulated_token_usage=0) for m in messages],
+            "cache_control": "REPLACE"}))
+
+    def completion(self, body, session):
         prompt = str(body.get("prompt", ""))
         thinking, search = bool(body.get("thinking_enabled")), bool(body.get("search_enabled"))
-        request_id, response_id = self.state.next_ids()
+        refs = [str(r) for r in body.get("ref_file_ids") or []]
+        pow_state = self.state.check_pow(self.headers.get("X-DS-PoW-Response"), COMPLETION_PATH)
+        if pow_state != "ok":
+            self.note(kind="chat", pow=pow_state)
+            return self.pow_rejected(pow_state)
+        if session is None:
+            self.note(expected=False, kind="chat", pow="ok", error="unknown session")
+            return self.send(200, {"code": 0, "msg": "", "data": {"biz_code": 1, "biz_msg": "session not found", "biz_data": None}})
+        files = [self.state.files.get(r) for r in refs]
+        if not all(f is not None and f["status"] == "SUCCESS" for f in files):
+            # A completion may only reference files DeepSeek has finished processing (fetch_files said SUCCESS).
+            self.note(kind="chat", pow="ok", refs=len(refs), refs_ready=False)
+            return self.send(200, {"code": 0, "msg": "", "data": {"biz_code": 1, "biz_msg": "FILE_NOT_READY", "biz_data": None}})
+        messages = session["messages"]
+        parent = body.get("parent_message_id")
+        current = messages[-1]["message_id"] if messages else None
+        request_id = max((m["message_id"] for m in messages), default=0) + 1
+        response_id = request_id + 1
+        updated = time.time()
+        title = None
+        if not messages:
+            words = re.sub(r"[^\w\s-]", " ", prompt.rsplit("User request:\n", 1)[-1]).split()
+            title = " ".join(words[:4]) or "New Chat"
+        history = {}
+        if session["seeded"] and parent is not None:
+            # Continuing the chat "from another device": the parent must be its current message, as history_messages said.
+            history = {"scenario": "server_history" if parent == current else "server_history_wrong_parent", "parent_ok": parent == current}
         if "E2E-EXPIRE" in prompt:
             self.state.revoked.add(self.token())
-            self.note(scenario="expire", thinking=thinking, search=search, has_pow=bool(self.headers.get("X-DS-PoW-Response")))
+            self.note(scenario="expire", thinking=thinking, search=search, pow="ok")
             return self.send(401, {"code": 40003, "msg": "expired", "data": None})
+        prefix = ""
         if prompt.startswith(FENCE + "tool_result"):
             text, name, ok = tool_result_reply(prompt)
-            self.note(kind="tool_result", tool=name, ok=ok, has_pow=bool(self.headers.get("X-DS-PoW-Response")))
-            return self.stream(text_reply(text, request_id, response_id))
-        if prompt.startswith("[Agent mode"):
+            events = text_events(text, request_id, response_id)
+            self.note(kind="tool_result", tool=name, ok=ok, pow="ok")
+        elif prompt.startswith("[Agent mode"):
             tools = listed_tools(prompt)
-            reply = agent_reply(prompt)
-            requested = re.search(r'"name": "([A-Za-z0-9_-]+)"', reply)
-            self.note(kind="agent", tools=tools, requested=requested.group(1) if requested else None,
-                      has_pow=bool(self.headers.get("X-DS-PoW-Response")), refs=len(body.get("ref_file_ids") or []))
-            return self.stream(text_reply(reply, request_id, response_id))
-        self.note(kind="chat", thinking=thinking, search=search, refs=len(body.get("ref_file_ids") or []),
-                  has_pow=bool(self.headers.get("X-DS-PoW-Response")), slow="E2E-SLOW" in prompt)
-        stream = web_reply(prompt, thinking, search, request_id, response_id)
-        return self.stream(stream, slow="E2E-SLOW" in prompt)
+            text = agent_reply(prompt)
+            requested = re.search(r'"name": "([A-Za-z0-9_-]+)"', text)
+            events = text_events(text, request_id, response_id)
+            self.note(kind="agent", tools=tools, requested=requested.group(1) if requested else None, pow="ok", refs=len(refs))
+        elif refs:
+            events, text = file_reply(request_id, response_id, files)
+            prefix = "".join(named("update_file", {k: v for k, v in f.items() if k != "polls"}) for f in files)
+            self.note(kind="chat", pow="ok", refs=len(refs), refs_ready=True, scenario="upload")
+        elif thinking and search:
+            events, text = think_search_reply(request_id, response_id)
+            self.note(kind="chat", thinking=True, search=True, pow="ok", refs=0, scenario="think_search")
+        else:
+            events, text = web_reply(thinking, search, request_id, response_id)
+            self.note(kind="chat", thinking=thinking, search=search, refs=0, pow="ok", slow="E2E-SLOW" in prompt, **history)
+        user = ([{"id": 1, "type": "FILE", "files": [{k: v for k, v in f.items() if k != "polls"} for f in files]}] if files else []) + \
+            [{"id": 2 if files else 1, "type": "REQUEST", "content": prompt}]
+        messages.append({"message_id": request_id, "parent_id": parent, "role": "USER", "fragments": user})
+        messages.append({"message_id": response_id, "parent_id": request_id, "role": "ASSISTANT",
+                         "fragments": [{"id": len(user) + 1, "type": "RESPONSE", "content": text, "references": [], "stage_id": 1}]})
+        session["updated_at"] = updated
+        if title:
+            session["title"] = title
+        reply = stream(events, request_id, response_id, updated, title)
+        if prefix:
+            ready, rest = reply.split("\n\n", 1)
+            reply = ready + "\n\n" + prefix + rest
+        return self.stream(reply, slow="E2E-SLOW" in prompt)
 
     def stream(self, text, slow=False):
         data = text.encode()
