@@ -57,7 +57,9 @@ import app.dsandroid.workbench.WorkbenchPane
 import java.io.File
 import kotlinx.coroutines.launch
 
-enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS, ACCOUNTS }
+enum class AccountPage { CHAT, SETTINGS, LOGIN, SKILLS, ACCOUNTS, PROFILE, DATA_CONTROLS }
+/** Pages drawn on the official light-grey grouped background. */
+internal val GROUPED_PAGES = setOf(AccountPage.SETTINGS, AccountPage.PROFILE, AccountPage.DATA_CONTROLS)
 data class AccountMessage(
     val id: String, val user: Boolean, val text: String, val thinking: String = "", val prompt: String? = null,
     val steps: List<TurnStep> = emptyList(), val artifacts: List<Artifact> = emptyList(), val codeRuns: List<TurnStep.ToolCall> = emptyList(),
@@ -159,15 +161,30 @@ data class AccountUiState(
     /** Contact details DeepSeek shows for the signed-in account (Settings > Account settings); memory only. */
     val profileEmail: String? = null,
     val profilePhone: String? = null,
+    /** Settings > Personalization: finished thinking starts collapsed. */
+    val collapseThinking: Boolean = true,
+    /** Settings > Audio > Main language for dictation; empty follows the app language. */
+    val audioLanguage: String = "",
 )
 
 /** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
 @Composable
-fun AccountTheme(appearance: Appearance, content: @Composable () -> Unit) {
+fun AccountTheme(appearance: Appearance, textScale: Float = 1f, content: @Composable () -> Unit) {
     val dark = appearance == Appearance.DARK || (appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     CompositionLocalProvider(LocalOfficialColors provides if (dark) DarkOfficialColors else LightOfficialColors) {
-        MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography, content = content)
+        MaterialTheme(colorScheme = if (dark) DarkChatColors else LightChatColors, typography = OfficialTypography.scaled(textScale.coerceIn(0.85f, 1.3f)),
+            content = content)
     }
+}
+
+/** Settings > Personalization: whether finished thinking starts collapsed. */
+internal val LocalCollapseThinking = staticCompositionLocalOf { true }
+
+/** Where Back goes from each page: settings sub-pages return to Settings, everything else to the chat. */
+internal fun parentPage(page: AccountPage, signedIn: Boolean): AccountPage = when (page) {
+    AccountPage.PROFILE, AccountPage.DATA_CONTROLS -> AccountPage.SETTINGS
+    AccountPage.ACCOUNTS -> if (signedIn) AccountPage.SETTINGS else AccountPage.CHAT
+    else -> AccountPage.CHAT
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,6 +204,9 @@ fun DeepSeekShell(
     actions: AgentActions = AgentActions.None, accountActions: AccountActions = AccountActions.None,
     heldShare: Boolean = false, onUseApiKey: (String) -> Unit = {}, onOpenLink: (String) -> Unit = {}, onDismissNotice: () -> Unit = {},
     onPin: (String, Boolean) -> Unit = { _, _ -> }, onShareText: (String) -> Unit = {},
+    onTextScale: (Float) -> Unit = {}, onCollapseThinking: (Boolean) -> Unit = {}, onAudioLanguage: (String) -> Unit = {},
+    onAppLanguage: (String) -> Unit = {}, appLanguage: String = "", onDeleteAllChats: () -> Unit = {},
+    onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -201,16 +221,28 @@ fun DeepSeekShell(
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var attachmentTray by rememberSaveable { mutableStateOf(false) }
-    var logoutDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<AccountHistory?>(null) }
     var renameTitle by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<AccountHistory?>(null) }
     var editTarget by remember { mutableStateOf<AccountMessage?>(null) }
     var editText by remember { mutableStateOf("") }
-    var apiKey by remember { mutableStateOf("") }
     var sources by remember { mutableStateOf<List<WebCitation>?>(null) }
+    var shareSheet by remember { mutableStateOf(false) }
+    val settingsActions = object : SettingsActions {
+        override fun theme(value: Appearance) = onTheme(value)
+        override fun textScale(value: Float) = onTextScale(value)
+        override fun collapseThinking(value: Boolean) = onCollapseThinking(value)
+        override fun audioLanguage(tag: String) = onAudioLanguage(tag)
+        override fun appLanguage(tag: String) = onAppLanguage(tag)
+        override fun saveApiKey(value: String) = onApiKey(value)
+        override fun apiFallback() = onApiFallback()
+        override fun openLink(url: String) = onOpenLink(url)
+        override fun deleteAllChats() = onDeleteAllChats()
+        override fun logout() = onLogout()
+    }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
-    BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(AccountPage.CHAT) }
+    BackHandler(!drawer.isOpen && state.page != AccountPage.CHAT) { onNavigate(parentPage(state.page, state.signedIn)) }
+    CompositionLocalProvider(LocalCollapseThinking provides state.collapseThinking) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = state.page == AccountPage.CHAT, drawerContent = {
             HistoryDrawer(state, query, onQuery = { query = it.take(200) },
@@ -223,11 +255,16 @@ fun DeepSeekShell(
                 onSettings = { onNavigate(AccountPage.SETTINGS); scope.launch { drawer.close() } })
         }) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-                if (state.page == AccountPage.CHAT) ChatTopBar(state, onMenu = { scope.launch { drawer.open() } }, onNew = onNew)
-                else Box(Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                    TextButton(onClick = { onNavigate(AccountPage.CHAT) }, modifier = Modifier.align(Alignment.CenterStart)) { Text("Back") }
-                    Text(when (state.page) { AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"; else -> "Log in with DeepSeek" }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
-                        textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+                if (state.page == AccountPage.CHAT) ChatTopBar(state, onMenu = { scope.launch { drawer.open() } }, onNew = onNew,
+                    onShare = { shareSheet = true }.takeIf { state.messages.isNotEmpty() })
+                else Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).background(if (state.page in GROUPED_PAGES) LocalOfficialColors.current.groupedBackground else MaterialTheme.colorScheme.surface)) {
+                    IconButton(onClick = { onNavigate(parentPage(state.page, state.signedIn)) }, modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp)) {
+                        AppIcon(Glyph.BACK, "Back", Modifier.size(22.dp))
+                    }
+                    Text(when (state.page) {
+                        AccountPage.SETTINGS -> "Settings"; AccountPage.SKILLS -> "Skills"; AccountPage.ACCOUNTS -> "Accounts"
+                        AccountPage.PROFILE -> "Account settings"; AccountPage.DATA_CONTROLS -> "Data controls"; else -> "Log in with DeepSeek"
+                    }, Modifier.align(Alignment.Center).padding(horizontal = 72.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
                 }
                 state.error?.let { error ->
                     Text(error, Modifier.fillMaxWidth().heightIn(max = 96.dp).background(MaterialTheme.colorScheme.errorContainer).verticalScroll(rememberScrollState()).padding(12.dp).testTag("account-error"),
@@ -258,49 +295,9 @@ fun DeepSeekShell(
                             ChatComposer(state, onDraft, onSend, onStop, { attachmentTray = true }, onError, speechInput, voiceTrigger, onVoiceHandled, actions::setAgent)
                         }
                     }
-                    AccountPage.SETTINGS -> Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Text("Account", style = MaterialTheme.typography.titleMedium)
-                        if (state.signedIn || state.logoutPending) {
-                            Text(if (state.logoutPending) "Session cleanup needs attention" else "DeepSeek account connected")
-                            OutlinedButton(onClick = { logoutDialog = true }, enabled = !state.busy) { Text(if (state.logoutPending) "Retry logout" else "Log out") }
-                        } else Button(onClick = onLogin) { Text("Log in with DeepSeek") }
-                        HorizontalDivider()
-                        Text("Accounts", style = MaterialTheme.typography.titleMedium)
-                        val inUse = state.accounts.firstOrNull { it.active }
-                        Text(if (inUse == null) "No account in use. Sign in, or choose one of your accounts." else "In use: ${inUse.label} (${inUse.type.label})",
-                            style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { onNavigate(AccountPage.ACCOUNTS) }, enabled = !state.busy, modifier = Modifier.testTag("manage-accounts")) {
-                            Text("Manage accounts (${state.accounts.size})")
-                        }
-                        HorizontalDivider()
-                        Text("Theme", style = MaterialTheme.typography.titleMedium)
-                        Appearance.entries.forEach { appearance ->
-                            Row(Modifier.fillMaxWidth().clickable { onTheme(appearance) }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = state.appearance == appearance, onClick = { onTheme(appearance) })
-                                Text(when (appearance) { Appearance.SYSTEM -> "System"; Appearance.LIGHT -> "Light"; Appearance.DARK -> "Dark" })
-                            }
-                        }
-                        HorizontalDivider()
-                        Text("API-key mode", style = MaterialTheme.typography.titleMedium)
-                        OutlinedTextField(apiKey, { apiKey = it }, label = { Text("DeepSeek API key") }, singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(), enabled = !state.busy,
-                            modifier = Modifier.fillMaxWidth().testTag("fallback-key"))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { onApiKey(apiKey); apiKey = "" }, enabled = !state.busy && apiKey.isNotBlank()) { Text("Save API key") }
-                            if (state.hasApiKey) TextButton(onClick = { apiKey = ""; onApiKey("") }, enabled = !state.busy) { Text("Clear API key") }
-                        }
-                        if (state.hasApiKey) Text("API key saved securely", style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = onApiFallback, enabled = !state.busy) { Text("API-key fallback") }
-                        Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.", style = MaterialTheme.typography.bodySmall)
-                        HorizontalDivider()
-                        Text("About", style = MaterialTheme.typography.titleMedium)
-                        Text("DeepSeek Android \u00B7 ${app.dsandroid.BuildConfig.VERSION_NAME}\nUnofficial client. Not affiliated with or endorsed by DeepSeek.")
-                        Text("Light layout follows the measured reference. Dark colors and the abstract mark are original interpretations. Web login and chat use an unofficial protocol that may change.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        HorizontalDivider()
-                        Text("Agent", style = MaterialTheme.typography.titleMedium)
-                        Text("Agent mode lets DeepSeek use tools on this phone: Python, files, PDFs and documents, skills and web pages. Downloads and network access ask first.", style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { onNavigate(AccountPage.SKILLS) }, enabled = !state.busy) { Text("Skills and Python toolsets") }
-                    }
+                    AccountPage.SETTINGS -> SettingsPage(state, settingsActions, appLanguage, onNavigate, Modifier.weight(1f))
+                    AccountPage.PROFILE -> ProfilePage(state, settingsActions, Modifier.weight(1f))
+                    AccountPage.DATA_CONTROLS -> DataControlsPage(state, settingsActions, Modifier.weight(1f))
                     AccountPage.SKILLS -> SkillsPage(state, actions, Modifier.weight(1f))
                     AccountPage.ACCOUNTS -> AccountsPage(state, accountActions, Modifier.weight(1f))
                     AccountPage.LOGIN -> {
@@ -324,9 +321,12 @@ fun DeepSeekShell(
             }
         }
     }
+    }
     if (attachmentTray) AttachmentSheet(enabled = !state.busy && !state.importing, onDismiss = { attachmentTray = false },
         onPick = { label -> attachmentTray = false; onAttachment(label) })
     sources?.let { list -> SourcesSheet(list, onDismiss = { sources = null }, onOpen = onOpenLink) }
+    if (shareSheet) ShareChatSheet(onDismiss = { shareSheet = false }, onShareText = { shareSheet = false; onShareChat() },
+        onExportPdf = { shareSheet = false; onExportChatPdf() })
     state.chatFiles?.let { files ->
         ModalBottomSheet(onDismissRequest = actions::hideChatFiles) {
             Text("Files in this chat", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium)
@@ -368,10 +368,6 @@ fun DeepSeekShell(
             confirmButton = { TextButton(onClick = { editTarget = null; onEdit(message.id, editText) }, enabled = editText.isNotBlank()) { Text("Resend") } },
             dismissButton = { TextButton(onClick = { editTarget = null }) { Text("Cancel") } })
     }
-    if (logoutDialog) AlertDialog(onDismissRequest = { logoutDialog = false }, title = { Text("Log out of DeepSeek?") },
-        text = { Text("This clears this app's DeepSeek session and local account chat history. Other sites' cookies are kept.") },
-        confirmButton = { TextButton(onClick = { logoutDialog = false; onLogout() }) { Text("Log out") } },
-        dismissButton = { TextButton(onClick = { logoutDialog = false }) { Text("Cancel") } })
     state.confirmation?.let { request ->
         AlertDialog(onDismissRequest = { actions.answerTool(false) }, title = { Text("Allow this action?") },
             text = { Text(request.summary, Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()).testTag("tool-confirmation")) },

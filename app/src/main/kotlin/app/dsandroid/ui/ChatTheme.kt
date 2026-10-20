@@ -67,6 +67,14 @@ internal val OfficialTypography = Typography(
     headlineSmall = OfficialBody.copy(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
 )
 
+/** The type scale at the user's text size (Settings > Font size); only the styles set above, which all have sizes. */
+internal fun Typography.scaled(factor: Float): Typography {
+    if (factor == 1f) return this
+    fun TextStyle.by() = copy(fontSize = fontSize * factor, lineHeight = lineHeight * factor)
+    return copy(bodyLarge = bodyLarge.by(), bodyMedium = bodyMedium.by(), bodySmall = bodySmall.by(), labelSmall = labelSmall.by(),
+        labelMedium = labelMedium.by(), titleMedium = titleMedium.by(), titleLarge = titleLarge.by(), headlineSmall = headlineSmall.by())
+}
+
 @Composable
 fun ChatTheme(appearance: Appearance = Appearance.SYSTEM, fontScale: Float = 1f, content: @Composable () -> Unit) {
     val dark = when (appearance) { Appearance.SYSTEM -> isSystemInDarkTheme(); Appearance.LIGHT -> false; Appearance.DARK -> true }

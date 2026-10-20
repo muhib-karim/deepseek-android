@@ -139,7 +139,7 @@ class AccountViewModel @JvmOverloads constructor(
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
                 val agent = appearancePrefs.getBoolean("agent_mode", false)
                 mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent, textScale = loaded.settings.fontScale,
-                    apiKeyProfile = apiProfileOf(loaded.settings)) }
+                    apiKeyProfile = apiProfileOf(loaded.settings), collapseThinking = loaded.settings.collapseThinking, audioLanguage = loaded.settings.audioLanguage) }
                 if (expired) expireSession()
                 else {
                     if (session == null && webAccount != null) {
@@ -189,7 +189,8 @@ class AccountViewModel @JvmOverloads constructor(
                 withContext(Dispatchers.IO) { store?.saveRegistry(next) }
                 registry = next
             }
-            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config), textScale = config.fontScale) }
+            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config), textScale = config.fontScale,
+                collapseThinking = config.collapseThinking, audioLanguage = config.audioLanguage) }
             publishAccounts()
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The API key settings could not be read securely. Try again.") }
@@ -614,6 +615,96 @@ class AccountViewModel @JvmOverloads constructor(
     private fun displayMessages() = current.messages.map {
         AccountMessage(it.id, it.user, if (it.user) it.text else CITATION.replace(it.text) { match -> "[${match.groupValues[1]}]" }, it.thinking, it.prompt,
             it.steps, it.artifacts, it.codeRuns, it.revisionOf, it.thinkingSeconds, it.citations)
+    }
+
+    // ---- Settings (docs/reference/SCREEN_SPEC.md "settings"): stored in the encrypted settings shared with the API-key client. ----
+
+    fun setTextScale(value: Float) = updateSettings("The text size could not be saved.") { it.copy(fontScale = value.coerceIn(0.85f, 1.3f)) }
+    fun setCollapseThinking(value: Boolean) = updateSettings("The setting could not be saved.") { it.copy(collapseThinking = value) }
+    fun setAudioLanguage(tag: String) = updateSettings("The voice language could not be saved.") { it.copy(audioLanguage = tag.take(35)) }
+
+    private fun updateSettings(failure: String, change: (AppSettings) -> AppSettings) {
+        viewModelScope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) { settings().let { store -> change(store.load()).also(store::save) } }
+                mutable.update { it.copy(textScale = saved.fontScale, collapseThinking = saved.collapseThinking, audioLanguage = saved.audioLanguage) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice(failure) }
+        }
+    }
+
+    /**
+     * Settings > Data controls > Delete all chats: each chat is deleted on DeepSeek, then on this phone with its files.
+     * A chat DeepSeek does not delete stays, so nothing disappears here while it remains on the service.
+     */
+    fun deleteAllChats() {
+        if (!available() || locked()) return
+        val all = chats
+        mutable.update { it.copy(busy = true, error = null) }
+        sending = viewModelScope.launch {
+            try {
+                val kept = mutableListOf<WebChat>()
+                for (chat in all) {
+                    val deleted = try {
+                        chat.sessionId?.let { client.deleteSession(credentials(), it) }
+                        true
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (expired: SessionExpired) { throw expired }
+                    catch (_: Exception) { false }
+                    if (deleted) withContext(Dispatchers.IO) { File(agentWorkspace.root, chatDir(chat.id)).deleteRecursively(); workbench.deleteChat(chat.id) }
+                    else kept += chat
+                }
+                withContext(Dispatchers.IO) { persistence.withLock { history.save(kept) } }
+                chats = kept
+                if (kept.none { it.id == current.id }) { current = emptyChat(); clearUploads() }
+                mutable.update { it.copy(history = summaries(), title = current.title, conversationId = current.id, messages = displayMessages(),
+                    requiresNewChat = current.blocked, pane = null, chatFiles = null) }
+                if (kept.isNotEmpty()) notice("${kept.size} chat${if (kept.size == 1) " was" else "s were"} not deleted on DeepSeek and stayed. Try again later.")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { reportFailure(error) }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    /** The open chat as Markdown, for Share chat. AI replies are marked as such. */
+    fun chatMarkdown(): String = buildString {
+        appendLine("# ${current.title}")
+        appendLine()
+        current.messages.filter { it.text.isNotBlank() }.forEach { message ->
+            appendLine(if (message.user) "**You**" else "**DeepSeek**")
+            appendLine()
+            appendLine(if (message.user) message.text.trim() else CITATION.replace(message.text.trim()) { "[${it.groupValues[1]}]" })
+            appendLine()
+        }
+        append("_Shared from DeepSeek Android, an unofficial client. Replies are AI-generated, for reference only._")
+    }
+
+    /** Share chat > Export as PDF: the whole chat laid out as a PDF card under the last reply. */
+    fun exportChatPdf() {
+        if (!available() || locked()) return
+        val last = current.messages.lastOrNull { !it.user && it.text.isNotBlank() } ?: return notice("There is nothing to export yet.")
+        val chatId = current.id
+        val title = current.title.ifBlank { "DeepSeek chat" }
+        val markdown = chatMarkdown()
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                val artifact = withContext(Dispatchers.IO) {
+                    CreatePdfTool().run(buildJsonObject {
+                        put("title", title)
+                        put("markdown", markdown)
+                        put("file_path", "exports/" + title.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50).ifEmpty { "chat" } + "-chat.pdf")
+                    }, ToolContext(agentWorkspace, chatDir = chatDir(chatId))).artifacts.single()
+                }
+                if (current.id == chatId) {
+                    current = current.copy(messages = current.messages.map { if (it.id == last.id) it.copy(artifacts = (it.artifacts + artifact).distinctBy { a -> a.path }) else it })
+                    persist()
+                    mutable.update { it.copy(messages = displayMessages()) }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The PDF could not be created.") }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
     }
 
     /** Pinning is local to this phone; pinned chats lead the drawer. */

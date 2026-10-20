@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,6 +35,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -315,7 +317,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     val workbenchPane = remember {
         movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, browser::solve, saveAs, shareText) }
     }
-    AccountTheme(state.appearance) {
+    AccountTheme(state.appearance, state.textScale) {
         // An active API-key profile chats through the API-key client; Settings > Accounts and sign-in still use the account shell.
         val apiProfile = state.accounts.firstOrNull { it.active && it.type == AccountType.API_KEY }
         val shellPage = state.page == AccountPage.ACCOUNTS || state.page == AccountPage.LOGIN
@@ -402,6 +404,12 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         heldShare = sharedInput != null,
                         onUseApiKey = { key -> vm.useApiKey(key) { apiFallback = true } }, onOpenLink = ::openLink, onDismissNotice = vm::dismissNotice,
                         onPin = vm::pin, onShareText = { text -> shareText("DeepSeek answer", text) },
+                        onTextScale = vm::setTextScale, onCollapseThinking = vm::setCollapseThinking, onAudioLanguage = vm::setAudioLanguage,
+                        onAppLanguage = { tag ->
+                            AppCompatDelegate.setApplicationLocales(if (tag.isEmpty()) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag))
+                        },
+                        appLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
+                        onDeleteAllChats = vm::deleteAllChats, onShareChat = { shareText("DeepSeek chat", vm.chatMarkdown()) }, onExportChatPdf = vm::exportChatPdf,
                     )
                 }
                 if (wide && pane != null) {

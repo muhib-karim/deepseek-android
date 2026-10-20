@@ -27,12 +27,15 @@ fun AccountDictation(
     input: AccountSpeechInput? = null,
     trigger: Int = 0,
     onTriggerConsumed: () -> Unit = {},
+    /** Settings > Audio > Main language (a BCP 47 tag); empty uses the recognizer's default. */
+    language: String = "",
 ) {
     val context = LocalContext.current
+    val latestLanguage by rememberUpdatedState(language)
     val system = remember(context) {
         val recognizer = VoiceRecognizer(context)
         object : AccountSpeechInput {
-            override fun listen(result: (String) -> Unit, failed: () -> Unit) = recognizer.listen("", result, failed)
+            override fun listen(result: (String) -> Unit, failed: () -> Unit) = recognizer.listen(latestLanguage, result, failed)
             override fun cancel() = recognizer.cancel()
         }
     }
