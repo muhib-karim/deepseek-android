@@ -199,5 +199,7 @@ metadata remains unchanged. See BUILD_NOTES for validation and packaging follow-
 | v0.1.0 (released) | 6 |
 | v0.2.0 (released) | 26 |
 | v0.3.0 (released) | 25 |
-| v0.4.0 (planned, hardening) | 7 |
-| **All** | **57 features shipped + 7 hardening items planned** |
+| v0.4.0 (released, hardening) | 7 |
+| v0.5.0 / v0.5.1 (released) | account mode, see [ACCOUNT_CLIENT_050.md](ACCOUNT_CLIENT_050.md) |
+| v0.6.0 (released) | Agent, see [AGENT_MODE.md](AGENT_MODE.md) |
+| **v0.1.0-v0.4.0** | **64 rows shipped** (row 64 partial, above) |

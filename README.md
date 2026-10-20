@@ -3,8 +3,8 @@
 An English, open-source Android agent app for DeepSeek and OpenAI-compatible
 models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Current version: **v0.6.0 "Agent"** (not audited; validation pending in CI, see below). The
-latest published release before it is v0.5.1. Each GitHub release carries a debug APK, a signed
+Current version: **v0.6.0 "Agent"**, released 2026-10-18 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v0.6.0)). Not
+independently audited. Each GitHub release carries a debug APK, a signed
 minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitHub Actions.
 Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
 emulators.
@@ -49,9 +49,11 @@ packages it lists before confirming.
 several tens of MB larger than v0.5.x. 32-bit-only (armeabi-v7a) phones are not supported from this
 version. No install permission was added: INTERNET plus runtime RECORD_AUDIO remain the only ones.
 
-Status: implementation and tests are complete; CI unit tests, lint, builds and the emulator tests
-(agent PDF flow on the mocked server, on-device Python) are pending. No live agent run against
-chat.deepseek.com has been recorded yet.
+Status: CI is green for v0.6.0: core and app unit tests, lint, debug and signed release builds, and
+62/62 instrumented tests on an API 34 x86_64 emulator (including prompt -> `create_pdf` tool call ->
+PDF artifact card, and on-device Python). A live agent turn against chat.deepseek.com with a real
+account is a manual check and has not been recorded yet. Full table:
+[docs/AGENT_MODE.md](docs/AGENT_MODE.md).
 
 ## v0.5.0: DeepSeek account mode
 
