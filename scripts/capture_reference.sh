@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# CI only (reference.yml, inside android-emulator-runner): install the verified official split APKs unchanged on the
+# disposable emulator and run the reference driver. The viewport matches our own capture tests (1080x2200, 440 dpi,
+# font scale 1.0) so the official screens and ours can be compared at identical settings.
+set -uo pipefail
+if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
+  echo 'This script runs only in GitHub Actions.' >&2
+  exit 2
+fi
+APKS="${REFERENCE_APK_DIR:?verified APKs are staged by fetch_verify_reference.sh}"
+OUT=reference-output
+mkdir -p "$OUT/raw" "$OUT/device"
+
+adb wait-for-device
+adb shell getprop ro.build.version.sdk > "$OUT/device/sdk.txt"
+adb shell getprop ro.product.cpu.abilist > "$OUT/device/abilist.txt"
+adb shell wm size 1080x2200
+adb shell wm density 440
+adb shell settings put system font_scale 1.0
+adb shell settings put secure show_ime_with_hard_keyboard 1
+{
+  echo "sdk=$(cat "$OUT/device/sdk.txt")"
+  echo "abilist=$(cat "$OUT/device/abilist.txt")"
+  echo "viewport=1080x2200@440dpi font_scale=1.0"
+} > "$OUT/device/settings.txt"
+
+# Every split, unchanged and together (the set was verified before this step).
+if ! adb install-multiple -r -g "$APKS"/*.apk > "$OUT/device/install.txt" 2>&1; then
+  echo 'The official APK could not be installed on this emulator (see device/install.txt and device/abilist.txt).' >&2
+  exit 1
+fi
+adb shell dumpsys package com.deepseek.chat | grep -E 'versionCode|versionName|primaryCpuAbi' > "$OUT/device/package.txt" || true
+
+version="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%s (%s)" % (d["version_name"], d["version_code"]))' "$OUT/source/verification.json")"
+python3 -I e2e/reference/driver.py --out "$OUT/raw" --version "$version"
+status=$?
+adb shell cmd uimode night no || true
+exit $status
