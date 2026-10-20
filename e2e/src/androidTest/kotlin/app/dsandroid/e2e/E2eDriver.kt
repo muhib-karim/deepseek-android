@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -117,10 +118,13 @@ class E2eDriver(journey: String) {
         }
     }
 
-    /** Waits until [condition] holds, polling the screen; fails with [what]. */
+    /**
+     * Waits until [condition] holds, polling the screen; fails with [what]. A view that changes while the condition reads
+     * it (StaleObjectException, common inside a loading WebView) counts as "not yet".
+     */
     fun waitUntil(what: String, timeoutMs: Long = 20_000, condition: () -> Boolean) {
         val end = SystemClock.uptimeMillis() + timeoutMs
-        while (!condition()) {
+        while (!(try { condition() } catch (_: StaleObjectException) { false })) {
             if (SystemClock.uptimeMillis() > end) {
                 step("timeout-$what")
                 throw AssertionError("Timed out: $what")

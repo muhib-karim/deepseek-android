@@ -36,7 +36,7 @@ class LiveLoginTest {
         val ready = Pattern.compile("Sign-in page ready: .+ \\((\\d+) characters\\)")
         var state = ""
         e2e.waitUntil("text on DeepSeek's sign-in page", 90_000) {
-            state = e2e.device.findObject(E2eDriver.res("login-page-state"))?.text.orEmpty()
+            state = runCatching { e2e.device.findObject(E2eDriver.res("login-page-state"))?.text }.getOrNull().orEmpty()
             ready.matcher(state).matches() || e2e.device.findObjects(By.clazz("android.webkit.WebView")).any { hasText(it, PAGE_TEXT) }
         }
         e2e.step("in-app-sign-in-page")
@@ -70,8 +70,12 @@ class LiveLoginTest {
 
     /** Chrome's first-run screens on a fresh image ("Use without an account", "No thanks") stand between the hand-off and the page. */
     private fun dismissBrowserFirstRun() {
-        (e2e.device.findObject(By.res("com.android.chrome:id/signin_fre_dismiss_button"))
-            ?: e2e.device.findObject(By.text(Pattern.compile("(?i)(use without an account|no,? thanks)"))))?.click()
+        // Chrome can show several in a row (sign-in, notifications, ...); this runs on every poll of the address-bar wait.
+        runCatching {
+            (e2e.device.findObject(By.res("com.android.chrome:id/signin_fre_dismiss_button"))
+                ?: e2e.device.findObject(By.res("com.android.chrome:id/negative_button"))
+                ?: e2e.device.findObject(By.text(Pattern.compile("(?i)(use without an account|no,? thanks)"))))?.click()
+        }
     }
 
     private fun chooseBrowserIfAsked() {
@@ -80,8 +84,10 @@ class LiveLoginTest {
         e2e.device.findObject(By.text(Pattern.compile("(?i)just once")))?.click()
     }
 
-    private fun hasText(node: UiObject2, pattern: Pattern): Boolean =
+    /** Walks a WebView's accessibility tree; the tree changes while a page loads, so a stale node means "not found yet". */
+    private fun hasText(node: UiObject2, pattern: Pattern): Boolean = runCatching {
         (node.text?.let { pattern.matcher(it).matches() } == true) ||
             (node.contentDescription?.let { pattern.matcher(it).matches() } == true) ||
             node.children.any { hasText(it, pattern) }
+    }.getOrDefault(false)
 }
