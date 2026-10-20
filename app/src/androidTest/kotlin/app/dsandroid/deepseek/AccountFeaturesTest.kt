@@ -463,6 +463,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         launch(signedIn = false)
         compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
         compose.onNodeWithText("Log in with phone or email").performClick()
+        // The terms box is not ticked yet, so the route asks first, as in the official app.
+        compose.onNodeWithText("Terms of Use and Privacy Policy").assertIsDisplayed()
+        compose.onNodeWithTag("consent-agree").performClick()
         compose.onNodeWithTag("login-webview").assertIsDisplayed()
         compose.waitUntil(15_000) { compose.runOnIdle { browser.view.title == "Mock sign-in" } }
         assertTrue(requests.any { it.path == "/sign_in" })

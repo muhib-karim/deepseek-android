@@ -33,6 +33,8 @@ class LaunchTest {
         compose.onNodeWithText("Continue with Google").assertIsDisplayed()
         compose.onNodeWithText("Log in with phone or email").assertIsDisplayed()
         compose.onNodeWithText("Paste session").assertIsDisplayed()
+        // DeepSeek's terms box, as on the official welcome screen: not ticked on a fresh install.
+        compose.onNodeWithTag("welcome-consent").performScrollTo().assertIsOff()
         compose.onNodeWithTag("account-composer").assertDoesNotExist()
         compose.onNodeWithText("Type a message or hold to speak", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithText("Think").assertDoesNotExist()

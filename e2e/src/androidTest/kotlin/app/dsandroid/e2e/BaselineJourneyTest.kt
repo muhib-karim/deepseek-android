@@ -2,6 +2,7 @@ package app.dsandroid.e2e
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,6 +41,8 @@ class BaselineJourneyTest {
 
     private fun pasteSession(token: String) {
         e2e.tap(E2eDriver.res("welcome-paste"), "Paste session")
+        // The first sign-in route asks for DeepSeek's terms (the welcome screen's box is not ticked on a fresh install).
+        e2e.device.wait(Until.findObject(By.text("Agree")), 3_000)?.click()
         e2e.type(By.clazz("android.widget.EditText"), token, "session field")
         e2e.step("paste-session")
         e2e.tap(By.text("Sign in"), "Sign in")

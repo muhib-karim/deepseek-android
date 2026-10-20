@@ -27,6 +27,7 @@ class LiveLoginTest {
         e2e.step("signed-out")
 
         e2e.tap(phoneEmail, "Log in with phone or email")
+        e2e.tap(By.text("Agree"), "Agree to DeepSeek's terms")
         // A Compose test tag does not name the embedded WebView, so the page is found by its class.
         e2e.waitFor(By.clazz("android.webkit.WebView"), "the in-app sign-in page", 30_000)
         // The page (or DeepSeek's security check, or its cookie banner) must show text; a page that stays blank is the failure

@@ -170,6 +170,7 @@ class SignInGateTest {
         assertLocked()
         // The sign-in page and the account list stay reachable, and back returns to the welcome screen.
         compose.onNodeWithText("Log in with phone or email").performClick()
+        if (compose.onAllNodesWithTag("consent-agree").fetchSemanticsNodes().isNotEmpty()) compose.onNodeWithTag("consent-agree").performClick()
         compose.onNodeWithTag("login-webview").assertIsDisplayed()
         compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()

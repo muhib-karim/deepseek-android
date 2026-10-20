@@ -179,6 +179,8 @@ data class AccountUiState(
     val remoteServers: List<RemoteServer> = emptyList(),
     /** Plugins & tools > Trusted execution: native Python, packages and skill functions may be offered (each call asks). */
     val trustedExecution: Boolean = false,
+    /** The welcome screen's terms box (DeepSeek's Terms of Use and Privacy Policy); remembered on this phone once ticked. */
+    val termsAgreed: Boolean = false,
 )
 
 /** Official palettes (shared with the API-key client, app.dsandroid.ui.ChatTheme) and type scale; see docs/reference/SCREEN_SPEC.md. */
@@ -220,7 +222,7 @@ fun DeepSeekShell(
     onPin: (String, Boolean) -> Unit = { _, _ -> }, onShareText: (String) -> Unit = {},
     onTextScale: (Float) -> Unit = {}, onCollapseThinking: (Boolean) -> Unit = {}, onAudioLanguage: (String) -> Unit = {},
     onAppLanguage: (String) -> Unit = {}, appLanguage: String = "", onDeleteAllChats: () -> Unit = {},
-    onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {},
+    onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {}, onTerms: (Boolean) -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -228,7 +230,7 @@ fun DeepSeekShell(
     if (!state.signedIn && state.page != AccountPage.LOGIN && state.page != AccountPage.ACCOUNTS) {
         WelcomeScreen(state, heldShare = heldShare, onBrowser = onBrowserSignIn, onGoogle = onBrowserSignIn, onPhoneEmail = onLogin,
             onPaste = onPasteSession, onUseApiKey = onUseApiKey, onAccounts = { onNavigate(AccountPage.ACCOUNTS) },
-            onDismissNotice = onDismissNotice, onOpenLink = onOpenLink, onFinishLogout = onLogout)
+            onDismissNotice = onDismissNotice, onOpenLink = onOpenLink, onFinishLogout = onLogout, onTerms = onTerms)
         return
     }
     val drawer = rememberDrawerState(DrawerValue.Closed)

@@ -160,7 +160,7 @@ class AccountViewModel @JvmOverloads constructor(
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
                 val agent = appearancePrefs.getBoolean("agent_mode", false)
                 mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent,
-                    apiKeyProfile = apiProfileOf(loaded.settings)).withSettings(loaded.settings) }
+                    apiKeyProfile = apiProfileOf(loaded.settings), termsAgreed = appearancePrefs.getBoolean("terms_agreed", false)).withSettings(loaded.settings) }
                 if (expired) expireSession()
                 else {
                     if (session == null && webAccount != null) {
@@ -194,6 +194,11 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun draft(value: String) { mutable.update { it.copy(draft = value.take(20_000)) } }
     fun notice(message: String) = notice(message, offerSwitchAccount = false)
+    /** The welcome screen's terms box; kept on this phone (cleared with the app's data). */
+    fun setTermsAgreed(agreed: Boolean) {
+        appearancePrefs.edit().putBoolean("terms_agreed", agreed).apply()
+        mutable.update { it.copy(termsAgreed = agreed) }
+    }
     fun dismissNotice() { mutable.update { it.copy(error = null, offerSwitchAccount = false) } }
     private fun notice(message: String, offerSwitchAccount: Boolean) { mutable.update { it.copy(error = message, offerSwitchAccount = offerSwitchAccount) } }
     fun appearance(value: Appearance) {

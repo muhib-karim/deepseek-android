@@ -430,6 +430,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         },
                         appLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
                         onDeleteAllChats = vm::deleteAllChats, onShareChat = { shareText("DeepSeek chat", vm.chatMarkdown()) }, onExportChatPdf = vm::exportChatPdf,
+                        onTerms = vm::setTermsAgreed,
                     )
                 }
                 if (wide && pane != null) {

@@ -120,20 +120,32 @@ embedded browsers), **Log in with phone or email** (DeepSeek's own sign-in page 
 No chat, drawer or composer exists until a session is validated with DeepSeek (`GET /api/v0/users/current`).
 Tags: `welcome-screen`, `welcome-browser`, `welcome-google`, `welcome-phone-email`, `welcome-paste`.
 
-**Captured [C] (1.4.1, an older interface):** the signed-out welcome has "Contact us" at the top right, the whale logo
-and wordmark, then the sign-in buttons and the consent checkbox ("I confirm that I have read and agree to DeepSeek's
-Terms of Use and Privacy Policy"). Offline, as captured, it offers **Continue with Phone** and **Continue with Password**
-and no Google button; online, the same build also showed **Continue with Google** and **Sign up**, but a server-driven
-"Update Required / Please update to the latest version to ensure all features work properly / Update now" modal covered
-every screen (runs 39445093258, 39445097855), which is why the capture runs offline. Tapping a sign-in route before the
-checkbox is ticked opens a "Terms of Use and Privacy Policy" consent dialog. Light and dark welcome were both captured.
-**Ours** keeps the order (mark and wordmark, routes, consent text with links) without the checkbox gate: our consent line
-links DeepSeek's Terms of Use and Privacy Policy, and DeepSeek's own sign-in page asks for consent itself.
+**Captured [C] (1.4.1, an older interface; runs 39447927215 and 39449534982, offline, light and dark; described from the
+reviewer's reading of the run screenshots, no image copied):** the signed-out welcome has no back arrow and shows
+"Contact us" at the top right, the whale logo and wordmark, **Continue with Phone** and **Continue with Password**, and
+the consent checkbox ("I confirm that I have read and agree to DeepSeek's Terms of Use and Privacy Policy"). Online, the
+same build also showed **Continue with Google** and **Sign up**, but a server-driven "Update Required / Please update to
+the latest version to ensure all features work properly / Update now" modal covered every screen (runs 39445093258,
+39445097855), which is why the capture runs offline.
+- **intro**: "Welcome to DeepSeek" consent sheet with **Disagree** / **Agree**.
+- **terms-required**: tapping a route before ticking the box opens the "Terms of Use and Privacy Policy" dialog with
+  **Cancel** / **Agree**.
+- **login-phone** ("Log in with phone"): "+86 Phone number", a code field with **Send code**, blue full-width **Log in**.
+- **login-password** ("Log in with password"): "+86 Phone number", Password with an eye toggle, "Forgot password?" link,
+  **Log in**.
+- **forgot-password** ("Reset password"): phone, code with **Send code**, **Continue**.
+- Sub-screens have a back arrow at the top left and "Contact us" at the top right.
+
+**Ours** follows the welcome layout: **Help** at the top right where the official app has "Contact us" (it opens this
+project's issue tracker, never DeepSeek's support), mark and wordmark, the routes (browser first), and the same terms box;
+tapping a DeepSeek route before ticking it shows the same "Terms of Use and Privacy Policy" dialog with Cancel / Agree,
+and the agreement is remembered on the phone. The phone, password and reset screens are DeepSeek's own web pages inside
+the app (Log in with phone or email), so their fields and validation are DeepSeek's.
 
 ### login-password, forgot-password, login-google
 Variants of the sign-in page. **Ours:** the in-app page is DeepSeek's own web sign-in (password, code and reset live
-there); Google always goes through the phone's browser. Not captured yet: the 1.4.1 capture stops at the consent dialog
-until the driver ticks the checkbox first (reviewer's driver fix).
+there); Google always goes through the phone's browser. Captured in 1.4.1 as login-phone, login-password and
+forgot-password (above).
 
 ### chat-empty: new chat [M]
 Top bar: menu icon left ("Open sidebar" [R]), title centred ("New chat" [R]; the model mode "Instant" / "Expert" [R]

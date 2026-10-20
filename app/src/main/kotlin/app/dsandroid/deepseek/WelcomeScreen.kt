@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,10 +47,15 @@ fun WelcomeScreen(
     onDismissNotice: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onFinishLogout: () -> Unit = {},
+    onTerms: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var more by rememberSaveable { mutableStateOf(false) }
     var keyDialog by rememberSaveable { mutableStateOf(false) }
+    // As in the official app, DeepSeek's sign-in routes need the terms box ticked; tapping one first asks (Cancel / Agree).
+    var pendingRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    val routes = mapOf("browser" to onBrowser, "google" to onGoogle, "phone" to onPhoneEmail, "paste" to onPaste)
+    fun route(key: String) { if (state.termsAgreed) routes.getValue(key)() else pendingRoute = key }
     val busy = state.validating || state.busy
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(
@@ -56,7 +63,11 @@ fun WelcomeScreen(
             .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).testTag("welcome-screen"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(56.dp))
+        // Where the official app has "Contact us": this app's own help and feedback page (never DeepSeek's support).
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { onOpenLink(ISSUES_URL) }, modifier = Modifier.testTag("welcome-help")) { Text("Help", color = muted) }
+        }
+        Spacer(Modifier.height(8.dp))
         AppMark(Modifier.size(64.dp))
         Spacer(Modifier.height(14.dp))
         Text("DeepSeek Android", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
@@ -83,19 +94,19 @@ fun WelcomeScreen(
         if (state.logoutPending) TextButton(onClick = onFinishLogout, enabled = !busy) { Text("Finish logging out") }
         Spacer(Modifier.height(12.dp))
         val wide = Modifier.fillMaxWidth().widthIn(max = 420.dp).heightIn(min = 48.dp)
-        Button(onClick = onBrowser, enabled = !busy, modifier = wide.testTag("welcome-browser"), shape = RoundedCornerShape(24.dp)) {
+        Button(onClick = { route("browser") }, enabled = !busy, modifier = wide.testTag("welcome-browser"), shape = RoundedCornerShape(24.dp)) {
             Text("Sign in with browser", fontWeight = FontWeight.Medium)
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onGoogle, enabled = !busy, modifier = wide.testTag("welcome-google"), shape = RoundedCornerShape(24.dp)) {
+        OutlinedButton(onClick = { route("google") }, enabled = !busy, modifier = wide.testTag("welcome-google"), shape = RoundedCornerShape(24.dp)) {
             Text("Continue with Google", color = MaterialTheme.colorScheme.onBackground)
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onPhoneEmail, enabled = !busy, modifier = wide.testTag("welcome-phone-email"), shape = RoundedCornerShape(24.dp)) {
+        OutlinedButton(onClick = { route("phone") }, enabled = !busy, modifier = wide.testTag("welcome-phone-email"), shape = RoundedCornerShape(24.dp)) {
             Text("Log in with phone or email", color = MaterialTheme.colorScheme.onBackground)
         }
         Spacer(Modifier.height(4.dp))
-        TextButton(onClick = onPaste, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("welcome-paste")) { Text("Paste session") }
+        TextButton(onClick = { route("paste") }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("welcome-paste")) { Text("Paste session") }
         Text("Google doesn't allow its sign-in inside apps, so browser and Google sign-in use your phone's browser once and bring " +
             "the session back here. Phone and email open DeepSeek's own sign-in page in the app.",
             Modifier.widthIn(max = 420.dp), style = MaterialTheme.typography.bodySmall, color = muted, textAlign = TextAlign.Center)
@@ -111,14 +122,26 @@ fun WelcomeScreen(
                 Text("Choose one of your accounts")
             }
         }
-        Spacer(Modifier.height(28.dp))
-        Text("DeepSeek can make mistakes. Signing in to DeepSeek means accepting DeepSeek's terms.", Modifier.widthIn(max = 420.dp),
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.widthIn(max = 420.dp).toggleable(state.termsAgreed, enabled = !busy, role = Role.Checkbox) { onTerms(it) }
+            .testTag("welcome-consent"), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = state.termsAgreed, onCheckedChange = null, enabled = !busy)
+            Text("I confirm that I have read and agree to DeepSeek's Terms of Use and Privacy Policy", Modifier.padding(start = 8.dp),
+                style = MaterialTheme.typography.labelMedium, color = muted)
+        }
+        Text("DeepSeek can make mistakes. Check important information.", Modifier.padding(top = 6.dp).widthIn(max = 420.dp),
             style = MaterialTheme.typography.labelSmall, color = muted, textAlign = TextAlign.Center)
         Row(horizontalArrangement = Arrangement.Center) {
             TextButton(onClick = { onOpenLink(TERMS_URL) }) { Text("Terms of Use", fontSize = 12.sp) }
             TextButton(onClick = { onOpenLink(PRIVACY_URL) }) { Text("Privacy Policy", fontSize = 12.sp) }
         }
         Spacer(Modifier.height(16.dp))
+    }
+    pendingRoute?.let { key ->
+        AlertDialog(onDismissRequest = { pendingRoute = null }, title = { Text("Terms of Use and Privacy Policy") },
+            text = { Text("To sign in, agree to DeepSeek's Terms of Use and Privacy Policy. They govern your DeepSeek account; this app is an unofficial client.") },
+            confirmButton = { TextButton(onClick = { pendingRoute = null; onTerms(true); routes.getValue(key)() }, modifier = Modifier.testTag("consent-agree")) { Text("Agree") } },
+            dismissButton = { TextButton(onClick = { pendingRoute = null }, modifier = Modifier.testTag("consent-cancel")) { Text("Cancel") } })
     }
     if (keyDialog) {
         var key by remember { mutableStateOf("") }
