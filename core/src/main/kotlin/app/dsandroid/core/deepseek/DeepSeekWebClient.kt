@@ -22,6 +22,11 @@ data class CompletionInput(
     val thinking: Boolean, val search: Boolean, val refFileIds: List<String> = emptyList(),
 )
 
+/** What users/current says about a valid session; deliberately not a data class, so debug strings carry no contact data. */
+class WebUser(val needBirthday: Boolean, val email: String?, val phone: String?) {
+    override fun toString() = "WebUser([redacted])"
+}
+
 class DeepSeekWebClient(
     client: OkHttpClient = OkHttpClient(),
     private val origin: HttpUrl = DeepSeekOrigin.URL.toHttpUrl(),
@@ -45,13 +50,21 @@ class DeepSeekWebClient(
         postJson(credentials, "/api/v0/chat_session/delete", buildJsonObject { put("chat_session_id", sessionId) }, allowEmptyAcknowledgement = true)
     }
 
-    /** New accounts must confirm a date of birth on the web page before chatting (users/current need_birthday). */
-    suspend fun needsBirthday(credentials: WebCredentials): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Asks DeepSeek whether [credentials] are a valid session (the sign-in gate: nothing unlocks without this answer).
+     * Throws [SessionExpired] when DeepSeek rejects the session; reads only the date-of-birth flag and the contact fields
+     * DeepSeek shows its owner (the response's own token field is ignored).
+     */
+    suspend fun currentUser(credentials: WebCredentials): WebUser = withContext(Dispatchers.IO) {
         val data = exchange(authenticatedRequest(credentials, "/api/v0/users/current").get().build()) { response ->
             decodeEnvelope(readBounded(response.body ?: throw EndpointChanged()))
         }
-        (data["need_birthday"] as? JsonPrimitive)?.booleanOrNull ?: false
+        fun text(key: String) = (data[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() && it.length <= 120 }
+        WebUser((data["need_birthday"] as? JsonPrimitive)?.booleanOrNull ?: false, text("email"), text("mobile_number"))
     }
+
+    /** New accounts must confirm a date of birth on the web page before chatting (users/current need_birthday). */
+    suspend fun needsBirthday(credentials: WebCredentials): Boolean = currentUser(credentials).needBirthday
 
     suspend fun uploadFile(credentials: WebCredentials, file: File, name: String, mime: String): String = withContext(Dispatchers.IO) {
         val mediaType = mime.toMediaType()

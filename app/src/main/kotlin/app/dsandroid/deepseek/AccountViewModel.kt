@@ -79,6 +79,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
+/** What happened to a session offered by the sign-in page, the browser link or Paste session. Only [SIGNED_IN] unlocks the app. */
+enum class SessionCheck { SIGNED_IN, NEEDS_BIRTHDAY, REJECTED, UNVERIFIED, BUSY }
+
 class AccountViewModel @JvmOverloads constructor(
     application: Application,
     baseUrl: String = DeepSeekOrigin.URL,
@@ -145,6 +148,7 @@ class AccountViewModel @JvmOverloads constructor(
                     }
                     publishAccounts()
                     mutable.update { it.copy(ready = true, signedIn = session != null, history = summaries()) }
+                    revalidate()
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -156,6 +160,8 @@ class AccountViewModel @JvmOverloads constructor(
     private fun available() = state.value.ready && !state.value.busy && !state.value.importing && !sessionChanging
     fun navigate(page: AccountPage) {
         if (!available()) return
+        // Signed out, only the welcome screen, the sign-in page and the account list exist (navigation-layer gate).
+        if (session == null && page !in SIGNED_OUT_PAGES) return
         if (page != AccountPage.LOGIN) addingAccount = false
         mutable.update { it.copy(page = page, error = null, offerSwitchAccount = false) }
         if (page == AccountPage.SKILLS) refreshToolsets()
@@ -188,7 +194,27 @@ class AccountViewModel @JvmOverloads constructor(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The API key settings could not be read securely. Try again.") }
     }
-    fun saveApiKey(value: String) {
+    /**
+     * "Use an API key" on the welcome screen: DeepSeek must accept the key (GET /user/balance) before it is saved and
+     * [then] opens the API-key client. The account route never switches to it by itself.
+     */
+    fun useApiKey(value: String, then: () -> Unit) {
+        if (!available()) return
+        val key = value.trim()
+        if (key.isEmpty() || key.length > 16_384 || key.any { it.code !in 33..126 }) { notice("Enter a valid API key without spaces."); return }
+        mutable.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            val reading = try { balanceClient.read(key) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+            mutable.update { it.copy(busy = false) }
+            if (reading == null || reading.error != null) {
+                notice("DeepSeek did not accept this API key. ${reading?.error ?: "Check your connection and try again."}")
+                return@launch
+            }
+            saveApiKey(key, then)
+        }
+    }
+
+    fun saveApiKey(value: String, then: () -> Unit = {}) {
         if (!available()) return
         val key = value.trim()
         if (key.length > 16_384 || key.any { it.isWhitespace() }) { notice("Enter a valid API key without spaces."); return }
@@ -214,22 +240,52 @@ class AccountViewModel @JvmOverloads constructor(
                 }
                 registry = next.first
                 publishAccounts()
-                mutable.update { it.copy(hasApiKey = key.isNotBlank(), apiKeyProfile = next.second, error = null) }
+                mutable.update { it.copy(hasApiKey = key.isNotBlank(), apiKeyProfile = next.second, error = null, busy = false) }
+                then()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { notice("The API key could not be saved securely. Try again.") }
             finally { mutable.update { it.copy(busy = false) } }
         }
     }
-    /** True only when the service says this freshly signed-in account still owes the age confirmation. */
-    suspend fun needsBirthday(token: SessionToken): Boolean = try {
-        client.needsBirthday(WebCredentials(token, DeepSeekCookies.read()))
-    } catch (cancelled: CancellationException) { throw cancelled }
-    catch (_: Exception) { false }
+    /** Sign-in for callers that only need yes or no; see [signIn]. */
+    suspend fun acceptSession(token: SessionToken): Boolean = signIn(token) == SessionCheck.SIGNED_IN
 
-    suspend fun acceptSession(token: SessionToken): Boolean {
-        if (!available() || token.bearer() == rejectedToken) return false
-        if (token.isExpired(System.currentTimeMillis())) { expireSession(); return false }
+    /**
+     * The sign-in gate: a session from the sign-in page, the browser link or Paste session unlocks chat only after DeepSeek
+     * confirms it (GET /api/v0/users/current). A rejected, unreachable or unreadable answer leaves the app locked with a notice.
+     */
+    suspend fun signIn(token: SessionToken): SessionCheck {
+        if (token.bearer() == rejectedToken) return SessionCheck.REJECTED
+        if (!available()) return SessionCheck.BUSY
+        if (token.isExpired(System.currentTimeMillis())) {
+            rejectedToken = token.bearer()
+            notice("This DeepSeek session has already expired. Sign in again.")
+            return SessionCheck.REJECTED
+        }
         sessionChanging = true
+        mutable.update { it.copy(validating = true, error = null, offerSwitchAccount = false) }
+        try {
+            val user = try {
+                client.currentUser(WebCredentials(token, DeepSeekCookies.read()))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SessionExpired) {
+                rejectedToken = token.bearer()
+                notice("DeepSeek did not accept this session. Sign in again, then send the new session.")
+                return SessionCheck.REJECTED
+            } catch (_: Exception) {
+                notice("The session could not be checked with DeepSeek. Check your connection and try again; chat stays locked until DeepSeek confirms it.")
+                return SessionCheck.UNVERIFIED
+            }
+            if (user.needBirthday) return SessionCheck.NEEDS_BIRTHDAY
+            return if (storeSession(token, user)) SessionCheck.SIGNED_IN else SessionCheck.UNVERIFIED
+        } finally {
+            sessionChanging = false
+            mutable.update { it.copy(validating = false) }
+        }
+    }
+
+    /** Stores a session DeepSeek has just confirmed; [sessionChanging] is already set by [signIn]. */
+    private suspend fun storeSession(token: SessionToken, user: WebUser): Boolean {
         return try {
             val sessions = store ?: withContext(Dispatchers.IO) { DeepSeekSessionStore(getApplication()) }.also { store = it }
             val target = registry.active?.takeIf { !addingAccount && it.type == AccountType.DEEPSEEK_WEB }
@@ -270,12 +326,34 @@ class AccountViewModel @JvmOverloads constructor(
             }
             publishAccounts()
             mutable.update { it.copy(signedIn = true, logoutPending = false, page = AccountPage.CHAT, error = null, offerSwitchAccount = false,
-                messages = displayMessages(), history = summaries(), title = current.title, conversationId = current.id, requiresNewChat = current.blocked, draft = "", attachments = emptyList()) }
+                messages = displayMessages(), history = summaries(), title = current.title, conversationId = current.id, requiresNewChat = current.blocked,
+                draft = "", attachments = emptyList(), profileEmail = user.email, profilePhone = user.phone) }
             true
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The session could not be stored securely. Login was not completed."); false }
-        finally { sessionChanging = false }
     }
+
+    /**
+     * A stored session was confirmed when it was saved; on start and on switching to it, DeepSeek is asked again in the
+     * background. An explicit rejection locks the app; being offline keeps the stored session (the next request decides).
+     */
+    private fun revalidate() {
+        val token = session ?: return
+        viewModelScope.launch {
+            try {
+                val user = client.currentUser(WebCredentials(token, DeepSeekCookies.read()))
+                if (session?.bearer() == token.bearer()) mutable.update { it.copy(profileEmail = user.email, profilePhone = user.phone) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SessionExpired) {
+                if (session?.bearer() == token.bearer() && !sessionChanging && !state.value.busy) {
+                    try { expireSession() } catch (_: Exception) { /* expireSession publishes the safe cleanup state. */ }
+                }
+            } catch (_: Exception) { /* Offline or service trouble: not a rejection. */ }
+        }
+    }
+
+    /** Chat, files, tools and code need a confirmed DeepSeek session (action-layer gate behind the welcome screen). */
+    private fun locked(): Boolean = (session == null).also { if (it) notice("Sign in to DeepSeek first.") }
     fun logout() {
         if (sessionChanging || !state.value.ready) return
         sessionChanging = true
@@ -293,7 +371,7 @@ class AccountViewModel @JvmOverloads constructor(
                     selectWebAccount(null)
                 }
                 rejectedToken = null
-                mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale, page = AccountPage.LOGIN) }
+                mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale, page = AccountPage.CHAT) }
                 publishAccounts()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -331,7 +409,7 @@ class AccountViewModel @JvmOverloads constructor(
             }
         } finally {
             mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale,
-                page = AccountPage.LOGIN, error = SessionExpired().message, logoutPending = !cleared) }
+                page = AccountPage.CHAT, error = SessionExpired().message, logoutPending = !cleared) }
             publishAccounts()
             sessionChanging = false
         }
@@ -343,7 +421,7 @@ class AccountViewModel @JvmOverloads constructor(
             requiresNewChat = false, error = null, offerSwitchAccount = false, pane = null, chatFiles = null, editorOutput = null) }
     }
     fun open(id: String) {
-        if (!available()) return
+        if (!available() || locked()) return
         current = chats.firstOrNull { it.id == id } ?: return
         clearUploads()
         mutable.update { it.copy(page = AccountPage.CHAT, title = current.title, conversationId = current.id, messages = displayMessages(), draft = "", attachments = emptyList(),
@@ -356,7 +434,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun delete(id: String) = changeHistory(id, delete = true)
     private fun changeHistory(id: String, delete: Boolean, title: String = "") {
-        if (!available()) return
+        if (!available() || locked()) return
         val chat = chats.firstOrNull { it.id == id } ?: return
         mutable.update { it.copy(busy = true, error = null) }
         sending = viewModelScope.launch {
@@ -384,13 +462,14 @@ class AccountViewModel @JvmOverloads constructor(
         }
     }
     fun importShared(uris: List<Uri>) {
+        if (locked()) return
         viewModelScope.launch {
             for (uri in uris.take(5)) { importAttachment(uri); importing?.join() }
             if (uris.size > 5) notice("Only the first five attachments were imported.")
         }
     }
     fun importAttachment(uri: Uri) {
-        if (!available()) return
+        if (!available() || locked()) return
         if (uploads.size >= 5) { notice("Attach up to five files per message."); return }
         mutable.update { it.copy(importing = true) }
         importing = viewModelScope.launch {
@@ -671,7 +750,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Export as PDF" on an assistant message: the answer is laid out as Markdown and attached as a card. */
     fun exportPdf(id: String) {
-        if (!available()) return
+        if (!available() || locked()) return
         val chatId = current.id
         val message = current.messages.firstOrNull { it.id == id && !it.user && it.text.isNotBlank() } ?: return
         val title = current.title.ifBlank { "DeepSeek answer" }
@@ -698,7 +777,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run button on a Python code block: executes on the device in this chat's folder; output and files attach to the message. */
     fun runCode(id: String, code: String) {
-        if (!available() || code.isBlank()) return
+        if (!available() || code.isBlank() || locked()) return
         val chatId = current.id
         val callId = UUID.randomUUID().toString()
         val argsJson = buildJsonObject { put("code", code) }.toString()
@@ -771,7 +850,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
 
     private fun preparePack(load: suspend () -> SkillPack) {
-        if (state.value.toolsetBusy) return
+        if (state.value.toolsetBusy || locked()) return
         mutable.update { it.copy(toolsetBusy = true, error = null) }
         viewModelScope.launch {
             try {
@@ -821,7 +900,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
 
     private fun toolsetTask(failure: String, block: suspend (AgentToolkit) -> Unit) {
-        if (state.value.toolsetBusy) return
+        if (state.value.toolsetBusy || locked()) return
         mutable.update { it.copy(toolsetBusy = true, error = null) }
         viewModelScope.launch {
             try { block(AgentToolkit.get(getApplication())) }
@@ -875,8 +954,7 @@ class AccountViewModel @JvmOverloads constructor(
         if (!available()) return
         val target = registry.account(id) ?: return
         if (id == registry.activeId) {
-            val page = if (target.type == AccountType.DEEPSEEK_WEB && session == null) AccountPage.LOGIN else AccountPage.CHAT
-            mutable.update { it.copy(page = page, error = null, offerSwitchAccount = false) }
+            mutable.update { it.copy(page = AccountPage.CHAT, error = null, offerSwitchAccount = false) }
             return
         }
         sessionChanging = true
@@ -897,9 +975,10 @@ class AccountViewModel @JvmOverloads constructor(
                     chats = if (session != null) loaded else emptyList()
                     current = emptyChat()
                     rejectedToken = null
-                    mutable.update { it.copy(signedIn = session != null, page = if (session != null) AccountPage.CHAT else AccountPage.LOGIN,
+                    mutable.update { it.copy(signedIn = session != null, page = AccountPage.CHAT,
                         title = current.title, conversationId = current.id, messages = emptyList(), history = summaries(), draft = "",
-                        attachments = emptyList(), requiresNewChat = false, pane = null, chatFiles = null) }
+                        attachments = emptyList(), requiresNewChat = false, pane = null, chatFiles = null, profileEmail = null, profilePhone = null) }
+                    revalidate()
                 } else {
                     val settings = settings()
                     val hasKey = withContext(Dispatchers.IO) {
@@ -1061,6 +1140,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Preview" on an HTML, SVG or Markdown code block. A revision reply reopens the artifact it revised. */
     fun previewCode(messageId: String, revisionOf: String?, language: String, code: String) {
+        if (locked()) return
         val kind = ArtifactKind.fromFence(language, code) ?: return
         val chatId = current.id
         val bench = workbench
@@ -1080,6 +1160,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Edit" on any other code block: a buffer in the editor, saved into this chat's folder on Save. */
     fun editCode(language: String, code: String) {
+        if (locked()) return
         val editorLanguage = EditorLanguage.forFence(language) ?: return
         val key = "code-" + WorkbenchIds.forFence(current.id, "editor", language, code)
         mutable.update { it.copy(pane = WorkbenchPane.Editor(EditorFile(key, editorLanguage.fileName("snippet"), code, editorLanguage, null, current.id)), editorOutput = null) }
@@ -1087,6 +1168,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Agent files: HTML, SVG and Markdown open in the panel (a rewritten file becomes a new version); returns false for others. */
     fun openArtifactFile(artifact: Artifact): Boolean {
+        if (locked()) return true
         val kind = ArtifactKind.fromFileName(artifact.fileName) ?: return false
         val chatId = current.id
         val bench = workbench
@@ -1114,6 +1196,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Edit" on a text file card or in Files in this chat: the workspace file itself, saved in place. */
     fun editArtifactFile(artifact: Artifact) {
+        if (locked()) return
         val language = EditorLanguage.forFileName(artifact.fileName) ?: return notice("This file type cannot be edited here.")
         val chatId = current.id
         viewModelScope.launch {
@@ -1132,6 +1215,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run in the panel: edited source becomes the next version. */
     fun runArtifact(id: String, source: String) {
+        if (locked()) return
         val bench = workbench
         viewModelScope.launch {
             try {
@@ -1203,6 +1287,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Editor Save: back into its workspace file, or a new file in this chat's folder for a code block. */
     fun saveEditor(text: String) {
+        if (locked()) return
         val file = (state.value.pane as? WorkbenchPane.Editor)?.file ?: return
         if (text.toByteArray(Charsets.UTF_8).size > MAX_EDITOR_BYTES) { notice("This file is larger than 1 MB; use Save as instead."); return }
         val chatDirectory = chatDir(file.chatId)
@@ -1232,6 +1317,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run on a Python file: the chat's on-device run_python worker; output appears under the editor. */
     fun runEditorPython(code: String) {
+        if (locked()) return
         val file = (state.value.pane as? WorkbenchPane.Editor)?.file ?: return
         if (state.value.editorBusy || code.isBlank()) return
         val chatDirectory = chatDir(file.chatId)
@@ -1252,7 +1338,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Files in this chat's folder (agent files, saved editor files), for the editor and the panel. */
     fun showChatFiles() {
-        if (!available()) return
+        if (!available() || locked()) return
         val root = File(agentWorkspace.root, chatDir(current.id))
         viewModelScope.launch {
             try {
@@ -1275,6 +1361,8 @@ class AccountViewModel @JvmOverloads constructor(
     companion object {
         /** The API key saved through Settings > API-key mode is also listed as this profile. */
         const val QUICK_KEY_ID = "api-key"
+        /** Pages that exist while signed out; everything else waits for a confirmed session. */
+        val SIGNED_OUT_PAGES = setOf(AccountPage.CHAT, AccountPage.LOGIN, AccountPage.ACCOUNTS)
         private const val MAX_EDITOR_BYTES = 1024 * 1024
     }
 }

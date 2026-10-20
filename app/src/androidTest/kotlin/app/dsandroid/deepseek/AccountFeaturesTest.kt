@@ -59,6 +59,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         private const val CREATE = "/api/v0/chat_session/create"
         private const val RENAME = "/api/v0/chat_session/update_title"
         private const val DELETE = "/api/v0/chat_session/delete"
+        private const val CURRENT = "/api/v0/users/current"
     }
     @get:Rule val compose = createAndroidComposeRule<SmokeActivity>()
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
@@ -89,6 +90,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
                 overrides[path]?.poll()?.let { return it }
                 return when (path) {
                     CREATE -> envelope("""{"chat_session":{"id":"remote-${sequence.incrementAndGet()}"}}""")
+                    CURRENT -> envelope("""{"id":"user","email":"t***@example.com","mobile_number":"","need_birthday":false}""")
                     "/api/v0/chat/create_pow_challenge" -> envelope("""{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"signature"}}""")
                     COMPLETION -> reply("Hello", " world.")
                     RENAME, DELETE -> envelope("{}")
@@ -426,7 +428,10 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithText("Log out", substring = false).performScrollTo().performClick()
         compose.onAllNodesWithText("Log out", substring = false).onLast().performClick()
         compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy }
-        assertEquals(AccountPage.LOGIN, vm.state.value.page)
+        // Logging out locks the app on the welcome screen.
+        assertEquals(AccountPage.CHAT, vm.state.value.page)
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithTag("account-composer").assertDoesNotExist()
         assertNull(DeepSeekSessionStore(app).load())
         assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())
         assertFalse(DeepSeekCookies.read().contains("synthetic-cookie"))
@@ -434,7 +439,8 @@ class AccountFeaturesTest(private val dark: Boolean) {
 
     @Test fun feature12_loginWebView() {
         launch(signedIn = false)
-        compose.onNodeWithText("Log in with DeepSeek").performClick()
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithText("Log in with phone or email").performClick()
         compose.onNodeWithTag("login-webview").assertIsDisplayed()
         compose.waitUntil(15_000) { compose.runOnIdle { browser.view.title == "Mock sign-in" } }
         assertTrue(requests.any { it.path == "/sign_in" })
@@ -450,7 +456,8 @@ class AccountFeaturesTest(private val dark: Boolean) {
 
     @Test fun feature13_sessionExpiry() {
         launch(); queue(CREATE, MockResponse().setResponseCode(401)); send()
-        compose.waitUntil(15_000) { vm.state.value.page == AccountPage.LOGIN && !vm.state.value.busy }
+        compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy && vm.state.value.page == AccountPage.CHAT }
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
         compose.onNodeWithTag("account-error").assertTextEquals(EXPIRED)
         assertNull(DeepSeekSessionStore(app).load()); assertFalse(vm.state.value.signedIn)
         assertTrue(vm.state.value.history.isEmpty())
@@ -465,7 +472,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
             if (index == 2) queue(COMPLETION, MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: $body\n\n"))
             else queue(CREATE, MockResponse().setHeader("Content-Type", "application/json").setBody(body))
             send("Expired again")
-            compose.waitUntil(15_000) { vm.state.value.page == AccountPage.LOGIN && !vm.state.value.busy }
+            compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy && vm.state.value.page == AccountPage.CHAT }
             compose.onNodeWithTag("account-error").assertTextEquals(EXPIRED)
             assertNull(DeepSeekSessionStore(app).load())
             assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())

@@ -142,6 +142,11 @@ data class AccountUiState(
     val chatFiles: List<ChatFileRow>? = null,
     /** The API-key profile the API settings currently use (its chats are scoped to it); null for none. */
     val apiKeyProfile: String? = null,
+    /** A session is being checked with DeepSeek (users/current); the app stays locked until it is confirmed. */
+    val validating: Boolean = false,
+    /** Contact details DeepSeek shows for the signed-in account (Settings > Account settings); memory only. */
+    val profileEmail: String? = null,
+    val profilePhone: String? = null,
 )
 
 /** Light measurements follow ui-spec.md; the dark palette is an original interpretation. */
@@ -181,7 +186,17 @@ fun DeepSeekShell(
     onRegenerate: () -> Unit = {}, onEdit: (String, String) -> Unit = { _, _ -> },
     onApiKey: (String) -> Unit = {}, speechInput: AccountSpeechInput? = null, voiceTrigger: Int = 0, onVoiceHandled: () -> Unit = {},
     actions: AgentActions = AgentActions.None, accountActions: AccountActions = AccountActions.None,
+    heldShare: Boolean = false, onUseApiKey: (String) -> Unit = {}, onOpenLink: (String) -> Unit = {}, onDismissNotice: () -> Unit = {},
 ) {
+    // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
+    // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
+    if (!state.ready) { LoadingScreen(); return }
+    if (!state.signedIn && state.page != AccountPage.LOGIN && state.page != AccountPage.ACCOUNTS) {
+        WelcomeScreen(state, heldShare = heldShare, onBrowser = onBrowserSignIn, onGoogle = onBrowserSignIn, onPhoneEmail = onLogin,
+            onPaste = onPasteSession, onUseApiKey = onUseApiKey, onAccounts = { onNavigate(AccountPage.ACCOUNTS) },
+            onDismissNotice = onDismissNotice, onOpenLink = onOpenLink, onFinishLogout = onLogout)
+        return
+    }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
@@ -261,13 +276,9 @@ fun DeepSeekShell(
                         Column(Modifier.widthIn(max = 840.dp).fillMaxHeight()) {
                             if (state.messages.isEmpty()) {
                                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    OriginalMark()
+                                    AppMark(Modifier.size(52.dp))
                                     Spacer(Modifier.height(16.dp))
-                                    Text(if (state.ready && !state.signedIn) "Sign in to start chatting" else "How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-                                    if (state.ready && !state.signedIn) {
-                                        Spacer(Modifier.height(20.dp))
-                                        SignInCard(onBrowser = onBrowserSignIn, onPaste = onPasteSession, onInApp = onLogin)
-                                    } else if (!state.ready) Text("Loading…", Modifier.padding(12.dp))
+                                    Text("How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                                 }
                             } else {
                                 val list = rememberLazyListState()
@@ -282,8 +293,6 @@ fun DeepSeekShell(
                                     }
                                 }
                             }
-                            if (state.ready && !state.signedIn && state.messages.isNotEmpty()) SignInCard(onBrowser = onBrowserSignIn, onPaste = onPasteSession, onInApp = onLogin,
-                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 8.dp))
                             if (state.requiresNewChat) TextButton(onClick = onNew, enabled = !state.busy, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Start a new chat to continue") }
                             state.attachments.forEachIndexed { index, name ->
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -496,25 +505,6 @@ private fun SkillsPage(state: AccountUiState, actions: AgentActions, modifier: M
 }
 
 @Composable
-private fun OriginalMark() {
-    val blue = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.size(width = 64.dp, height = 44.dp).semantics { contentDescription = "Original abstract mark" }) {
-        // Own simple whale silhouette drawn in code; no official logo geometry or extracted assets.
-        val w = size.width; val h = size.height
-        val body = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * .06f, h * .52f)
-            cubicTo(w * .08f, h * .18f, w * .52f, h * .10f, w * .70f, h * .40f)
-            lineTo(w * .86f, h * .12f); lineTo(w * .97f, h * .20f); lineTo(w * .84f, h * .48f)
-            cubicTo(w * .80f, h * .86f, w * .40f, h * 1.0f, w * .20f, h * .86f)
-            cubicTo(w * .10f, h * .78f, w * .05f, h * .66f, w * .06f, h * .52f); close()
-        }
-        drawPath(body, blue)
-        drawCircle(androidx.compose.ui.graphics.Color.White, radius = w * .035f, center = Offset(w * .26f, h * .44f))
-        drawLine(androidx.compose.ui.graphics.Color.White, Offset(w * .16f, h * .66f), Offset(w * .50f, h * .70f), w * .03f, StrokeCap.Round)
-    }
-}
-
-@Composable
 private fun OutlinedCircle(content: @Composable () -> Unit) {
     Box(Modifier.size(26.dp).border(1.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape), contentAlignment = Alignment.Center) { content() }
 }
@@ -575,8 +565,8 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
     onAgent: (Boolean) -> Unit = {}) {
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
-    // Signed out (no DeepSeek session; an API-key profile uses its own screen): no typing, no send, no chips or attachments; a tap on the field opens sign-in.
-    val locked = state.ready && !state.signedIn
+    // The chat page is composed only for a confirmed session; this stays as a second line of defence.
+    val locked = !state.signedIn
     val pillColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -624,25 +614,3 @@ private fun Composer(state: AccountUiState, draft: (String) -> Unit, send: (Bool
     }
 }
 
-/**
- * Signed out: every way to sign in, on the first screen. The browser route comes first because it works on every
- * phone, including ones where the in-app sign-in page stays blank; the in-app page is the secondary option.
- */
-@Composable
-private fun SignInCard(onBrowser: () -> Unit, onPaste: () -> Unit, onInApp: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier.padding(horizontal = 20.dp).widthIn(max = 420.dp).fillMaxWidth().testTag("signin-card"), shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("You're signed out. Chat is off until you sign in with your DeepSeek account.", textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = onBrowser, modifier = Modifier.fillMaxWidth().testTag("card-google"), shape = RoundedCornerShape(24.dp)) { Text("Continue with Google") }
-            OutlinedButton(onClick = onBrowser, modifier = Modifier.fillMaxWidth().testTag("card-browser"), shape = RoundedCornerShape(24.dp)) { Text("Sign in with browser") }
-            Text("Both open your browser once, then bring the session back to this app.", textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onInApp, modifier = Modifier.testTag("card-in-app")) { Text("Log in with DeepSeek") }
-                TextButton(onClick = onPaste, modifier = Modifier.testTag("card-paste")) { Text("Paste session") }
-            }
-        }
-    }
-}

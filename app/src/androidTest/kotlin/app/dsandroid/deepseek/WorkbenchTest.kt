@@ -85,6 +85,7 @@ class WorkbenchTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.requestUrl!!.encodedPath) {
                 "/api/v0/chat_session/create" -> envelope("""{"chat_session":{"id":"workbench-session"}}""")
+                "/api/v0/users/current" -> envelope("""{"id":"user","email":"t***@example.com","mobile_number":"","need_birthday":false}""")
                 "/api/v0/chat/create_pow_challenge" -> envelope("""{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"signature"}}""")
                 COMPLETION -> {
                     completions += Json.parseToJsonElement(request.body.readUtf8()).jsonObject

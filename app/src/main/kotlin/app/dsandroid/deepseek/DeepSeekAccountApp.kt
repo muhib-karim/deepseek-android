@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -103,11 +104,15 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     val ignoredLink by BrowserSessionInbox.ignored.collectAsStateWithLifecycle()
     LaunchedEffect(incomingSession) { if (incomingSession != null) browserToken = BrowserSessionInbox.take() }
     LaunchedEffect(ignoredLink) { if (ignoredLink) { BrowserSessionInbox.ignored.value = false; vm.notice(LINK_IGNORED_NOTICE) } }
-    // A session from the browser (link or paste) goes through the same checks as one captured on the sign-in page.
+    // A session from the browser (link or paste) goes through the same check as one captured on the sign-in page:
+    // DeepSeek must confirm it before anything unlocks; the view model shows why when it does not.
     fun useSession(token: SessionToken) = scope.launch {
         BrowserSessionInbox.clearStarted(context)
-        if (vm.needsBirthday(token)) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
-        else if (!vm.acceptSession(token)) vm.notice("DeepSeek did not accept this session. Sign in again in your browser and send it again.")
+        if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
+    }
+    fun openLink(url: String) {
+        try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: Exception) { vm.notice("No browser is available on this phone.") }
     }
     val dark = state.appearance == Appearance.DARK || (state.appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     DisposableEffect(context, dark) {
@@ -274,24 +279,28 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                     if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) { vm.notice(DeepSeekWebView.BLANK_NOTICE); browserGuide = true }
                 }
                 val token = browser.captureSession() ?: continue
-                // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
+                // Keep the sign-in page open until DeepSeek confirms the session (and a new account has answered its date-of-birth prompt).
                 if (System.currentTimeMillis() - birthdayChecked < 3000) continue
                 birthdayChecked = System.currentTimeMillis()
-                if (vm.needsBirthday(token)) { vm.notice(BIRTHDAY_NOTICE); continue }
-                if (vm.acceptSession(token)) break
+                when (vm.signIn(token)) {
+                    SessionCheck.SIGNED_IN -> break
+                    SessionCheck.NEEDS_BIRTHDAY -> vm.notice(BIRTHDAY_NOTICE)
+                    else -> Unit // Rejected or not confirmed: the notice explains it and the page stays open.
+                }
             }
         }
     }
-    LaunchedEffect(sharedInput, state.ready, state.busy, state.importing) {
-        if (sharedInput != null && state.ready && !state.busy && !state.importing) {
+    // Shared content and shortcuts wait behind the sign-in gate; they are used once DeepSeek has confirmed a session.
+    LaunchedEffect(sharedInput, state.ready, state.signedIn, state.busy, state.importing) {
+        if (sharedInput != null && state.ready && state.signedIn && !state.busy && !state.importing) {
             vm.newChat(); vm.draft(sharedInput.text)
             vm.importShared(sharedInput.uris)
             if (sharedInput.limited) vm.notice("Some shared content was too large or unsupported and was not imported.")
             sharedConsumed()
         }
     }
-    LaunchedEffect(launchRequest, state.ready, state.busy, state.importing) {
-        if (launchRequest != null && state.ready && !state.busy && !state.importing) {
+    LaunchedEffect(launchRequest, state.ready, state.signedIn, state.busy, state.importing) {
+        if (launchRequest != null && state.ready && state.signedIn && !state.busy && !state.importing) {
             vm.newChat()
             when (launchRequest.action) {
                 QuickAction.CAMERA -> pick("Camera")
@@ -361,7 +370,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         onLogin = { if (state.page == AccountPage.LOGIN) browser.openLogin() else vm.navigate(AccountPage.LOGIN) },
                         onFinishLogin = { scope.launch {
                             val token = browser.captureSession()
-                            if (token == null || !vm.acceptSession(token)) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
+                            if (token == null) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
+                            else if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice(BIRTHDAY_NOTICE)
                         } },
                         onBrowserSignIn = { browserGuide = true }, onPasteSession = { pasteOpen = true },
                         onCopyDiagnostics = {
@@ -388,6 +398,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         },
                         loginContent = { AndroidView(factory = { browser.view }, modifier = Modifier.fillMaxSize().testTag("login-webview")) },
                         actions = agentActions, accountActions = accountActions,
+                        heldShare = sharedInput != null,
+                        onUseApiKey = { key -> vm.useApiKey(key) { apiFallback = true } }, onOpenLink = ::openLink, onDismissNotice = vm::dismissNotice,
                     )
                 }
                 if (wide && pane != null) {

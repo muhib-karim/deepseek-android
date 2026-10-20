@@ -68,8 +68,7 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         compose.onNodeWithText("Weekend ideas").assertDoesNotExist()
     }
     @Test fun settings() {
-        launch(AccountUiState(ready = true, signedIn = false, page = AccountPage.SETTINGS))
-        compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed()
+        launch(AccountUiState(ready = true, signedIn = true, page = AccountPage.SETTINGS))
         compose.onNodeWithText("API-key fallback").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Unofficial client", substring = true).assertExists()
         screenshot("settings")
@@ -80,19 +79,35 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         compose.onNodeWithText("Continue with Google").assertIsDisplayed()
         screenshot("login-logged-out")
     }
+    @Test fun welcomeSignedOut() {
+        launch(AccountUiState(ready = true, signedIn = false))
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithText("Sign in with browser").assertIsDisplayed()
+        screenshot("welcome")
+    }
     @Test fun noSessionHasOneTapLoginAndNeverAnApiKeyPrompt() {
         var logins = 0
         launch(AccountUiState(ready = true, signedIn = false), login = { logins++ })
-        compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Log in with phone or email").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, logins) }
         compose.onAllNodes(hasText("API key", substring = true, ignoreCase = true)).assertCountEquals(0)
-        // Signed out, the composer takes no typing and says why.
-        compose.onNodeWithTag("account-composer").assertIsNotEnabled()
-        compose.onNodeWithText("Log in to chat", useUnmergedTree = true).assertExists()
+        // Signed out, there is no chat to type into at all, and no drawer.
+        compose.onNodeWithTag("account-composer").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open navigation").assertDoesNotExist()
+    }
+    @Test fun apiKeyRouteIsBehindMoreOptionsAndNeedsAnExplicitKey() {
+        val keys = mutableListOf<String>()
+        compose.setContent { AccountTheme(theme) { DeepSeekShell(AccountUiState(ready = true, appearance = theme), onUseApiKey = { keys += it }) } }
+        compose.onNodeWithTag("welcome-api-key").assertDoesNotExist()
+        compose.onNodeWithTag("welcome-more").performScrollTo().performClick()
+        compose.onNodeWithTag("welcome-api-key").performScrollTo().performClick()
+        compose.onNodeWithTag("welcome-api-key-field").performTextInput("synthetic-welcome-key")
+        compose.onNodeWithText("Check and use").performClick()
+        compose.runOnIdle { assertEquals(listOf("synthetic-welcome-key"), keys) }
     }
     @Test fun apiFallbackRequiresAnExplicitSettingsAction() {
         var fallbacks = 0
-        launch(AccountUiState(ready = true, page = AccountPage.SETTINGS), fallback = { fallbacks++ })
+        launch(AccountUiState(ready = true, signedIn = true, page = AccountPage.SETTINGS), fallback = { fallbacks++ })
         compose.runOnIdle { assertEquals(0, fallbacks) }
         compose.onNodeWithText("API-key fallback").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, fallbacks) }
@@ -104,9 +119,14 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
     }
     @Test fun doubledFontKeepsLoginAndComposerReachable() {
         launch(AccountUiState(ready = true), fontScale = 2f)
-        // The signed-out sign-in card scrolls at large font sizes; every route must stay reachable.
-        compose.onNodeWithText("Continue with Google").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Log in with DeepSeek").performScrollTo().assertIsDisplayed()
+        // The welcome screen scrolls at large font sizes; every route must stay reachable.
+        listOf("Sign in with browser", "Continue with Google", "Log in with phone or email", "Paste session").forEach {
+            compose.onNodeWithText(it).performScrollTo().assertIsDisplayed()
+        }
+        compose.onNodeWithTag("account-composer").assertDoesNotExist()
+    }
+    @Test fun doubledFontKeepsTheSignedInComposerReachable() {
+        launch(AccountUiState(ready = true, signedIn = true), fontScale = 2f)
         compose.onNodeWithContentDescription("Send message").assertIsDisplayed()
         compose.onNodeWithContentDescription("Add attachment").assertIsDisplayed()
     }
