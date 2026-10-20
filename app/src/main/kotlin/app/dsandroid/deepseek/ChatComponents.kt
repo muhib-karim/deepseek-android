@@ -362,7 +362,8 @@ private fun SiteIconStack(pages: List<WebCitation>) {
 internal fun SiteIcon(page: WebCitation, modifier: Modifier = Modifier, size: Int = 16) {
     val context = LocalContext.current
     val host = remember(page.url) { SiteIcons.host(page.url) }
-    val icon by produceState<ImageBitmap?>(null, page.url) { value = SiteIcons.load(context, page)?.asImageBitmap() }
+    var icon by remember(page.url) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(page.url) { icon = SiteIcons.load(context, page)?.asImageBitmap() }
     Box(modifier.size(size.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
         .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape), contentAlignment = Alignment.Center) {
         val image = icon
@@ -554,7 +555,8 @@ internal fun AttachmentPanel(enabled: Boolean, onPick: (String) -> Unit, onAddPh
 @Composable
 private fun PhotoThumb(uri: Uri, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
-    val image by produceState<ImageBitmap?>(null, uri) { value = RecentPhotos.thumbnail(context, uri, 240)?.asImageBitmap() }
+    var image by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(uri) { image = RecentPhotos.thumbnail(context, uri, 240)?.asImageBitmap() }
     Box(Modifier.size(76.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
         .clickable(enabled = enabled, onClick = onClick).semantics { this.selected = selected; contentDescription = "Recent photo" }) {
         image?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
