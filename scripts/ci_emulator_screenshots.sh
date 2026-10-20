@@ -13,7 +13,8 @@ if [[ "${LIVE_LOGIN:-false}" == "true" ]]; then
   # Opt-in diagnostic only: the real sign-in page, nothing else. Never part of pull request checks.
   gradle --no-daemon :app:connectedDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=app.dsandroid.deepseek.LiveLoginDiagnosticTest \
-    -Pandroid.testInstrumentationRunnerArguments.liveLogin=true
+    -Pandroid.testInstrumentationRunnerArguments.liveLogin=true \
+    -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
   live_status=$?
   mkdir -p live-login
   adb pull /sdcard/Android/data/app.dsandroid/files/live-login/. live-login/ || true

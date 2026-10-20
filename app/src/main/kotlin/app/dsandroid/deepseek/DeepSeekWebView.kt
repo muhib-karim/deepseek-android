@@ -152,6 +152,16 @@ class DeepSeekWebView(
         view.loadUrl(loginUrl)
     }
 
+    /** True when the trusted page has finished loading yet shows no text at all (the reported blank sign-in screen). */
+    suspend fun looksBlank(): Boolean = withContext(Dispatchers.Main.immediate) {
+        if (destroyed || !DeepSeekOrigin.isTrusted(view.url)) return@withContext false
+        val length = withTimeoutOrNull(2000) {
+            evaluate("""(() => document.body ? document.body.innerText.trim().length : 0)()""")
+        }?.toIntOrNull() ?: return@withContext false
+        record("text length $length")
+        length == 0
+    }
+
     suspend fun captureSession(): SessionToken? = withContext(Dispatchers.Main.immediate) {
         if (!loaded || destroyed || !DeepSeekOrigin.isTrusted(view.url)) return@withContext null
         val epoch = generation
@@ -257,6 +267,7 @@ class DeepSeekWebView(
   hide();
   if (!window.__dsHideGoogle) { window.__dsHideGoogle = new MutationObserver(hide); window.__dsHideGoogle.observe(document.documentElement, {childList: true, subtree: true}); }
 })();"""
+        const val BLANK_NOTICE = "The sign-in page isn't showing in this app. Tap Continue with Google: it signs in through your browser and works for any DeepSeek account. Updating Android System WebView and Chrome in the Play Store may also help."
         const val SECURITY_CHECK_NOTICE = "DeepSeek is running a security check. Complete it on this page if one is shown."
         const val SSO_NOTICE = "Google sign-in can't run inside apps. For a Google account, tap Continue with Google to use your browser."
     }

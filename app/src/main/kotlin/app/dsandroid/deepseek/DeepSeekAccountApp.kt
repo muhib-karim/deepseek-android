@@ -260,8 +260,15 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
         if (state.page == AccountPage.LOGIN) {
             browser.openLogin()
             var birthdayChecked = 0L
+            val opened = System.currentTimeMillis()
+            var blankChecked = false
             while (true) {
                 delay(1000)
+                // Point to the browser route once if the page is still blank after 15 seconds.
+                if (!blankChecked && System.currentTimeMillis() - opened > 15_000) {
+                    blankChecked = true
+                    if (browser.looksBlank()) vm.notice(DeepSeekWebView.BLANK_NOTICE)
+                }
                 val token = browser.captureSession() ?: continue
                 // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
                 if (System.currentTimeMillis() - birthdayChecked < 3000) continue

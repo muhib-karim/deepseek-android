@@ -17,6 +17,9 @@ Validation: PENDING (CI and emulator results are filled in after the pull reques
     short notice, so it can be completed.
 - **Signed out, the composer looked usable.** With no DeepSeek session it now takes no typing, reads
   "Log in to chat", and a tap on it (or on send) opens the sign-in page.
+- If the sign-in page is still blank after 15 seconds, the app says so and points to **Continue with Google**,
+  which signs in through the browser and works for any DeepSeek account (and suggests updating Android System
+  WebView and Chrome).
 - Debug builds record page addresses (without queries), main-frame errors, other hosts contacted and console
   lines for diagnosis. Release builds record nothing.
 
