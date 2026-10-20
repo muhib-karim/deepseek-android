@@ -73,10 +73,32 @@ def requests_problems(path):
     return problems, notes
 
 
+def coverage_problems(log_path, coverage_path):
+    """Each required tool case must appear in the fixture's log: an agent turn requesting the tool, then its result."""
+    spec = json.load(open(coverage_path))
+    if not os.path.exists(log_path):
+        return ["coverage: the fixture recorded no requests"], 0
+    entries = [json.loads(line) for line in open(log_path) if line.strip()]
+    observed, pending = [], {}
+    for entry in entries:
+        if entry.get("kind") == "agent" and entry.get("requested"):
+            pending[entry["requested"]] = entry["requested"] in (entry.get("tools") or [])
+        elif entry.get("kind") == "tool_result" and entry.get("tool") in pending:
+            observed.append((entry["tool"], pending.pop(entry["tool"]), bool(entry.get("ok"))))
+    problems = []
+    for case in spec["cases"]:
+        wanted = (case["tool"], case["offered"], case["ok"])
+        if wanted not in observed:
+            problems.append(f"coverage: no {'successful' if case['ok'] else 'refused or declined'} {case['tool']} call "
+                            f"({'offered' if case['offered'] else 'not offered'})")
+    return problems, len(spec["cases"])
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out")
     parser.add_argument("--mode", choices=sorted(LABELS), required=True)
+    parser.add_argument("--coverage", help="e2e/coverage.json: required tool cases (full mocked suite only)")
     args = parser.parse_args(argv)
     out, problems, notes = args.out, [], []
 
@@ -130,10 +152,17 @@ def main(argv):
         found, extra = requests_problems(os.path.join(out, "logs", "requests.jsonl"))
         problems += found
         notes += extra
+    covered = None
+    if args.coverage:
+        found, cases = coverage_problems(os.path.join(out, "logs", "requests.jsonl"), args.coverage)
+        problems += found
+        covered = (cases - len(found), cases)
 
     lines = [f"## Release E2E ({LABELS[args.mode]}): {os.path.basename(os.path.normpath(out))}", "",
              f"- Tests: {tests - skipped - failures} passed, {failures} failed, {skipped} skipped",
              f"- Step screenshots: {len(shots)}; video segments: {len(good_videos)}"]
+    if covered:
+        lines.append(f"- Tool coverage (e2e/coverage.json, from the fixture's log): {covered[0]} of {covered[1]} cases")
     lines += [f"- Note: {n}" for n in notes] + [f"- PROBLEM: {p}" for p in problems]
     if args.mode == "mocked":
         lines.append("- Mocked backend: proves the release build's UI, storage, tools and protocol handling, not live model behaviour.")

@@ -138,7 +138,8 @@ jobs:
           E2E_TEST_APK: e2e-apks/e2e-debug-androidTest.apk
       - name: Validate the evidence
         if: always()
-        run: python3 -I scripts/check_e2e_evidence.py e2e-output/mocked-api${{ matrix.api }}-${{ matrix.theme }} --mode mocked
+        # The full suite (AgentJourneyTest included) must also cover every case in e2e/coverage.json.
+        run: python3 -I scripts/check_e2e_evidence.py e2e-output/mocked-api${{ matrix.api }}-${{ matrix.theme }} --mode mocked ${{ matrix.classes == '' && '--coverage e2e/coverage.json' || '' }}
       - name: Upload video, step screenshots and results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

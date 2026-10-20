@@ -46,6 +46,9 @@ TOOL_CALLS = {
     "skill": {"name": "data-analysis"},
     "data_analysis__describe_csv": {"path": "cities.csv"},
     "pip_install": {"packages": ["tabulate"]},
+    "create_xlsx": {"fileName": "figures.xlsx", "sheets": [{"name": "Q1", "rows": [["Region", "Revenue"], ["North", 1200], ["South", 980]]}]},
+    "create_pptx": {"fileName": "deck.pptx", "title": "Quarter", "slides": [{"title": "Highlights", "bullets": ["North led", "South recovered"], "notes": "Keep it short."}]},
+    "zip_files": {"sources": ["cities.csv", "hello.py"], "zip_path": "bundle.zip"},
 }
 TOOL_ALIASES = {"write_file_docx": "write_file", "write_file_md": "write_file", "code_interpreter_python": "code_interpreter"}
 
