@@ -42,10 +42,30 @@ if ! adb install-multiple -r -g "${installer[@]}" "$APKS"/*.apk > "$OUT/device/i
 fi
 adb shell dumpsys package com.deepseek.chat | grep -E 'versionCode|versionName|primaryCpuAbi|secondaryCpuAbi' > "$OUT/device/package.txt" || true
 adb shell pm list packages -i com.deepseek.chat > "$OUT/device/installer.txt" 2>&1 || true
+# The 1.4.1 build asks a DeepSeek server for its minimum version on start and then covers every screen with an
+# "Update Required" modal. Offline (the default), that check cannot run, so the screens underneath can be captured.
+# The modal is never dismissed with "Update now", and the APK is never modified.
+NETWORK="${REFERENCE_NETWORK:-offline}"
+if [[ "$NETWORK" == "offline" ]]; then
+  adb shell cmd connectivity airplane-mode enable || adb shell settings put global airplane_mode_on 1 || true
+  adb shell svc wifi disable || true
+  adb shell svc data disable || true
+  sleep 3
+fi
+{
+  echo "network=$NETWORK"
+  echo "airplane_mode_on=$(adb shell settings get global airplane_mode_on | tr -d '\r')"
+  if adb shell ping -c 1 -W 3 8.8.8.8 > /dev/null 2>&1; then echo "internet_reachable=yes"; else echo "internet_reachable=no"; fi
+} > "$OUT/device/network.txt" 2>&1
+cat "$OUT/device/network.txt"
+if [[ "$NETWORK" == "offline" ]] && grep -q 'internet_reachable=yes' "$OUT/device/network.txt"; then
+  echo 'Offline capture requested, but the emulator still reaches the internet (see device/network.txt).' >&2
+  exit 1
+fi
 adb logcat -c || true
 
 version="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("%s (%s)" % (d["version_name"], d["version_code"]))' "$OUT/source/verification.json")"
-python3 -I e2e/reference/driver.py --out "$OUT/raw" --version "$version" --diagnostics "$OUT/device/diagnostics"
+python3 -I e2e/reference/driver.py --out "$OUT/raw" --version "$version" --diagnostics "$OUT/device/diagnostics" --network "$NETWORK"
 status=$?
 # Text only, for the verification artifact: what the app logged during the run (a fresh emulator with no account).
 adb logcat -d -t 2000 -b main -b system -b crash > "$OUT/device/diagnostics/logcat-run.txt" 2>&1 || true

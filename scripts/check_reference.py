@@ -173,6 +173,14 @@ def main(argv):
         shutil.copy2(device, os.path.join(sanitized, "device-settings.txt"))
 
     coverage["diagnostic_screenshots"] = diagnostics
+    coverage["network"] = manifest.get("network", "online")
+    if coverage["network"] == "offline":
+        notes.append("Captured offline: 1.4.1 checks a server minimum version on start and otherwise covers the app with an "
+                     "\"Update Required\" modal. This is the 1.4.1 interface; current builds are wrapped in Google's PairIP license check.")
+    modal = manifest.get("update_modal_themes") or []
+    if modal:
+        coverage["update_modal_themes"] = modal
+        notes.append(f"The server's \"Update Required\" modal appeared in: {', '.join(modal)} (kept as a diagnostic screenshot, never dismissed).")
     blocked = manifest.get("blocked_by") or next((e.get("reason") for e in entries if "license check screen" in (e.get("reason") or "")), "")
     if blocked:
         coverage["blocked_by"] = blocked
