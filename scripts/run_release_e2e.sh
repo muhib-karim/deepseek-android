@@ -25,6 +25,12 @@ adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 [[ "${E2E_THEME:-light}" == "dark" ]] && adb shell cmd uimode night yes
+# Chrome is the browser hand-off target. On user images (google_apis) it reads its command-line file only as the debug
+# app; with it, Chrome opens the page directly instead of its welcome, sign-in and default-browser screens.
+adb shell am set-debug-app --persistent com.android.chrome || true
+adb shell "echo 'chrome --disable-fre --no-default-browser-check --no-first-run --disable-features=SigninPromo' > /data/local/tmp/chrome-command-line" || true
+adb shell "chmod 644 /data/local/tmp/chrome-command-line" || true
+adb shell am force-stop com.android.chrome || true
 
 fixture_pid=""
 if [[ "$mode" == "mocked" ]]; then

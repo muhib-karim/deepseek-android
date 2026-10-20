@@ -123,6 +123,8 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          # A 1080x2200 panel, so screenshots match the spec even where the shell's screencap ignores `wm size` (API 26).
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 1080x2200
           disable-animations: true
           script: bash scripts/run_release_e2e.sh
         env:
