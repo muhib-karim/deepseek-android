@@ -47,13 +47,14 @@ import kotlinx.serialization.json.*
 
 /** Ordered agent turn: reasoning, compact tool rows and answer text, in the order they happened. */
 @Composable
-fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, onRunCode: ((String) -> Unit)?) {
+fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, onRunCode: ((String) -> Unit)?,
+    onPreviewCode: ((String, String) -> Unit)? = null, onEditCode: ((String, String) -> Unit)? = null) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         steps.forEachIndexed { index, step ->
             when (step) {
                 is TurnStep.Reasoning -> ReasoningRow("$messageId-$index", step.text, working && !step.complete)
                 is TurnStep.ToolCall -> ToolStepRow(step)
-                is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(step.text.trim(), onRunCode = onRunCode)
+                is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(step.text.trim(), onRunCode = onRunCode, onPreviewCode = onPreviewCode, onEditCode = onEditCode)
             }
         }
     }
@@ -219,9 +220,9 @@ private fun size(bytes: Long) = when {
     else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
 }
 
-/** A generated file: preview (PDF first page, image thumbnail or text), then Open, Save and Share. */
+/** A generated file: preview (PDF first page, image thumbnail or text), then Open, Edit (text files), Save and Share. */
 @Composable
-fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit) {
+fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit, onEdit: (() -> Unit)? = null) {
     val previewKey = file?.lastModified()
     var preview by remember(artifact.path, previewKey) { mutableStateOf<CardPreview?>(null) }
     LaunchedEffect(artifact.path, previewKey) {
@@ -257,6 +258,7 @@ fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: ()
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f), thickness = 0.5.dp)
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 TextButton(onClick = onOpen, modifier = Modifier.semantics { contentDescription = "Open ${artifact.fileName}" }) { Text("Open") }
+                if (onEdit != null) TextButton(onClick = onEdit, modifier = Modifier.semantics { contentDescription = "Edit ${artifact.fileName}" }) { Text("Edit") }
                 TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Save") }
                 TextButton(onClick = onShare, modifier = Modifier.semantics { contentDescription = "Share ${artifact.fileName}" }) { Text("Share") }
             }

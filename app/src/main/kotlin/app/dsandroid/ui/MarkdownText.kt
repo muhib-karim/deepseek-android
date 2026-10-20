@@ -24,16 +24,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
+import app.dsandroid.core.editor.EditorLanguage
 import app.dsandroid.core.markdown.*
 import app.dsandroid.core.tools.WebSource
+import app.dsandroid.core.workbench.ArtifactKind
 
 private data class CitationLinks(val numbers: Set<Int> = emptySet(), val open: (Int) -> Unit = {})
 private val LocalCitations = compositionLocalOf { CitationLinks() }
 
-/** [onRunCode], when set, adds a Run action to Python code blocks. */
+/**
+ * [onRunCode], when set, adds a Run action to Python code blocks. [onPreviewCode] adds Preview to HTML, SVG and Markdown
+ * blocks (artifacts panel) and [onEditCode] adds Edit to blocks in other editor languages; both receive (language, code).
+ */
 @Composable
 fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebSource> = emptyList(), onCitation: (Int) -> Unit = {},
-    onRunCode: ((String) -> Unit)? = null) {
+    onRunCode: ((String) -> Unit)? = null, onPreviewCode: ((String, String) -> Unit)? = null, onEditCode: ((String, String) -> Unit)? = null) {
     val blocks = remember(text) { MarkdownParser.parse(text) }
     CompositionLocalProvider(LocalCitations provides CitationLinks(sources.map { it.number }.toSet(), onCitation)) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -45,7 +51,12 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, sources: List<WebS
                     else -> MaterialTheme.typography.titleMedium
                 }.copy(fontWeight = FontWeight.Bold))
                 is MarkdownBlock.Paragraph -> InlineText(block.text)
-                is MarkdownBlock.Code -> CodeBlock(block, onRunCode?.takeIf { block.language.lowercase() in setOf("python", "py", "python3") })
+                is MarkdownBlock.Code -> {
+                    val artifact = ArtifactKind.fromFence(block.language, block.text) != null
+                    CodeBlock(block, onRunCode?.takeIf { block.language.lowercase() in setOf("python", "py", "python3") },
+                        onPreviewCode?.takeIf { artifact }?.let { callback -> { callback(block.language, block.text) } },
+                        onEditCode?.takeIf { !artifact && EditorLanguage.forFence(block.language) != null }?.let { callback -> { callback(block.language, block.text) } })
+                }
                 is MarkdownBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     block.items.forEachIndexed { index, item ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -113,7 +124,7 @@ private fun InlineText(text: String, modifier: Modifier = Modifier, style: andro
 
 @Suppress("DEPRECATION")
 @Composable
-private fun CodeBlock(block: MarkdownBlock.Code, onRun: ((String) -> Unit)? = null) {
+private fun CodeBlock(block: MarkdownBlock.Code, onRun: ((String) -> Unit)? = null, onPreview: (() -> Unit)? = null, onEdit: (() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     var copied by remember(block.text) { mutableStateOf(false) }
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
@@ -122,6 +133,8 @@ private fun CodeBlock(block: MarkdownBlock.Code, onRun: ((String) -> Unit)? = nu
                 Text(block.language.ifBlank { stringResource(R.string.code) }, style = MaterialTheme.typography.labelMedium)
                 Row {
                     if (onRun != null) TextButton(onClick = { onRun(block.text) }) { Text(stringResource(R.string.run_code)) }
+                    if (onPreview != null) TextButton(onClick = onPreview, modifier = Modifier.testTag("code-preview")) { Text(stringResource(R.string.canvas_preview)) }
+                    if (onEdit != null) TextButton(onClick = onEdit, modifier = Modifier.testTag("code-edit")) { Text(stringResource(R.string.code_edit)) }
                     TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy)) }
                 }
             }
