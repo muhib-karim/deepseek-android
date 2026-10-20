@@ -12,3 +12,7 @@ captures/
 !/docs/reference/captures/
 .externalNativeBuild/
 .cxx/
+
+# Python bytecode from local syntax checks; never shipped
+__pycache__/
+*.pyc
