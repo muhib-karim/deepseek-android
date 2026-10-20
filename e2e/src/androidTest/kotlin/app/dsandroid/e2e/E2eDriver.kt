@@ -18,6 +18,8 @@ object Fixture {
     /** Synthetic sessions: the fixture accepts any token with this prefix until a test revokes it. */
     const val TOKEN = "e2e-synthetic-session-0123456789abcdef"
     const val SECOND_TOKEN = "e2e-synthetic-session-second-0123456789"
+    /** AgentJourneyTest ends by expiring its session, which the fixture then refuses for the rest of the run. */
+    const val AGENT_TOKEN = "e2e-synthetic-session-agent-0123456789ab"
     /** Synthetic API-key profile value; only the fixture accepts it (it is not a credential). */
     const val FIXTURE_PROFILE_VALUE = "e2e-synthetic-profile-0123456789" // gitleaks:allow
     const val PLAIN_REPLY = "from the E2E fixture"

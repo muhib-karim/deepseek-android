@@ -35,7 +35,7 @@ class AgentJourneyTest {
         e2e.waitFor(E2eDriver.res("welcome-screen"), "the welcome screen", 30_000)
         e2e.tap(E2eDriver.res("welcome-paste"), "Paste session")
         e2e.tap(By.text("Agree"), "Agree to DeepSeek's terms")
-        e2e.type(By.clazz("android.widget.EditText"), Fixture.TOKEN, "session field")
+        e2e.type(By.clazz("android.widget.EditText"), Fixture.AGENT_TOKEN, "session field")
         e2e.tap(By.text("Sign in"), "Sign in")
         e2e.waitFor(E2eDriver.res("account-composer").enabled(true), "a usable composer after sign-in", 30_000)
 
