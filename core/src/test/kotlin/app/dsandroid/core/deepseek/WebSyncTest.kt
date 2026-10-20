@@ -230,5 +230,8 @@ class WebSyncTest {
         assertTrue(open.blocked)
         assertNull(open.sessionId)
         assertEquals(merged, ServerHistory.merge(merged, sessions, complete = false, openId = null) { "never" })
+        // An agent chat keeps its own title (DeepSeek's would describe the tool instructions).
+        val agent = WebChat("g", "Make a CSV", "s-known", messages = listOf(WebMessage("u", true, "Make a CSV", agent = true)))
+        assertEquals("Make a CSV", ServerHistory.merge(listOf(agent), sessions, complete = false, openId = null) { "x" }.single { it.id == "g" }.title)
     }
 }

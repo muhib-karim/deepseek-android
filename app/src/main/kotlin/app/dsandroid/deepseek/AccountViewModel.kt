@@ -1056,8 +1056,9 @@ class AccountViewModel @JvmOverloads constructor(
                         }
                         parent = done.responseMessageId
                         answered = true
-                        current = current.copy(parentId = parent, title = done.title?.takeIf { first && before.messages.isEmpty() } ?: current.title,
-                            syncedAt = done.sessionUpdatedAt ?: current.syncedAt, remoteUpdatedAt = maxOf(current.remoteUpdatedAt, done.sessionUpdatedAt ?: 0L))
+                        // DeepSeek's generated title would describe this app's tool instructions, so agent chats keep their own.
+                        current = current.copy(parentId = parent, syncedAt = done.sessionUpdatedAt ?: current.syncedAt,
+                            remoteUpdatedAt = maxOf(current.remoteUpdatedAt, done.sessionUpdatedAt ?: 0L))
                     }
                 }
                 val toolkit = AgentToolkit.get(getApplication())

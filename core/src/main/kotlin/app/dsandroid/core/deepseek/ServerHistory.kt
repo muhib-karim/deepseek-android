@@ -93,8 +93,8 @@ object ServerHistory {
     }
 
     /**
-     * Merges DeepSeek's chat list into local history. Chats are matched by session id; DeepSeek's title (when it has one)
-     * and pin win for chats it keeps. Listed chats unknown here become remote entries. When the list is [complete], a local
+     * Merges DeepSeek's chat list into local history. Chats are matched by session id; DeepSeek's title (when it has one,
+     * and not for agent chats) and pin win for chats it keeps. Listed chats unknown here become remote entries. When the list is [complete], a local
      * chat whose session DeepSeek no longer lists was deleted elsewhere: without local files it goes, otherwise it stays as a
      * read-only local chat. Chats that exist only here are kept as they are.
      */
@@ -103,8 +103,9 @@ object ServerHistory {
         val merged = local.mapNotNull { chat ->
             val session = chat.sessionId?.let(listed::get)
             when {
-                session != null -> chat.copy(title = session.title.ifBlank { chat.title }, pinned = session.pinned,
-                    updatedAt = maxOf(chat.updatedAt, session.updatedAt), remoteUpdatedAt = session.updatedAt)
+                // DeepSeek titles an agent chat after this app's tool instructions, so agent chats keep their own title.
+                session != null -> chat.copy(title = session.title.takeIf { chat.messages.none { it.agent } }?.ifBlank { null } ?: chat.title,
+                    pinned = session.pinned, updatedAt = maxOf(chat.updatedAt, session.updatedAt), remoteUpdatedAt = session.updatedAt)
                 chat.sessionId == null || !complete -> chat
                 chat.remote -> null
                 chat.id != openId && chat.messages.none { it.artifacts.isNotEmpty() || it.codeRuns.isNotEmpty() || it.agent } -> null
