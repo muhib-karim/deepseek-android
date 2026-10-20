@@ -1,0 +1,116 @@
+package app.dsandroid.e2e
+
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.Until
+import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * The release build's chat and agent journey against the fixture: DeepThink and Search replies, then one agent turn per
+ * account tool case in e2e/coverage.json (the fixture's "E2E-TOOL:<name>" marker makes the model call that tool). A PDF
+ * goes through the system share sheet to the E2E receiver, which checks the bytes it got; Charts is switched off in
+ * Plugins & tools and then refused. check_e2e_evidence.py --coverage verifies every case from the fixture's own log.
+ */
+@RunWith(AndroidJUnit4::class)
+class AgentJourneyTest {
+    private val e2e = E2eDriver("agent")
+    private val received get() = File(e2e.context.filesDir, "received")
+
+    private enum class Answer { NONE, ALLOW, DENY }
+
+    @Test fun thinkSearchEveryToolAndAFileThroughTheShareSheet() {
+        assumeTrue("Mocked fixture runs only", Fixture.mode == "mocked")
+        received.deleteRecursively()
+        e2e.freshStart()
+        e2e.waitFor(E2eDriver.res("welcome-screen"), "the welcome screen", 30_000)
+        e2e.tap(E2eDriver.res("welcome-paste"), "Paste session")
+        e2e.tap(By.text("Agree"), "Agree to DeepSeek's terms")
+        e2e.type(By.clazz("android.widget.EditText"), Fixture.TOKEN, "session field")
+        e2e.tap(By.text("Sign in"), "Sign in")
+        e2e.waitFor(E2eDriver.res("account-composer").enabled(true), "a usable composer after sign-in", 30_000)
+
+        e2e.tap(By.text("Think"), "the Think pill")
+        send("Explain the E2E thinking check")
+        e2e.waitFor(By.textContains("Thought for"), "the thinking time", 60_000)
+        e2e.step("deepthink")
+        e2e.tap(By.text("Think"), "the Think pill (off)")
+        e2e.tap(By.text("Search"), "the Search pill")
+        send("Search for the E2E fixture")
+        e2e.waitFor(By.textContains("web page"), "the searched pages", 60_000)
+        e2e.step("search")
+        e2e.tap(By.text("Search"), "the Search pill (off)")
+
+        e2e.tap(E2eDriver.res("agent-toggle"), "Agent mode")
+        listOf("write_file", "write", "read", "present", "write_file_docx", "write_file_md").forEach { agent(it) }
+        agent("create_pdf")
+        shareBack("report.pdf", "application/pdf")
+        listOf("create_xlsx", "create_pptx", "create_image", "create_chart", "zip_files", "code_interpreter", "skill").forEach { agent(it) }
+        agent("web_search", answer = Answer.ALLOW)
+        agent("web_fetch", answer = Answer.DENY, ok = false)
+        // Native Python and skill functions need trusted execution, which is off on a fresh install: refused.
+        listOf("run_python", "pip_install", "data_analysis__describe_csv").forEach { agent(it, ok = false) }
+
+        e2e.tap(By.desc("Open navigation"), "the drawer")
+        e2e.tap(E2eDriver.res("drawer-plugins"), "Plugins & tools")
+        val charts = scrollTo(E2eDriver.res("tool-create_chart"), "the Charts switch")
+        assertTrue("Charts starts on", charts.isChecked)
+        charts.click()
+        e2e.waitUntil("Charts switched off", 10_000) { e2e.find(E2eDriver.res("tool-create_chart"))?.isChecked == false }
+        e2e.step("plugins-charts-off")
+        e2e.device.pressBack()
+        e2e.waitFor(E2eDriver.res("account-composer"), "the chat", 10_000)
+        agent("create_chart", ok = false, step = "create-chart-switched-off")
+    }
+
+    private fun send(text: String) {
+        e2e.type(E2eDriver.res("account-composer"), text, "composer")
+        e2e.tap(By.desc("Send message"), "Send")
+    }
+
+    /** One agent turn for a fixture scenario; [answer] handles the approval dialog. The fixture's log is the record. */
+    private fun agent(scenario: String, answer: Answer = Answer.NONE, ok: Boolean = true, step: String = scenario) {
+        val tool = mapOf("write_file_docx" to "write_file", "write_file_md" to "write_file")[scenario] ?: scenario
+        send("E2E-TOOL:$scenario please")
+        when (answer) {
+            Answer.ALLOW -> e2e.tap(By.text("Allow once"), "the approval for $tool", 60_000)
+            Answer.DENY -> e2e.tap(By.text("Deny"), "the approval for $tool", 60_000)
+            Answer.NONE -> Unit
+        }
+        e2e.device.wait(Until.hasObject(By.desc("Stop response")), 3_000)
+        e2e.waitGone(By.desc("Stop response"), "the $tool turn", 120_000)
+        e2e.waitFor(By.text(if (ok) "Done: $tool succeeded." else "Noted: $tool was not run."), "the $tool result", 30_000)
+        e2e.step(step)
+    }
+
+    /** Shares a generated file to the E2E receiver through the system share sheet, then checks what arrived. */
+    private fun shareBack(fileName: String, mime: String) {
+        e2e.tap(By.desc("Share $fileName"), "Share $fileName")
+        val target = e2e.device.wait(Until.findObject(By.text("E2E receiver")), 10_000) ?: run {
+            e2e.device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.8f)
+            e2e.waitFor(By.text("E2E receiver"), "the E2E receiver in the share sheet", 10_000)
+        }
+        e2e.step("share-sheet")
+        target.click()
+        val file = File(received, fileName)
+        e2e.waitUntil("$fileName to reach the receiver", 20_000) { file.length() > 0 && File(received, "$fileName.type").isFile }
+        assertEquals(mime, File(received, "$fileName.type").readText())
+        assertEquals("%PDF", file.inputStream().use { input -> ByteArray(4).also { check(input.read(it) == 4) }.toString(Charsets.US_ASCII) })
+        val pages = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { PdfRenderer(it).use { renderer -> renderer.pageCount } }
+        assertTrue("The shared PDF has no pages", pages >= 1)
+        e2e.waitFor(E2eDriver.res("account-composer"), "the chat after sharing", 20_000)
+        e2e.step("shared-$fileName")
+    }
+
+    private fun scrollTo(selector: BySelector, what: String) =
+        (0 until 10).firstNotNullOfOrNull { e2e.find(selector) ?: run { e2e.device.findObject(By.scrollable(true))?.scroll(Direction.DOWN, 0.6f); null } }
+            ?: e2e.waitFor(selector, what, 2_000)
+}

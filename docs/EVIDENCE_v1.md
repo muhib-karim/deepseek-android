@@ -32,9 +32,21 @@ debug build and are not release evidence.
    `am instrument`. Each step leaves a numbered screenshot and window hierarchy.
 5. **Check** (`scripts/check_e2e_evidence.py`). Requires passing tests, matching APK hashes, 1080 x 2200 step
    screenshots, a decodable video, no credential markers, and the protocol order (session validated before chat, a
-   proof-of-work header on every completion, no unexpected request to a fixture host).
+   proof-of-work header on every completion, no unexpected request to a fixture host). The full suite is also checked
+   against [`e2e/coverage.json`](../e2e/coverage.json) with `--coverage`: every required tool case must appear in the
+   fixture's own log as an agent turn that requested the tool (offered or not, as the case says) followed by that tool's
+   result with the expected ok flag. A missing case fails the run. `ToolCatalogCoverageTest` keeps the list in step with
+   the account route of the tool catalog.
 
-Matrix: API 35 light (all journeys), API 35 dark and API 26 light (baseline journey).
+Journeys: `BaselineJourneyTest` (welcome, terms, rejected and accepted session, one streamed reply) and
+`AgentJourneyTest` (DeepThink and Search replies, then one agent turn per tool case: files, documents, Excel,
+PowerPoint, PNG, chart, ZIP, code sandbox, skill, web search approved, web fetch declined, native Python and skill
+functions refused while trusted execution is off, Charts refused after it is switched off in Plugins & tools; the PDF
+travels through the system share sheet to a test-only receiver in the driver app, which checks its type, header and
+pages). WASM Python in the sandbox is covered by the emulator test `SandboxPythonTest` (real pinned runtime), not by
+the fixture.
+
+Matrix: API 35 light (all journeys, coverage enforced), API 35 dark and API 26 light (baseline journey).
 
 ## Live login-page check
 

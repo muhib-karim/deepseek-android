@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Test-only host for the release E2E driver. No activity, no permission; it shares fixture files with the app under test. -->
+<!-- Test-only host for the release E2E driver. No permission; it shares fixture files with the app under test and is a
+     share target ("E2E receiver") that keeps what the app shares, so the journey can check the received bytes. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
         <package android:name="app.dsandroid" />
     </queries>
     <application android:label="DeepSeek Android E2E" android:allowBackup="false">
+        <activity
+            android:name=".ShareReceiverActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="E2E receiver"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="app.dsandroid.e2e.files"
