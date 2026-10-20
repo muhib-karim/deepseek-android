@@ -17,8 +17,11 @@ Every value carries a source tag:
 
 The reference workflow ([.github/workflows/reference.yml](../../.github/workflows/reference.yml)) installs the verified APK
 on an emulator at the same viewport as our capture tests (1080 x 2200 px, 440 dpi = 392.7 dp wide, font scale 1.0) and
-uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the 2.6.2 arm64-v8a
-build on an API 33 x86_64 Play image (ARM translation); the armeabi-v7a build and the pre-PairIP 1.4.1 build are selectable.
+uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the pinned pre-PairIP
+1.4.1 arm64-v8a build on an API 34 x86_64 Google APIs image, which translates arm64 code; the 2.6.2 Play build (arm64-v8a or
+armeabi-v7a) is selectable, but its PairIP check stops it unless Play installed it. API 33 x86_64 images have no ARM
+translation (runs 39444214055 and 39444218498: INSTALL_FAILED_NO_MATCHING_ABIS). Screens captured from 1.4.1 show an older
+release than 2.6.2; where they differ from the 2.6.2 resources and store screenshots, this spec follows 2.6.2.
 Signed-out screens need nothing else; signed-in screens need a dedicated test account in the
 `DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD` repository secrets.
 

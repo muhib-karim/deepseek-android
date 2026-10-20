@@ -8,26 +8,26 @@ on:
   workflow_dispatch:
     inputs:
       build:
-        description: 'current = 2.6.2 (Play build, wrapped in the PairIP license check); pre-pairip = the pinned 1.4.1 APK without it'
+        description: 'pre-pairip = the pinned 1.4.1 APK, which needs no Play; current = 2.6.2 (Play build, wrapped in the PairIP license check)'
         type: choice
-        options: [current, pre-pairip]
-        default: current
+        options: [pre-pairip, current]
+        default: pre-pairip
       image:
         description: 'Emulator system image (playstore records Play as the installer, as PairIP builds expect)'
         type: choice
-        options: [playstore, google_apis]
-        default: playstore
+        options: [google_apis, playstore]
+        default: google_apis
       version_code:
         description: 'versionCode for build=current (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
         default: '282'
       abi:
-        description: 'Official build to install (arm64-v8a needs API 32+; armeabi-v7a runs through 32-bit ARM translation)'
+        description: 'ABI of the 2.6.2 build (arm64-v8a needs API 32+; armeabi-v7a needs an image with 32-bit ARM translation, such as API 30); pre-pairip is arm64-v8a'
         type: choice
         options: [arm64-v8a, armeabi-v7a]
         default: arm64-v8a
       api_level:
-        description: 'Emulator API level (x86_64 image with ARM translation; 33 has Play images and suits both builds)'
-        default: '33'
+        description: 'Emulator API level (x86_64 image; the API 34 images translate arm64 code, the API 33 x86_64 images do not)'
+        default: '34'
       require_complete:
         description: 'Fail when signed-in screens are missing (needs the reference-account secrets)'
         type: boolean
