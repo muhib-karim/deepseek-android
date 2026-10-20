@@ -78,6 +78,7 @@ class AccountManagerTest {
                 overrides[path]?.poll()?.let { return it }
                 return when (path) {
                     "/api/v0/chat_session/create" -> envelope("""{"chat_session":{"id":"remote-${sequence.incrementAndGet()}"}}""")
+                    "/api/v0/users/current" -> envelope("""{"id":"user","email":"t***@example.com","mobile_number":"","need_birthday":false}""")
                     "/api/v0/chat/create_pow_challenge" -> envelope("""{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"signature"}}""")
                     COMPLETION -> reply("Hello there.")
                     "/sign_in" -> MockResponse().setHeader("Content-Type", "text/html").setBody("<html><body>Mock sign-in</body></html>")

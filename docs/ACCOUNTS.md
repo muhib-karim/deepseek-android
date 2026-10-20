@@ -1,4 +1,4 @@
-# Accounts (v0.7.1)
+# Accounts (v1.0.0)
 
 **Settings → Accounts** lists every DeepSeek account and API-key profile kept on the phone. Each row shows
 its label, sign-in type, balance (where a documented endpoint returns one) and when that figure was last
@@ -64,7 +64,7 @@ the saved key.
 ## Signing in with Google (v0.7.1)
 
 Google does not allow its sign-in inside an app's embedded browser, so a DeepSeek account that uses Google
-signs in through the phone's browser. On the sign-in page tap **Continue with Google**:
+signs in through the phone's browser. On the welcome screen tap **Continue with Google** (or **Sign in with browser**):
 
 1. **Copy the helper.** In Chrome, bookmark any page, edit that bookmark, name it `dsandroid` and paste the
    helper as its address.
@@ -79,6 +79,28 @@ Safety rules: the helper runs only on chat.deepseek.com and reads only `localSto
 nothing over the network. The hand-off is an intent addressed to this package, carried as an extra rather than
 in the link. The app takes it only within 30 minutes of starting a browser sign-in from the app and asks before
 signing in; anything else is ignored with a notice.
+
+## The sign-in gate (v1.0.0)
+
+Signed out, the app shows only its welcome screen: **Sign in with browser** (the default route), **Continue with
+Google** (the same browser route), **Log in with phone or email** (DeepSeek's own sign-in page inside the app) and
+**Paste session**. There is no drawer, chat history, composer, file panel, tool or editor until DeepSeek confirms a
+session.
+
+- **Every session is checked first.** A session from the sign-in page, the browser hand-off or Paste session unlocks the
+  app only after `GET /api/v0/users/current` answers successfully. A rejected session (HTTP 401 or codes
+  40001-40003) is refused and not offered again; an unreachable or unreadable answer leaves the app locked with a
+  notice; an account that still owes its date of birth stays locked until it confirms it on chat.deepseek.com.
+- **Stored sessions are re-checked** in the background on start and when you switch to the account. An explicit
+  rejection locks the app on the welcome screen; being offline does not (the next request decides).
+- **Two layers.** The shell composes nothing but the welcome screen, the sign-in page and the account list while
+  signed out, and the view model refuses chat, file, tool and code actions without a session.
+- **Shared content and shortcuts wait.** Text or files shared into the app and launcher shortcuts are held (the
+  welcome screen says so) and used after sign-in.
+- **API keys are separate and explicit.** Under **More sign-in options**, **Use a DeepSeek API key** checks the key
+  with `GET /user/balance` before saving it and opening the API-key client. The app never switches between the web
+  account and an API key by itself.
+- Logging out or an expired session returns to the welcome screen.
 
 ## Not included
 

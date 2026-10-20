@@ -24,4 +24,20 @@ class PythonRuntimeTest {
             "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/package.whl"
         )) assertFalse(url, PythonRuntime.isAllowedUrl(url))
     }
+
+    @Test fun everyRuntimeFileHasAPinnedDigest() {
+        assertEquals(setOf("pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"), PythonRuntime.files)
+        PythonRuntime.SHA256.forEach { (name, digest) -> assertTrue(name, Regex("[0-9a-f]{64}").matches(digest)) }
+        assertEquals(PythonRuntime.SHA256.size, PythonRuntime.SHA256.values.toSet().size)
+        assertTrue(PythonRuntime.BASE_URL.contains("/v${PythonRuntime.VERSION}/"))
+    }
+
+    @Test fun onlyThePinnedDigestMatches() {
+        val wasm = PythonRuntime.SHA256.getValue("pyodide.asm.wasm")
+        assertTrue(PythonRuntime.matchesPin("pyodide.asm.wasm", wasm))
+        assertTrue(PythonRuntime.matchesPin("pyodide.asm.wasm", wasm.uppercase()))
+        assertFalse(PythonRuntime.matchesPin("pyodide.asm.wasm", wasm.replaceRange(0, 1, if (wasm[0] == '0') "1" else "0")))
+        assertFalse(PythonRuntime.matchesPin("pyodide.js", wasm))
+        assertFalse(PythonRuntime.matchesPin("package.whl", wasm))
+    }
 }

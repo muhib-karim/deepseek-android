@@ -8,6 +8,9 @@ import android.net.http.SslError
 import android.os.Message
 import android.util.Log
 import android.webkit.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import app.dsandroid.core.deepseek.*
 import app.dsandroid.BuildConfig
 import java.util.UUID
@@ -163,6 +166,27 @@ class DeepSeekWebView(
         if (destroyed) { notice("Reopen the app to restart the login browser."); return }
         loaded = false; navigationFailed = false
         view.loadUrl(loginUrl)
+    }
+
+    /** What the sign-in page shows: whether it loaded, its title and how much text it has (a cookie banner counts as text). */
+    data class PageState(val loaded: Boolean = false, val title: String = "", val textLength: Int = 0)
+    /**
+     * The last [probePage] result, shown under the page. The WebView's own content is not readable by accessibility tools
+     * on every device, so this line is also how the release E2E check sees that the page rendered.
+     */
+    var pageState by mutableStateOf(PageState())
+        private set
+
+    /** Reads the loaded sign-in page's title and text length (nothing else) and publishes it as [pageState]. */
+    suspend fun probePage(): PageState = withContext(Dispatchers.Main.immediate) {
+        val result = if (!loaded || destroyed || !DeepSeekOrigin.isTrusted(view.url)) null else withTimeoutOrNull(2000) {
+            evaluate("""(() => [String(document.title || ""), document.body ? document.body.innerText.trim().length : 0])()""")
+        }
+        val values = result?.let { runCatching { Json.parseToJsonElement(it).jsonArray }.getOrNull() }
+        val next = if (values == null) PageState()
+            else PageState(true, values.getOrNull(0)?.jsonPrimitive?.contentOrNull.orEmpty().trim().take(80), values.getOrNull(1)?.jsonPrimitive?.intOrNull ?: 0)
+        pageState = next
+        next
     }
 
     /** True when the trusted page has finished loading yet shows no text at all (the reported blank sign-in screen). */

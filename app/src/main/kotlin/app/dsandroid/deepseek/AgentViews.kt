@@ -52,22 +52,13 @@ fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, on
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         steps.forEachIndexed { index, step ->
             when (step) {
-                is TurnStep.Reasoning -> ReasoningRow("$messageId-$index", step.text, working && !step.complete)
+                is TurnStep.Reasoning -> ThinkingBlock("$messageId-$index", step.text, working && !step.complete,
+                    step.durationMs.takeIf { step.complete && it > 0 }?.let { it / 1000.0 })
                 is TurnStep.ToolCall -> ToolStepRow(step)
                 is TurnStep.Answer -> if (step.text.isNotBlank()) MarkdownText(step.text.trim(), onRunCode = onRunCode, onPreviewCode = onPreviewCode, onEditCode = onEditCode)
             }
         }
     }
-}
-
-@Composable
-private fun ReasoningRow(key: String, text: String, active: Boolean) {
-    var expanded by rememberSaveable(key) { mutableStateOf(false) }
-    Row(Modifier.clickable { expanded = !expanded }.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (active) "Thinking\u2026" else "Thought", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        AppIcon(Glyph.CHEVRON, if (expanded) "Collapse reasoning" else "Expand reasoning", Modifier.size(18.dp).rotate(if (expanded) 180f else 0f))
-    }
-    if (expanded) Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 }
 
 /** One tool call as a single compact line; tapping shows its input and result. */
@@ -220,9 +211,13 @@ private fun size(bytes: Long) = when {
     else -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
 }
 
-/** A generated file: preview (PDF first page, image thumbnail or text), then Open, Edit (text files), Save and Share. */
+/**
+ * A generated file: preview (PDF first page, image thumbnail or text), then Open, Edit (text files), Download (to
+ * Downloads/DeepSeek, or the system file picker before Android 10), Save as (the system file picker) and Share.
+ */
 @Composable
-fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit, onEdit: (() -> Unit)? = null) {
+fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: () -> Unit, onShare: () -> Unit, onEdit: (() -> Unit)? = null,
+    onSaveAs: (() -> Unit)? = null) {
     val previewKey = file?.lastModified()
     var preview by remember(artifact.path, previewKey) { mutableStateOf<CardPreview?>(null) }
     LaunchedEffect(artifact.path, previewKey) {
@@ -256,10 +251,12 @@ fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: ()
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f), thickness = 0.5.dp)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            // Scrolls sideways on narrow screens or large text, so every action stays reachable.
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
                 TextButton(onClick = onOpen, modifier = Modifier.semantics { contentDescription = "Open ${artifact.fileName}" }) { Text("Open") }
                 if (onEdit != null) TextButton(onClick = onEdit, modifier = Modifier.semantics { contentDescription = "Edit ${artifact.fileName}" }) { Text("Edit") }
-                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Save") }
+                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Download") }
+                if (onSaveAs != null) TextButton(onClick = onSaveAs, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} as" }) { Text("Save as") }
                 TextButton(onClick = onShare, modifier = Modifier.semantics { contentDescription = "Share ${artifact.fileName}" }) { Text("Share") }
             }
         }

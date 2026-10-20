@@ -7,12 +7,32 @@ name: Official DeepSeek reference
 on:
   workflow_dispatch:
     inputs:
+      build:
+        description: 'pre-pairip = the pinned 1.4.1 APK, which needs no Play; current = 2.6.2 (Play build, wrapped in the PairIP license check)'
+        type: choice
+        options: [pre-pairip, current]
+        default: pre-pairip
+      image:
+        description: 'Emulator system image (playstore records Play as the installer, as PairIP builds expect)'
+        type: choice
+        options: [google_apis, playstore]
+        default: google_apis
       version_code:
-        description: 'versionCode to fetch (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
+        description: 'versionCode for build=current (282 = 2.6.2, pinned with per-split hashes; others are signer-checked only)'
         default: '282'
+      abi:
+        description: 'ABI of the 2.6.2 build (arm64-v8a needs API 32+; armeabi-v7a needs an image with 32-bit ARM translation, such as API 30); pre-pairip is arm64-v8a'
+        type: choice
+        options: [arm64-v8a, armeabi-v7a]
+        default: arm64-v8a
       api_level:
-        description: 'Emulator API level (x86_64 Google APIs image with ARM translation; the app needs API 29+)'
-        default: '30'
+        description: 'Emulator API level (x86_64 image; the API 34 images translate arm64 code, the API 33 x86_64 images do not)'
+        default: '34'
+      network:
+        description: 'offline = airplane mode before the first launch, so 1.4.1 cannot fetch the server minimum version that raises its "Update Required" modal'
+        type: choice
+        options: [offline, online]
+        default: offline
       require_complete:
         description: 'Fail when signed-in screens are missing (needs the reference-account secrets)'
         type: boolean
@@ -37,6 +57,8 @@ jobs:
       - name: Fetch and verify the official APK (nothing is installed if this fails)
         env:
           REFERENCE_VERSION_CODE: ${{ inputs.version_code }}
+          REFERENCE_ABI: ${{ inputs.abi }}
+          REFERENCE_BUILD: ${{ inputs.build }}
         run: bash scripts/fetch_verify_reference.sh
       - name: Enable KVM access
         run: |
@@ -47,27 +69,34 @@ jobs:
         uses: reactivecircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
         with:
           api-level: ${{ inputs.api_level }}
-          target: google_apis
+          target: ${{ inputs.image }}
           arch: x86_64
           profile: pixel_2
           disable-animations: true
           script: bash scripts/capture_reference.sh
         env:
+          REFERENCE_ABI: ${{ inputs.abi }}
+          REFERENCE_BUILD: ${{ inputs.build }}
+          REFERENCE_NETWORK: ${{ inputs.network }}
           # Optional dedicated test account; without it only signed-out screens are captured and the run is marked incomplete.
           DS_REF_EMAIL: ${{ secrets.DEEPSEEK_REFERENCE_EMAIL }}
           DS_REF_PASSWORD: ${{ secrets.DEEPSEEK_REFERENCE_PASSWORD }}
       - name: Check captures and keep only sanitized files
         id: check
         if: always()
-        run: python3 -I scripts/check_reference.py reference-output ${{ inputs.require_complete && '--require-complete' || '' }}
-      - name: Upload the sanitized reference
-        if: always() && steps.check.outcome == 'success'
+        shell: bash
+        run: |
+          set +e
+          python3 -I scripts/check_reference.py reference-output ${{ inputs.require_complete && '--require-complete' || '' }}
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - name: Upload the sanitized reference (also when incomplete, with diagnostic screenshots)
+        if: always() && steps.check.outputs.status != '' && steps.check.outputs.status != '2'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: deepseek-official-reference
           path: reference-output/sanitized/
           if-no-files-found: error
-      - name: Upload verification reports (no screenshots)
+      - name: Upload verification reports and text diagnostics (no screenshots)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -76,3 +105,8 @@ jobs:
             reference-output/source/
             reference-output/device/
           if-no-files-found: warn
+      - name: Fail when the reference is unsafe or incomplete
+        if: always() && steps.check.outputs.status != '0'
+        run: |
+          echo "check_reference.py exit status: '${{ steps.check.outputs.status }}' (2 unsafe, 1 incomplete; see the step summary)" >&2
+          exit 1

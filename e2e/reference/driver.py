@@ -26,9 +26,21 @@ PRIVATE = [
     re.compile(r"[A-Za-z0-9._%+*-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
     re.compile(r"\+?\d[\d\s*()-]{6,}\d"),
 ]
-LOGIN_MARKERS = [r"^Log in$", r"^Login$", r"Continue with Google", r"Email / \+86", r"^Send code$", r"Continue with Password"]
+# Matched case-insensitively against both text and content-desc (the official app may expose either).
+LOGIN_MARKERS = (r"^log ?in$", r"^sign ?in$", r"continue with google", r"log in with google", r"email\s*/\s*\+86", r"^send code$",
+                 r"continue with password", r"log in with password", r"forgot password", r"^password$", r"^登录$", r"手机号")
+# First-launch consent, privacy and welcome sheets; only tapped when no sign-in control is visible.
+AGREE = (r"^agree$", r"^agree and continue$", r"^i agree$", r"^accept( all)?$", r"^ok$", r"^continue$", r"^got it$",
+         r"^同意$", r"^同意并继续$", r"^确定$", r"^我知道了$")
 CHAT_MARKERS = [r"^Type a message", r"^New chat$", r"^Message DeepSeek"]
 CHAT_DESCRIPTIONS = [r"^Open sidebar$", r"^New chat$"]
+FIRST_LAUNCH_SECONDS = 90  # splash under ARM translation can be slow on the first start
+LAUNCH_SECONDS = 45
+# Play builds since versionCode 110 wrap the app in Google's PairIP license check; without a licensed Play install it stops here.
+LICENSE_ACTIVITY = "com.pairip.licensecheck.LicenseActivity"
+LICENSE_REASON = f"license check screen: {LICENSE_ACTIVITY}"
+# 1.4.1 asks the server for a minimum version and covers the app with this modal; "Update now" is never tapped.
+UPDATE_MODAL = (r"^Update Required$", r"^Update now$")
 CHALLENGE = re.compile(r"captcha|verif(y|ication)|slide to|puzzle|security check|robot", re.I)
 BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
@@ -115,6 +127,7 @@ def sanitize_xml(xml_text):
 class Device:
     def __init__(self):
         self.width, self.height = 1080, 2200
+        self.last_dump_output = ""
 
     def adb(self, *args, timeout=60, check=False, binary=False):
         result = subprocess.run(["adb", *args], capture_output=True, timeout=timeout)
@@ -125,17 +138,22 @@ class Device:
     def shell(self, command, timeout=60):
         return self.adb("shell", command, timeout=timeout)
 
-    def dump(self):
-        for _ in range(6):
-            out = self.shell("uiautomator dump /sdcard/ref_window.xml", timeout=45)
+    def dump(self, attempts=6):
+        for _ in range(attempts):
+            result = subprocess.run(["adb", "shell", "uiautomator dump /sdcard/ref_window.xml"], capture_output=True, timeout=45)
+            out = (result.stdout + result.stderr).decode("utf-8", "replace")
+            self.last_dump_output = out.strip()[-800:]
             if "dumped" in out.lower():
                 xml_text = self.adb("exec-out", "cat", "/sdcard/ref_window.xml")
                 try:
                     return parse(xml_text), xml_text
                 except ET.ParseError:
-                    pass
+                    self.last_dump_output += "\n(unparsable hierarchy)"
             time.sleep(1.5)
         return [], "<hierarchy/>"
+
+    def pid(self):
+        return self.shell(f"pidof {PACKAGE}").strip()
 
     def settle(self, timeout=8.0):
         """Waits until two consecutive hierarchies agree (animations done), then returns the last one."""
@@ -196,6 +214,10 @@ class Device:
         match = re.search(r"(topResumedActivity|mResumedActivity)[^\n]*?\s([\w.]+/[\w.$]+)", out)
         return match.group(2) if match else "unknown"
 
+    def resumed_lines(self):
+        out = self.shell("dumpsys activity activities")
+        return "\n".join(line.strip() for line in out.splitlines() if re.search(r"mResumedActivity|topResumedActivity|ResumedActivity", line))
+
     def restart(self):
         self.shell(f"am force-stop {PACKAGE}")
         time.sleep(1.0)
@@ -233,12 +255,14 @@ class Recorder:
 
 
 class Session:
-    def __init__(self, out, version):
-        self.out, self.version = out, version
+    def __init__(self, out, version, diagnostics):
+        self.out, self.version, self.diagnostics = out, version, diagnostics
         self.device = Device()
         self.recorder = Recorder(self.device, os.path.join(out, "video"))
         self.entries = []
         self.step = 0
+        self.license_blocked = False
+        self.update_modal = set()  # themes in which the server's "Update Required" modal appeared
         os.makedirs(os.path.join(out, "screens"), exist_ok=True)
 
     # ---- capture and bookkeeping ----
@@ -266,6 +290,50 @@ class Session:
                              "png": prefix + ".png" if status == "captured" else None, "xml": prefix + ".xml", "meta": prefix + ".json"})
         print(f"[{theme}] {screen}: {status}")
 
+    def frame(self, label, theme, nodes=None, xml_text=None):
+        """A diagnostic screenshot of whatever is on screen (not a reference capture), sanitized like the captures."""
+        if nodes is None:
+            nodes, xml_text = self.device.dump(attempts=2)
+        self.step += 1
+        prefix = f"{theme}-diagnostic-{label}"
+        png = os.path.join(self.out, "screens", prefix + ".png")
+        self.device.screencap(png)
+        boxes = private_boxes(nodes)
+        if boxes and not redact(png, boxes):
+            os.remove(png)
+            return
+        with open(os.path.join(self.out, "screens", prefix + ".xml"), "w") as handle:
+            handle.write(sanitize_xml(xml_text or "<hierarchy/>"))
+        meta = {"screen": f"diagnostic-{label}", "theme": theme, "source": "official-reference", "package": PACKAGE,
+                "version": self.version, "activity": self.device.top_activity(), "step": self.step, "redacted_regions": len(boxes)}
+        with open(os.path.join(self.out, "screens", prefix + ".json"), "w") as handle:
+            json.dump(meta, handle, indent=2)
+        self.entries.append({"screen": f"diagnostic-{label}", "theme": theme, "status": "diagnostic", "reason": "",
+                             "png": prefix + ".png", "xml": prefix + ".xml", "meta": prefix + ".json"})
+
+    def diagnose(self, label, theme):
+        """Text diagnostics for a required screen that did not appear: hierarchy, resumed activity, process, logcat."""
+        directory = os.path.join(self.diagnostics, f"{theme}-{label}")
+        os.makedirs(directory, exist_ok=True)
+        nodes, xml_text = self.device.dump(attempts=2)
+        files = {
+            "hierarchy.xml": sanitize_xml(xml_text),
+            "uiautomator-dump.txt": self.device.last_dump_output,
+            "resumed-activity.txt": self.device.resumed_lines(),
+            "focus.txt": "\n".join(l.strip() for l in self.device.shell("dumpsys window").splitlines() if "mCurrentFocus" in l or "mFocusedApp" in l),
+            "pidof.txt": self.device.pid() or "(no process: not running or crashed)",
+            "logcat.txt": self.device.shell("logcat -d -t 400 -b main -b system -b crash", timeout=60),
+            "logcat-crash.txt": self.device.shell("logcat -d -b crash", timeout=60),
+            "package.txt": "\n".join(l.strip() for l in self.device.shell(f"dumpsys package {PACKAGE}").splitlines()
+                                     if re.search(r"versionCode|versionName|primaryCpuAbi|secondaryCpuAbi|flags=", l)),
+        }
+        for name, text in files.items():
+            with open(os.path.join(directory, name), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        self.frame(label, theme, nodes, xml_text)
+        print(f"[{theme}] diagnostics for {label} saved: process={'yes' if files['pidof.txt'][:1].isdigit() else 'no'}, "
+              f"resumed={self.device.top_activity()}, nodes={len(nodes)}")
+
     def missing(self, screen, theme, reason):
         self.entries.append({"screen": screen, "theme": theme, "status": "missing", "reason": reason,
                              "png": None, "xml": None, "meta": None})
@@ -284,24 +352,60 @@ class Session:
     # ---- navigation helpers ----
 
     def dismiss_system_dialogs(self, nodes):
-        for package in ("com.android.permissioncontroller", "com.google.android.permissioncontroller", "android"):
-            button = find_any(nodes, texts=(r"^Don.t allow$", r"^Deny$", r"^Close app$", r"^OK$"), package=package)
+        # A slow first start under ARM translation can raise "isn't responding": wait, never close the app.
+        wait = find_any(nodes, texts=(r"^wait$",), package="android")
+        if wait:
+            self.device.tap(wait)
+            return True
+        for package in ("com.android.permissioncontroller", "com.google.android.permissioncontroller"):
+            button = find_any(nodes, texts=(r"^allow$", r"^while using the app$", r"^don.t allow$", r"^deny$"), package=package)
             if button:
                 self.device.tap(button)
                 return True
+        if nodes and all(n.pkg == "com.google.android.gms" for n in nodes if n.area > 0):
+            self.device.back()
+            return True
         return False
 
-    def to_login(self):
+    def login_node(self, nodes):
+        return find_any(nodes, texts=LOGIN_MARKERS, descs=LOGIN_MARKERS)
+
+    def to_login(self, first=False, theme="light"):
+        """Launches the app and waits for the sign-in screen, accepting first-launch consent sheets on the way."""
         self.device.restart()
-        def ready(nodes):
+        limit = FIRST_LAUNCH_SECONDS if first else LAUNCH_SECONDS
+        start, frames, intros, checked = time.time(), [5, 20, 45], 0, 0.0
+        while time.time() - start < limit:
+            nodes, xml_text = self.device.dump(attempts=2)
+            if first and frames and time.time() - start >= frames[0]:
+                self.frame(f"launch-{frames.pop(0):02d}s", theme, nodes, xml_text)
+            if time.time() - checked > 5:
+                checked = time.time()
+                # The license check never yields to the sign-in screen without a licensed Play install: stop waiting.
+                if LICENSE_ACTIVITY in self.device.top_activity() and time.time() - start > 15:
+                    self.license_blocked = True
+                    self.frame("license-check", theme, nodes, xml_text)
+                    return None
+            if find_any(nodes, texts=UPDATE_MODAL):
+                # Documented once per theme, never dismissed; the sign-in controls under it are not reachable.
+                if theme not in self.update_modal:
+                    self.update_modal.add(theme)
+                    self.frame("update-required-modal", theme, nodes, xml_text)
+                time.sleep(1.0)
+                continue
             if self.dismiss_system_dialogs(nodes):
-                return None
-            agree = find_any(nodes, texts=(r"^Agree$", r"^Agree and continue$", r"^Accept$"))
-            if agree and not find_any(nodes, texts=LOGIN_MARKERS):
-                return agree
-            return find_any(nodes, texts=LOGIN_MARKERS)
-        found = self.device.wait(ready, timeout=40)
-        return found
+                continue
+            login = self.login_node(nodes)
+            if login:
+                return login
+            agree = find_any(nodes, texts=AGREE, descs=AGREE)
+            if agree and intros < 3:
+                intros += 1
+                self.capture("intro" if intros == 1 else f"intro-{intros}", theme)
+                self.device.tap(agree)
+                continue
+            time.sleep(1.0)
+        return None
 
     def to_chat(self):
         self.device.restart()
@@ -323,45 +427,70 @@ class Session:
 
     # ---- signed-out screens ----
 
-    def signed_out(self, theme):
-        self.recorder.start(f"{theme}-signed-out")
-        first = self.to_login()
-        if first is None:
-            self.missing("login", theme, "the sign-in screen did not appear")
+    def open_sign_in(self, theme, *patterns):
+        """Taps a sign-in option. The welcome requires the terms checkbox: when the app asks for consent first, that
+        dialog is captured once per theme ("terms-required") and accepted with its own Agree button (a fresh emulator,
+        no account), so the real sign-in screen behind it can be captured."""
+        if not self.tap_text(*patterns, timeout=5):
             return False
-        nodes, _ = self.device.dump()
-        agree = find_any(nodes, texts=(r"^Agree$", r"^Agree and continue$", r"^Accept$"))
-        if agree and not find_any(nodes, texts=LOGIN_MARKERS):
-            self.capture("intro", theme)
-            self.device.tap(agree)
-            if not self.device.wait(lambda n: find_any(n, texts=LOGIN_MARKERS), timeout=20):
-                self.missing("login", theme, "the sign-in screen did not follow the intro")
+        dialog = self.device.wait(lambda nodes: find_any(nodes, texts=(r"^Terms of Use and Privacy Policy$",)), timeout=3)
+        if dialog:
+            if (theme, "terms-required") not in {(e["theme"], e["screen"]) for e in self.entries}:
+                self.capture("terms-required", theme)
+            if not self.tap_text(r"^Agree$", timeout=3):
                 return False
+            time.sleep(1.5)
+            nodes, _ = self.device.dump(attempts=2)
+            # Some builds only tick the box on Agree; tap the option again if the welcome is still showing.
+            if self.login_node(nodes) and find_any(nodes, texts=patterns):
+                self.tap_text(*patterns, timeout=3)
+        time.sleep(1.5)
+        return True
+
+    def signed_out(self, theme, first=False):
+        self.recorder.start(f"{theme}-signed-out")
+        if self.to_login(first=first, theme=theme) is None:
+            self.diagnose("login", theme)
+            if self.license_blocked:
+                self.missing("login", theme, LICENSE_REASON)
+            else:
+                process = "running" if self.device.pid() else "not running (crashed or never started)"
+                self.missing("login", theme, f"the sign-in screen did not appear; app process {process}; diagnostics saved")
+            self.recorder.stop()
+            return False
         self.capture("login", theme)
 
+        def phone():
+            if not self.open_sign_in(theme, r"Continue with Phone", r"Log in with phone"):
+                return "no phone sign-in option"
+            self.capture("login-phone", theme)
+            self.to_login(theme=theme)
+            return None
+        self.attempt("login-phone", theme, phone)
+
         def password():
-            if not self.tap_text(r"Log in with password", r"Continue with Password", r"^Password$", timeout=5):
+            if not self.open_sign_in(theme, r"Log in with password", r"Continue with Password", r"^Password$"):
                 return "no password sign-in option"
             self.capture("login-password", theme)
-            self.to_login()
+            self.to_login(theme=theme)
             return None
         self.attempt("login-password", theme, password)
 
         def forgot():
-            self.tap_text(r"Log in with password", r"Continue with Password", timeout=3)
+            self.open_sign_in(theme, r"Log in with password", r"Continue with Password")
             if not self.tap_text(r"^Forgot password", timeout=5):
                 return "no forgot-password link"
             self.capture("forgot-password", theme)
-            self.to_login()
+            self.to_login(theme=theme)
             return None
         self.attempt("forgot-password", theme, forgot)
 
         def google():
-            if not self.tap_text(r"Continue with Google", r"Log in with Google", timeout=5):
+            if not self.tap_text(r"continue with google", r"log in with google", descs=(r"google",), timeout=5):
                 return "no Google sign-in button"
             time.sleep(4)
             self.capture("login-google", theme)
-            self.to_login()
+            self.to_login(theme=theme)
             return None
         self.attempt("login-google", theme, google)
         self.recorder.stop()
@@ -400,7 +529,7 @@ class Session:
             if find(nodes, text=r"When were you born"):
                 return "birthday"
             return None
-        result = self.device.wait(outcome, timeout=45)
+        result = self.device.wait(outcome, timeout=60)
         if result == "chat":
             return None
         if result == "challenge":
@@ -579,15 +708,19 @@ def main(argv):
     parser = argparse.ArgumentParser(description="Capture the official DeepSeek app's screens.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--version", default="unknown")
+    parser.add_argument("--diagnostics", default="diagnostics", help="text diagnostics directory (verification artifact)")
+    parser.add_argument("--network", default="online", choices=("online", "offline"),
+                        help="whether the emulator had internet access during the capture (recorded in the manifest)")
     args = parser.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
-    session = Session(args.out, args.version)
+    os.makedirs(args.diagnostics, exist_ok=True)
+    session = Session(args.out, args.version, args.diagnostics)
     email, password = os.environ.get("DS_REF_EMAIL", ""), os.environ.get("DS_REF_PASSWORD", "")
     signed_in_reason = "no reference account configured (DEEPSEEK_REFERENCE_EMAIL / DEEPSEEK_REFERENCE_PASSWORD)"
     for theme in ("light", "dark"):
         session.device.shell(f"cmd uimode night {'yes' if theme == 'dark' else 'no'}")
         time.sleep(2)
-        session.signed_out(theme)
+        session.signed_out(theme, first=theme == "light")
     if email and password:
         session.device.shell("cmd uimode night no")
         reason = session.sign_in(email, password)
@@ -601,14 +734,18 @@ def main(argv):
             signed_in_reason = reason
     session.recorder.stop()
     session.device.shell("cmd uimode night no")
+    if session.license_blocked:
+        # Nothing behind the license check is reachable, signed in or not.
+        signed_in_reason = LICENSE_REASON
     protected = ["chat-empty", "think-on", "search-on", "attach-sheet", "chat-populated", "message-menu", "share",
                  "drawer", "settings", "settings-appearance", "profile", "data-controls"]
     if signed_in_reason:
         for theme in ("light", "dark"):
             for screen in protected:
                 session.missing(screen, theme, signed_in_reason)
-    manifest = {"package": PACKAGE, "version": args.version, "source": "official-reference",
+    manifest = {"package": PACKAGE, "version": args.version, "source": "official-reference", "blocked_by": LICENSE_REASON if session.license_blocked else "",
                 "signed_in": not signed_in_reason, "signed_in_reason": signed_in_reason,
+                "network": args.network, "update_modal_themes": sorted(session.update_modal),
                 "viewport": {"width": 1080, "height": 2200, "density": 440, "font_scale": 1.0},
                 "entries": session.entries}
     with open(os.path.join(args.out, "manifest.json"), "w") as handle:

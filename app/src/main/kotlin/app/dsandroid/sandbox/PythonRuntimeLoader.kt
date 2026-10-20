@@ -7,6 +7,7 @@ import app.dsandroid.core.tools.WebFetchUrlPolicy
 import java.io.File
 import java.io.IOException
 import java.net.Proxy
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -21,10 +22,15 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.*
 
-/** A complete private cache avoids future downloads. Interrupted downloads are never accepted. */
+/**
+ * A complete private cache avoids future downloads (the sandbox then works offline). Interrupted downloads and any file
+ * whose SHA-256 differs from its pin (PythonRuntime.SHA256) are never accepted; a cache that fails the check is deleted.
+ */
 internal class PythonRuntimeLoader(context: Context, private val approve: suspend () -> Boolean) {
-    private val root = File(context.filesDir, "python-runtime-0.26.4")
+    private val root = File(context.filesDir, "python-runtime-${PythonRuntime.VERSION}")
     private val mutex = Mutex()
+    /** The cache was hashed and matched the pins in this process; it is private storage, so once per process is enough. */
+    @Volatile private var verified = false
     private val http = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
         .followRedirects(false).followSslRedirects(false)
         .dns(object : Dns {
@@ -37,7 +43,7 @@ internal class PythonRuntimeLoader(context: Context, private val approve: suspen
         }).connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).callTimeout(90, TimeUnit.SECONDS).build()
 
     suspend fun load(): Boolean = mutex.withLock {
-        if (withContext(Dispatchers.IO) { cacheReady() }) return@withLock true
+        if (withContext(Dispatchers.IO) { cacheReady() && verifyCache() }) return@withLock true
         if (!approve()) return@withLock false
         withTimeout(120_000) {
             withContext(Dispatchers.IO) {
@@ -54,14 +60,32 @@ internal class PythonRuntimeLoader(context: Context, private val approve: suspen
                         remaining -= download(PythonRuntime.BASE_URL + name, remaining, File(staging, name))
                     }
                     currentCoroutineContext().ensureActive()
-                    File(staging, "complete").outputStream().use { it.write("0.26.4".toByteArray()); it.fd.sync() }
+                    File(staging, "complete").outputStream().use { it.write(PythonRuntime.VERSION.toByteArray()); it.fd.sync() }
                     if (root.exists()) check(root.deleteRecursively())
                     check(staging.renameTo(root))
                     check(cacheReady())
+                    verified = true
                     true
                 } finally { staging.deleteRecursively() }
             }
         }
+    }
+
+    /** Hashes the cached files against the pins; a mismatch (a damaged cache) deletes the cache so it is downloaded again. */
+    private fun verifyCache(): Boolean {
+        if (verified) return true
+        val intact = PythonRuntime.files.all { name -> PythonRuntime.matchesPin(name, sha256(File(root, name))) }
+        if (!intact) root.deleteRecursively() else verified = true
+        return intact
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(65536)
+            while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     private fun cacheReady(): Boolean {
@@ -109,6 +133,7 @@ internal class PythonRuntimeLoader(context: Context, private val approve: suspen
                         val body = requireNotNull(it.body)
                         require(body.contentLength() <= maximum)
                         var total = 0
+                        val digest = MessageDigest.getInstance("SHA-256")
                         target.outputStream().use { output -> body.byteStream().use { input ->
                             val buffer = ByteArray(8192)
                             while (true) {
@@ -117,10 +142,13 @@ internal class PythonRuntimeLoader(context: Context, private val approve: suspen
                                 if (count < 0) break
                                 require(total + count <= maximum)
                                 output.write(buffer, 0, count)
+                                digest.update(buffer, 0, count)
                                 total += count
                             }
                         }; output.fd.sync() }
                         require(total > 0)
+                        val actual = digest.digest().joinToString("") { b -> "%02x".format(b.toInt() and 0xff) }
+                        if (!PythonRuntime.matchesPin(target.name, actual)) throw IOException("${target.name} does not match its pinned SHA-256")
                         total
                     }
                 }

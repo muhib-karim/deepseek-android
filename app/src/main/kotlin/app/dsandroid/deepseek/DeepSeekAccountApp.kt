@@ -4,12 +4,14 @@ import android.app.Activity
 import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,10 +21,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,6 +35,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import androidx.core.os.LocaleListCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,6 +84,7 @@ private const val BROWSER_STEPS = "Google doesn't allow its sign-in inside apps,
 private const val PASTE_STEPS = "If the Open in DeepSeek Android button doesn't come back to this app, tap Copy session instead on that page and paste it here. " +
     "The session is stored encrypted on this phone, like a normal sign-in."
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
     launchRequest: LaunchRequest? = null, launchConsumed: () -> Unit = {},
@@ -99,11 +106,15 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     val ignoredLink by BrowserSessionInbox.ignored.collectAsStateWithLifecycle()
     LaunchedEffect(incomingSession) { if (incomingSession != null) browserToken = BrowserSessionInbox.take() }
     LaunchedEffect(ignoredLink) { if (ignoredLink) { BrowserSessionInbox.ignored.value = false; vm.notice(LINK_IGNORED_NOTICE) } }
-    // A session from the browser (link or paste) goes through the same checks as one captured on the sign-in page.
+    // A session from the browser (link or paste) goes through the same check as one captured on the sign-in page:
+    // DeepSeek must confirm it before anything unlocks; the view model shows why when it does not.
     fun useSession(token: SessionToken) = scope.launch {
         BrowserSessionInbox.clearStarted(context)
-        if (vm.needsBirthday(token)) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
-        else if (!vm.acceptSession(token)) vm.notice("DeepSeek did not accept this session. Sign in again in your browser and send it again.")
+        if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice("Confirm your date of birth on chat.deepseek.com in your browser, then send the session again.")
+    }
+    fun openLink(url: String) {
+        try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: Exception) { vm.notice("No browser is available on this phone.") }
     }
     val dark = state.appearance == Appearance.DARK || (state.appearance == Appearance.SYSTEM && isSystemInDarkTheme())
     DisposableEffect(context, dark) {
@@ -124,7 +135,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     }
     var viewing by remember { mutableStateOf<Artifact?>(null) }
     var pendingSave by remember { mutableStateOf<Artifact?>(null) }
-    val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { target ->
+    // Save as (and Download before Android 10): the system file picker with the file's own name and type, no storage permission.
+    val saveDocument = rememberLauncherForActivityResult(CreateTextDocument()) { target ->
         val artifact = pendingSave
         pendingSave = null
         val file = artifact?.let(vm::artifactFile)
@@ -178,13 +190,16 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                     try {
                         if (withContext(Dispatchers.IO) { ArtifactActions.saveToDownloads(context, artifact, file) }) {
                             Toast.makeText(context, "Saved to Downloads/DeepSeek", Toast.LENGTH_SHORT).show()
-                        } else {
-                            pendingSave = artifact
-                            saveDocument.launch(artifact.fileName)
-                        }
+                        } else saveArtifactAs(artifact)
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { vm.notice("The file could not be saved.") }
                 }
+            }
+            override fun saveArtifactAs(artifact: Artifact) {
+                if (vm.artifactFile(artifact) == null) return vm.notice("This file is no longer available.")
+                pendingSave = artifact
+                try { saveDocument.launch(CreateTextDocument.Request(artifact.fileName, artifact.mimeType)) }
+                catch (_: Exception) { pendingSave = null; vm.notice("No file picker is available.") }
             }
             override fun shareArtifact(artifact: Artifact) {
                 val file = vm.artifactFile(artifact) ?: return vm.notice("This file is no longer available.")
@@ -207,6 +222,10 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             override fun editArtifact(artifact: Artifact) = vm.editArtifactFile(artifact)
             override fun openChatFiles() = vm.showChatFiles()
             override fun hideChatFiles() = vm.hideChatFiles()
+            override fun setToolEnabled(name: String, enabled: Boolean) = vm.setToolEnabled(name, enabled)
+            override fun setTrustedExecution(enabled: Boolean) = vm.setTrustedExecution(enabled)
+            override fun addRemoteServer(name: String, url: String) = vm.addRemoteServer(name, url)
+            override fun removeRemoteServer(id: String) = vm.removeRemoteServer(id)
             override fun openChatFile(row: ChatFileRow) {
                 vm.hideChatFiles()
                 val artifact = vm.chatFileArtifact(row)
@@ -264,30 +283,36 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             var blankChecked = false
             while (true) {
                 delay(1000)
-                // A page that has not loaded, or loaded blank, after 10 seconds falls back to the browser route on its own.
-                if (!blankChecked && System.currentTimeMillis() - opened > 10_000) {
+                browser.probePage()
+                // A page that has not loaded, or loaded blank, after 20 seconds gets a notice pointing to the browser route. The
+                // person chose this route, so nothing opens on top of a page that may only be slow (DeepSeek's security check).
+                if (!blankChecked && System.currentTimeMillis() - opened > 20_000) {
                     blankChecked = true
-                    if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) { vm.notice(DeepSeekWebView.BLANK_NOTICE); browserGuide = true }
+                    if (browser.isProductionLogin && (!browser.pageLoaded || browser.looksBlank())) vm.notice(DeepSeekWebView.BLANK_NOTICE)
                 }
                 val token = browser.captureSession() ?: continue
-                // Keep the sign-in page open until a new account has answered DeepSeek's date-of-birth prompt.
+                // Keep the sign-in page open until DeepSeek confirms the session (and a new account has answered its date-of-birth prompt).
                 if (System.currentTimeMillis() - birthdayChecked < 3000) continue
                 birthdayChecked = System.currentTimeMillis()
-                if (vm.needsBirthday(token)) { vm.notice(BIRTHDAY_NOTICE); continue }
-                if (vm.acceptSession(token)) break
+                when (vm.signIn(token)) {
+                    SessionCheck.SIGNED_IN -> break
+                    SessionCheck.NEEDS_BIRTHDAY -> vm.notice(BIRTHDAY_NOTICE)
+                    else -> Unit // Rejected or not confirmed: the notice explains it and the page stays open.
+                }
             }
         }
     }
-    LaunchedEffect(sharedInput, state.ready, state.busy, state.importing) {
-        if (sharedInput != null && state.ready && !state.busy && !state.importing) {
+    // Shared content and shortcuts wait behind the sign-in gate; they are used once DeepSeek has confirmed a session.
+    LaunchedEffect(sharedInput, state.ready, state.signedIn, state.busy, state.importing) {
+        if (sharedInput != null && state.ready && state.signedIn && !state.busy && !state.importing) {
             vm.newChat(); vm.draft(sharedInput.text)
             vm.importShared(sharedInput.uris)
             if (sharedInput.limited) vm.notice("Some shared content was too large or unsupported and was not imported.")
             sharedConsumed()
         }
     }
-    LaunchedEffect(launchRequest, state.ready, state.busy, state.importing) {
-        if (launchRequest != null && state.ready && !state.busy && !state.importing) {
+    LaunchedEffect(launchRequest, state.ready, state.signedIn, state.busy, state.importing) {
+        if (launchRequest != null && state.ready && state.signedIn && !state.busy && !state.importing) {
             vm.newChat()
             when (launchRequest.action) {
                 QuickAction.CAMERA -> pick("Camera")
@@ -301,13 +326,14 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     val workbenchPane = remember {
         movableContentOf { pane: WorkbenchPane, ui: AccountUiState -> WorkbenchPaneHost(pane, ui, vm, browser::solve, saveAs, shareText) }
     }
-    AccountTheme(state.appearance) {
+    AccountTheme(state.appearance, state.textScale) {
         // An active API-key profile chats through the API-key client; Settings > Accounts and sign-in still use the account shell.
         val apiProfile = state.accounts.firstOrNull { it.active && it.type == AccountType.API_KEY }
         val shellPage = state.page == AccountPage.ACCOUNTS || state.page == AccountPage.LOGIN
         val apiMode = (apiFallback || apiProfile != null) && !shellPage
         val pane = state.pane.takeIf { !apiMode }
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Test tags double as resource ids so the release E2E driver (UiAutomator, outside the app) can find controls.
+        BoxWithConstraints(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
             // Side by side on wide windows (840 dp and up); full screen over the chat on phones.
             val wide = maxWidth >= 840.dp
             Row(Modifier.fillMaxSize()) {
@@ -356,7 +382,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         onLogin = { if (state.page == AccountPage.LOGIN) browser.openLogin() else vm.navigate(AccountPage.LOGIN) },
                         onFinishLogin = { scope.launch {
                             val token = browser.captureSession()
-                            if (token == null || !vm.acceptSession(token)) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
+                            if (token == null) vm.notice("A supported DeepSeek session was not found. Complete login on chat.deepseek.com; if Google blocks this browser, choose another sign-in method.")
+                            else if (vm.signIn(token) == SessionCheck.NEEDS_BIRTHDAY) vm.notice(BIRTHDAY_NOTICE)
                         } },
                         onBrowserSignIn = { browserGuide = true }, onPasteSession = { pasteOpen = true },
                         onCopyDiagnostics = {
@@ -381,8 +408,29 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                             else if (search || state.attachments.isNotEmpty()) pendingSend = think to search
                             else vm.send(think, search, browser::solve)
                         },
-                        loginContent = { AndroidView(factory = { browser.view }, modifier = Modifier.fillMaxSize().testTag("login-webview")) },
+                        loginContent = {
+                            Column(Modifier.fillMaxSize()) {
+                                val page = browser.pageState
+                                Text(when {
+                                    !page.loaded -> "Loading the sign-in page…"
+                                    page.textLength == 0 -> "The sign-in page has loaded but shows no text yet."
+                                    else -> "Sign-in page ready: ${page.title.ifEmpty { "DeepSeek" }} (${page.textLength} characters)"
+                                }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp).testTag("login-page-state"),
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AndroidView(factory = { browser.view }, modifier = Modifier.weight(1f).fillMaxWidth().testTag("login-webview"))
+                            }
+                        },
                         actions = agentActions, accountActions = accountActions,
+                        heldShare = sharedInput != null,
+                        onUseApiKey = { key -> vm.useApiKey(key) { apiFallback = true } }, onOpenLink = ::openLink, onDismissNotice = vm::dismissNotice,
+                        onPin = vm::pin, onShareText = { text -> shareText("DeepSeek answer", text) },
+                        onTextScale = vm::setTextScale, onCollapseThinking = vm::setCollapseThinking, onAudioLanguage = vm::setAudioLanguage,
+                        onAppLanguage = { tag ->
+                            AppCompatDelegate.setApplicationLocales(if (tag.isEmpty()) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag))
+                        },
+                        appLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
+                        onDeleteAllChats = vm::deleteAllChats, onShareChat = { shareText("DeepSeek chat", vm.chatMarkdown()) }, onExportChatPdf = vm::exportChatPdf,
+                        onTerms = vm::setTermsAgreed,
                     )
                 }
                 if (wide && pane != null) {

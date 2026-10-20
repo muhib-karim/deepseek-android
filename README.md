@@ -11,6 +11,26 @@ minified release APK and SHA256SUMS.txt. Builds, unit tests and lint run on GitH
 Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
 emulators.
 
+## v1.0.0 (in progress, not released)
+
+On branch `feature/v1.0.0`; versionCode 10, versionName 1.0.0. Nothing has been compiled locally: GitHub Actions builds
+and tests it, and [docs/RELEASE_NOTES_100.md](docs/RELEASE_NOTES_100.md) records each result (all PENDING CI for now).
+
+- **Looks like the official DeepSeek app**, screen by screen, in light and dark: welcome screen with DeepSeek's terms
+  box, drawer with content search and date groups, "Thought for N seconds", "Read N web pages", the Think and Search
+  composer, Settings, Account settings, Data controls and Share chat. The official screens are captured by a manual
+  workflow from the verified official APK and described in [docs/reference/SCREEN_SPEC.md](docs/reference/SCREEN_SPEC.md).
+- **Signed out, there is no chat at all** until DeepSeek confirms the session.
+- **Plugins & tools** ([docs/TOOLS.md](docs/TOOLS.md)): agent mode makes real files (code, Markdown, CSV, Word, PDF,
+  Excel, PowerPoint, charts, PNG, ZIP), runs code in a sandbox (JavaScript, or Python from a pinned Pyodide runtime),
+  searches and reads the web and calls remote MCP tools; every tool has a switch, and network and device actions ask
+  first. Native Python and skill code need **Trusted execution** (off by default) and ask before every run.
+- **File cards:** Open, Edit, Download, Save as, Share.
+- **Release builds are tested before they are published:** an emulator suite drives the signed release APK against a
+  local fixture with video and step screenshots, checks that every tool case happened, and a separate job loads
+  DeepSeek's real sign-in page ([docs/EVIDENCE_v1.md](docs/EVIDENCE_v1.md)). From v1.0.0 a release carries only the
+  signed release APK and SHA256SUMS.txt.
+
 ## v0.7.1: Sign-in fix
 
 Fixes the blank **Log in with DeepSeek** page (DeepSeek's site now runs a security check first; the sign-in
@@ -62,7 +82,7 @@ Turn on **Agent** in the composer, next to Think and Search, and DeepSeek can us
 phone in the same chat:
 
 - **On-device Python** (`run_python`): Python 3.13 with numpy and matplotlib, in a private
-  folder per chat. Charts and files it creates appear as cards. Code blocks in answers get a
+  folder per chat (from v1.0.0 only with Trusted execution on, asking every run; see [docs/TOOLS.md](docs/TOOLS.md)). Charts and files it creates appear as cards. Code blocks in answers get a
   **Run** button. Extra pure-Python packages install from PyPI with `pip_install`, after you
   approve each download; **Skills → Python toolsets** lists and removes them.
 - **Files you can keep**: `create_pdf` lays out Markdown (headings, lists, tables, code, page

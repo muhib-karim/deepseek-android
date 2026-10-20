@@ -1,42 +1,51 @@
 package app.dsandroid
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Fresh emulator opens the account shell without model discovery, a WebView load, or API-key prompts. */
+/** Fresh emulator opens the welcome screen without model discovery, a WebView load, or API-key prompts. */
 @RunWith(AndroidJUnit4::class)
 class LaunchTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    @Test fun launcherActivityShowsChat() {
-        compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("Log in with DeepSeek").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Log in with DeepSeek").assertIsDisplayed()
+    @Test fun launcherActivityShowsWelcome() {
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Log in with phone or email").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithText("Log in with phone or email").assertIsDisplayed()
         compose.onNodeWithText("API key", substring = true, ignoreCase = true).assertDoesNotExist()
+        // Nothing loads DeepSeek's page until the person picks the in-app route.
+        compose.onNodeWithTag("login-webview").assertDoesNotExist()
     }
 
-    /** What a person sees on first launch with no session: every sign-in route on the main screen, and no usable chat. */
+    /** What a person sees on first launch with no session: every sign-in route, and no chat at all (not even a locked one). */
     @Test fun freshLaunchSignedOutShowsSignInAndNoUsableComposer() {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Continue with Google").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("signin-card").assertIsDisplayed()
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
         compose.onNodeWithText("Sign in to start chatting").assertIsDisplayed()
-        compose.onNodeWithText("Continue with Google").assertIsDisplayed()
         compose.onNodeWithText("Sign in with browser").assertIsDisplayed()
+        compose.onNodeWithText("Continue with Google").assertIsDisplayed()
+        compose.onNodeWithText("Log in with phone or email").assertIsDisplayed()
         compose.onNodeWithText("Paste session").assertIsDisplayed()
-        compose.onNodeWithTag("account-composer").assertIsNotEnabled()
-        compose.onNodeWithText("Log in to chat", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("Think").assertIsNotEnabled()
-        compose.onNodeWithText("Search").assertIsNotEnabled()
-        compose.onNodeWithText("Agent").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Add attachment").assertIsNotEnabled()
-        compose.onNodeWithContentDescription("Send message").assertIsNotEnabled()
+        // DeepSeek's terms box, as on the official welcome screen: not ticked on a fresh install.
+        compose.onNodeWithTag("welcome-consent").performScrollTo().assertIsOff()
+        compose.onNodeWithTag("account-composer").assertDoesNotExist()
+        compose.onNodeWithText("Type a message or hold to speak", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Think").assertDoesNotExist()
+        compose.onNodeWithText("Search").assertDoesNotExist()
+        compose.onNodeWithText("Agent").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Add attachment").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Send message").assertDoesNotExist()
+        // No drawer: no history, files, skills or settings while signed out.
+        compose.onNodeWithContentDescription("Open navigation").assertDoesNotExist()
+        compose.onNodeWithTag("message-list").assertDoesNotExist()
     }
 }

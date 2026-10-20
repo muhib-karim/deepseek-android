@@ -14,14 +14,27 @@ Every value carries a source tag:
 | **[R]** | Resource table of the verified 2.6.2 base APK (string and colour resources read on 2026-10-20 with a local reader; nothing extracted into the repo) | Exact for copy and named colours |
 | **[M]** | Measurements from the Play listing's promotional screenshots in [../ui-spec.md](../ui-spec.md) (phone inset normalised to 393 dp, about 2.14 px/dp, JPEG/PNG compression) | ±1-2 dp, ±1 sp, ±#03 per colour channel |
 | **[E]** | Estimate from public screenshots and descriptions, not yet measured | To be replaced by values measured from the reference capture |
+| **[C]** | Reference capture of the pinned 1.4.1 build (run 39447927215, API 34 Google APIs image, offline), as reviewed from the run's screenshots | Exact for layout and copy of 1.4.1, an older release than 2.6.2 |
 
 The reference workflow ([.github/workflows/reference.yml](../../.github/workflows/reference.yml)) installs the verified APK
 on an emulator at the same viewport as our capture tests (1080 x 2200 px, 440 dpi = 392.7 dp wide, font scale 1.0) and
-uploads the screens listed below as the `deepseek-official-reference` artifact. Signed-out screens need nothing else;
-signed-in screens need a dedicated test account in the `DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD`
-repository secrets. **Status (2026-10-20): the workflow has not run yet**, so every [E] value below is still an estimate
-and no official capture is committed. When a run is reviewed, measured values replace [E] here and sanitized captures go
-under [captures/](captures/).
+uploads the screens listed below as the `deepseek-official-reference` artifact. By default it installs the pinned pre-PairIP
+1.4.1 arm64-v8a build on an API 34 x86_64 Google APIs image, which translates arm64 code; the 2.6.2 Play build (arm64-v8a or
+armeabi-v7a) is selectable, but its PairIP check stops it unless Play installed it. API 33 x86_64 images have no ARM
+translation (runs 39444214055 and 39444218498: INSTALL_FAILED_NO_MATCHING_ABIS). Screens captured from 1.4.1 show an older
+release than 2.6.2; where they differ from the 2.6.2 resources and store screenshots, this spec follows 2.6.2.
+Signed-out screens need nothing else; signed-in screens need a dedicated test account in the
+`DEEPSEEK_REFERENCE_EMAIL` / `DEEPSEEK_REFERENCE_PASSWORD` repository secrets.
+
+**Status (2026-10-20):** the first dispatch (run 39436094511: API 30, armeabi-v7a build) installed the app but saved no
+diagnostics. With diagnostics added, run 39440391796 showed why nothing was captured: from versionCode 110 on, the Play
+builds wrap the app in Google's PairIP license check (`com.pairip.licensecheck.LicenseActivity`), which stops with "Check
+that Google Play is enabled on your device" unless Play installed the app. The workflow now defaults to a Play system
+image with Play recorded as the installer (`build=current`), and offers `build=pre-pairip`: the pinned 1.4.1 APK
+(versionCode 107, same signer, no license check). Captures are labelled with the version they came from; screens taken
+from 1.4.1 show an older interface and are compared with that in mind. Until a dispatch captures the screens, every [E]
+value below is an estimate and no official capture is committed. When a run is reviewed, measured values replace [E]
+here and sanitized captures go under [captures/](captures/).
 
 ## Global tokens
 
@@ -107,9 +120,32 @@ embedded browsers), **Log in with phone or email** (DeepSeek's own sign-in page 
 No chat, drawer or composer exists until a session is validated with DeepSeek (`GET /api/v0/users/current`).
 Tags: `welcome-screen`, `welcome-browser`, `welcome-google`, `welcome-phone-email`, `welcome-paste`.
 
+**Captured [C] (1.4.1, an older interface; runs 39447927215 and 39449534982, offline, light and dark; described from the
+reviewer's reading of the run screenshots, no image copied):** the signed-out welcome has no back arrow and shows
+"Contact us" at the top right, the whale logo and wordmark, **Continue with Phone** and **Continue with Password**, and
+the consent checkbox ("I confirm that I have read and agree to DeepSeek's Terms of Use and Privacy Policy"). Online, the
+same build also showed **Continue with Google** and **Sign up**, but a server-driven "Update Required / Please update to
+the latest version to ensure all features work properly / Update now" modal covered every screen (runs 39445093258,
+39445097855), which is why the capture runs offline.
+- **intro**: "Welcome to DeepSeek" consent sheet with **Disagree** / **Agree**.
+- **terms-required**: tapping a route before ticking the box opens the "Terms of Use and Privacy Policy" dialog with
+  **Cancel** / **Agree**.
+- **login-phone** ("Log in with phone"): "+86 Phone number", a code field with **Send code**, blue full-width **Log in**.
+- **login-password** ("Log in with password"): "+86 Phone number", Password with an eye toggle, "Forgot password?" link,
+  **Log in**.
+- **forgot-password** ("Reset password"): phone, code with **Send code**, **Continue**.
+- Sub-screens have a back arrow at the top left and "Contact us" at the top right.
+
+**Ours** follows the welcome layout: **Help** at the top right where the official app has "Contact us" (it opens this
+project's issue tracker, never DeepSeek's support), mark and wordmark, the routes (browser first), and the same terms box;
+tapping a DeepSeek route before ticking it shows the same "Terms of Use and Privacy Policy" dialog with Cancel / Agree,
+and the agreement is remembered on the phone. The phone, password and reset screens are DeepSeek's own web pages inside
+the app (Log in with phone or email), so their fields and validation are DeepSeek's.
+
 ### login-password, forgot-password, login-google
 Variants of the sign-in page. **Ours:** the in-app page is DeepSeek's own web sign-in (password, code and reset live
-there); Google always goes through the phone's browser.
+there); Google always goes through the phone's browser. Captured in 1.4.1 as login-phone, login-password and
+forgot-password (above).
 
 ### chat-empty: new chat [M]
 Top bar: menu icon left ("Open sidebar" [R]), title centred ("New chat" [R]; the model mode "Instant" / "Expert" [R]
@@ -195,7 +231,11 @@ Response settings and read-aloud options. **Ours:** collapse thinking automatica
 4. **Agent extensions:** Agent pill, tool steps, file cards, Files panel, Plugins & tools, Skills, artifacts panel and
    editor. They appear only when used or from the drawer, so the default chat matches the reference.
 5. **Not offered:** voice calls, model mode picker on the web route, server-side share links, account deletion,
-   report, WeChat / Apple binding, training switch.
+   report, WeChat / Apple binding, training switch, like / dislike (there is no feedback channel for an unofficial
+   client).
+6. **Contrast:** the accent is `#3D63F5` (white text on the official `#426EFE` is about 4.3:1) and secondary text is
+   `#6E7178` (the measured `#909398` is about 3.2:1 on white), so text keeps 4.5:1. The dark palette is ours until the
+   reference capture measures the official one.
 
 ## Comparing captures
 

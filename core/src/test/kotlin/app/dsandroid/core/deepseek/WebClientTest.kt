@@ -102,4 +102,36 @@ data: [DONE]
             assertEquals("/api/v0/users/current", first.path)
         } finally { server.shutdown() }
     }
+
+    @Test fun currentUserIsTheSignInGateAndReadsOnlyContactFields() = runBlocking<Unit> {
+        val server = MockWebServer(); server.start()
+        try {
+            server.enqueue(MockResponse().setBody("""{"code":0,"msg":"","data":{"biz_code":0,"biz_msg":"","biz_data":{"id":"u","token":"must-not-be-read","email":"t***@example.com","mobile_number":"","need_birthday":false}}}"""))
+            server.enqueue(MockResponse().setResponseCode(401))
+            server.enqueue(MockResponse().setBody("""{"code":0,"data":{"biz_code":40003,"biz_data":null}}"""))
+            server.enqueue(MockResponse().setResponseCode(500))
+            server.enqueue(MockResponse().setBody("not json"))
+            val client = DeepSeekWebClient(OkHttpClient(), server.url("/"))
+            val user = client.currentUser(credentials)
+            assertEquals("t***@example.com", user.email)
+            assertNull("A blank phone number is no phone number", user.phone)
+            assertFalse(user.needBirthday)
+            assertFalse("Debug strings never carry contact data", user.toString().contains("example.com"))
+            assertEquals("Bearer synthetic-session", server.takeRequest().getHeader("Authorization"))
+            // Rejected sessions never unlock: HTTP 401 and business code 40003 are both a session error.
+            assertThrows(SessionExpired::class.java) { runBlocking { client.currentUser(credentials) } }
+            assertThrows(SessionExpired::class.java) { runBlocking { client.currentUser(credentials) } }
+            // Service trouble or an unreadable answer is not a confirmation either.
+            assertThrows(EndpointChanged::class.java) { runBlocking { client.currentUser(credentials) } }
+            assertThrows(EndpointChanged::class.java) { runBlocking { client.currentUser(credentials) } }
+        } finally { server.shutdown() }
+    }
+
+    @Test fun anUnreachableServiceIsAConnectionFailureNotASignIn() = runBlocking<Unit> {
+        val server = MockWebServer(); server.start()
+        val url = server.url("/")
+        server.shutdown()
+        val client = DeepSeekWebClient(OkHttpClient(), url)
+        assertThrows(WebConnectionFailed::class.java) { runBlocking { client.currentUser(credentials) } }
+    }
 }

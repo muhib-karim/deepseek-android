@@ -230,15 +230,20 @@ class AccountTransportTest {
                 if (streaming) client.complete(credentials, CompletionInput("s", null, "Hi", false, false)) { 1 }.collect { startedReading.complete(Unit) }
                 else client.createSession(credentials)
             }
-            assertNotNull(withContext(Dispatchers.IO) { server.takeRequest(2, TimeUnit.SECONDS) })
+            // Generous bounds for slow CI machines: the property is that cancelling ends the call long before the client's
+            // 90-second read timeout, not how fast a loaded runner schedules it.
+            assertNotNull(withContext(Dispatchers.IO) { server.takeRequest(20, TimeUnit.SECONDS) })
             if (streaming) {
-                assertNotNull(withContext(Dispatchers.IO) { server.takeRequest(2, TimeUnit.SECONDS) })
-                withTimeout(3000) { startedReading.await() }
+                assertNotNull(withContext(Dispatchers.IO) { server.takeRequest(20, TimeUnit.SECONDS) })
+                withTimeout(30_000) { startedReading.await() }
             }
-            withTimeout(3000) { job.cancelAndJoin() }
-            assertTrue("Cancelled HTTP call must close promptly", withContext(Dispatchers.IO) { failed.await(2, TimeUnit.SECONDS) })
+            val cancelled = System.nanoTime()
+            withTimeout(30_000) { job.cancelAndJoin() }
+            assertTrue(job.isCancelled)
+            assertTrue("Cancelled HTTP call must close", withContext(Dispatchers.IO) { failed.await(30, TimeUnit.SECONDS) })
+            assertTrue("Closing waited for the read timeout", (System.nanoTime() - cancelled) / 1_000_000 < 60_000)
             server.enqueue(envelope("""{"id":"next-session"}"""))
-            val next = try { withTimeout(3000) { client.createSession(credentials) } } catch (error: WebConnectionFailed) { fail("next request failed; call failures: $callErrors; served: ${server.requestCount}") }
+            val next = try { withTimeout(30_000) { client.createSession(credentials) } } catch (error: WebConnectionFailed) { fail("next request failed; call failures: $callErrors; served: ${server.requestCount}") }
             assertEquals("next-session", next)
         } finally { server.shutdown() }
     }

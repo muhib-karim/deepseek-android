@@ -3,7 +3,10 @@ package app.dsandroid.sandbox
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import android.webkit.*
+import app.dsandroid.BuildConfig
+import app.dsandroid.core.sandbox.CodeSandboxDocument
 import app.dsandroid.core.sandbox.SandboxPreviewDocument
 import app.dsandroid.core.tools.WebFetchUrlPolicy
 import java.io.ByteArrayInputStream
@@ -16,7 +19,10 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-/** Disposable opaque-origin views. No Android bridge, cookies, files, storage or navigation. */
+/**
+ * Disposable views: previews have an opaque origin; code runs on the reserved https://sandbox.invalid origin
+ * (CodeSandboxDocument.BASE_URL), which never reaches a socket. No Android bridge, cookies, files, storage or navigation.
+ */
 object SandboxWebViews {
     private val previewHttp = OkHttpClient.Builder().proxy(Proxy.NO_PROXY)
         .followRedirects(false).followSslRedirects(false)
@@ -33,7 +39,8 @@ object SandboxWebViews {
     @Suppress("DEPRECATION")
     fun create(context: Context, javaScriptEnabled: Boolean, approvedNetwork: Boolean = false,
         cachedResource: ((String) -> WebResourceResponse?)? = null,
-        onFailure: () -> Unit = {}): WebView = WebView(context).apply {
+        onFailure: () -> Unit = {}, onConsole: ((String) -> Unit)? = null,
+        onPageEvent: ((String) -> Unit)? = null, sandboxPage: String? = null): WebView = WebView(context).apply {
         settings.javaScriptEnabled = javaScriptEnabled
         settings.allowFileAccess = false
         settings.allowContentAccess = false
@@ -48,8 +55,9 @@ object SandboxWebViews {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
         // Cached Python uses synthetic HTTPS requests: every one is intercepted below.
-        settings.blockNetworkLoads = !approvedNetwork && cachedResource == null
-        settings.blockNetworkImage = !approvedNetwork && cachedResource == null
+        // The code page itself is served the same way (a real https origin, so its blob worker is same-origin).
+        settings.blockNetworkLoads = !approvedNetwork && cachedResource == null && sandboxPage == null
+        settings.blockNetworkImage = !approvedNetwork && cachedResource == null && sandboxPage == null
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         isSaveEnabled = false
         setDownloadListener { _, _, _, _, _ -> } // Exports belong to the explicit native Save action.
@@ -59,9 +67,20 @@ object SandboxWebViews {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                if (url != null && url != "about:blank" && !url.startsWith("data:text/html")) view?.stopLoading()
+                onPageEvent?.invoke("started ${url?.take(40)}")
+                if (url != null && url != "about:blank" && url != CodeSandboxDocument.BASE_URL && !url.startsWith("data:text/html")) view?.stopLoading()
+            }
+            override fun onPageFinished(view: WebView?, url: String?) { onPageEvent?.invoke("finished ${url?.take(40)}") }
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true) onPageEvent?.invoke("error ${error?.errorCode} ${error?.description}")
             }
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse {
+                if (sandboxPage != null && request != null && request.isForMainFrame) {
+                    return if (request.method == "GET" && request.url.toString() == CodeSandboxDocument.BASE_URL)
+                        WebResourceResponse("text/html", "UTF-8", 200, "OK", mapOf("Cache-Control" to "no-store"),
+                            ByteArrayInputStream(sandboxPage.toByteArray(Charsets.UTF_8)))
+                    else blocked()
+                }
                 if (cachedResource != null) {
                     return if (request != null && !request.isForMainFrame && request.method == "GET")
                         cachedResource(request.url.toString()) ?: blocked() else blocked()
@@ -98,6 +117,14 @@ object SandboxWebViews {
         }
         webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest?) { request?.deny() }
+            // Page-level messages (the trusted bootstrap's own errors); code output goes through the worker's captured console.
+            override fun onConsoleMessage(message: ConsoleMessage?): Boolean {
+                if (message != null) {
+                    onConsole?.invoke("${message.messageLevel()}: ${message.message()}")
+                    if (BuildConfig.DEBUG) Log.w("DsSandbox", "${message.messageLevel()} ${message.message()} (line ${message.lineNumber()})")
+                }
+                return true
+            }
             override fun onGeolocationPermissionsShowPrompt(origin: String?, callback: GeolocationPermissions.Callback?) {
                 callback?.invoke(origin, false, false)
             }

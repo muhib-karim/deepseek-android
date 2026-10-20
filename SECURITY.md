@@ -35,14 +35,17 @@ The remaining provider/OAuth sections describe the explicit legacy API client.
 
 - **Approvals.** `pip_install` asks before every download. `web_fetch` keeps the existing policy:
   query strings, URLs over 200 characters and hosts not returned by this turn's search ask first;
-  private networks and redirects are refused. Other agent tools work only inside the app's private
+  private networks and redirects are refused. `run_python` and skill functions ask before every run
+  (trusted execution, see below). Other agent tools work only inside the app's private
   storage and run without a prompt. No tool writes outside the app sandbox; Save to Downloads,
   Share and Open in another app are explicit user actions on a file card (FileProvider grants
   read access to that one file).
 - **Folders.** Agent tools resolve paths inside the chat's folder (`files/workspace/account/<chat>`
   or `files/workspace/chats/<chat>`); absolute paths, `..`, encoded tricks and symlinks are refused.
   Account-mode agent files are deleted with their chat and on logout.
-- **Python.** Code runs in a separate, non-exported `:python` process under the app's UID with the
+- **Python (trusted execution).** Native Python, its packages and skill functions are offered to the agent only
+  while Trusted execution is on (off by default since v1.0.0), and each call asks first. They are not a sandbox:
+  code runs in a separate, non-exported `:python` process under the app's UID with the
   app's file access and no extra permissions. The app kills that process on timeout or Stop.
   Socket connections and DNS lookups are refused inside it; this is best effort (native code could
   bypass it), and the app's INTERNET permission is shared by all its processes.
@@ -57,6 +60,12 @@ The remaining provider/OAuth sections describe the explicit legacy API client.
   ordinary messages in your DeepSeek chat and are stored by DeepSeek like any other message.
   Tool results and fetched pages are untrusted data; the guard checks every call regardless of
   what a page or result says.
+- **Plugins & tools (v1.0.0).** Every tool has a switch (drawer or Settings > Plugins & tools; the
+  same switches as the API-key client's Settings > Tools). A switched-off tool is left out of the
+  tool list sent to the model, and a call for it is refused. The switches are read again before a
+  tool runs, so a tool switched off while its approval is showing does not run. In account mode
+  `web_search` asks before every search and names the search service; remote MCP tools ask before
+  every call (see Remote tool servers), and their answers are sent to DeepSeek as tool results.
 
 ## Reporting
 
@@ -124,7 +133,9 @@ assumed by this scaffold.
   JavaScript interface. A trusted page validates and caps the result before native
   polling. Code is limited to 100,000 characters, total stdout/stderr/value to
   16,000 characters, and execution (including runtime startup) to 15 seconds.
-  Stop, timeout and renderer failure dispose the view. CSP, request interception
+  Stop, timeout and renderer failure dispose the view. The code page has the reserved
+  origin `https://sandbox.invalid` (never resolved: every request is intercepted, and
+  only the cached runtime files are answered), so its blob worker is same-origin. CSP, request interception
   and disabled worker APIs prevent app file/device access and outbound networking.
   WebView does not expose a hard per-worker heap quota: hostile allocations can
   still exhaust the renderer; this boundary needs adversarial device testing.
@@ -136,8 +147,13 @@ assumed by this scaffold.
   runs reuse the cache without another download. Synthetic runtime URLs inside the
   WebView are intercepted and streamed from those exact cached files; no request
   falls through to the network. Package downloads and installs are unavailable.
-  The version is pinned; runtime bytes are trusted from the HTTPS CDN, not verified
-  against an independently pinned content hash.
+  Since v1.0.0 every runtime file must also match a pinned SHA-256
+  (`core/.../sandbox/PythonRuntime.kt`; the CDN files were checked byte for byte
+  against the npm package pyodide@0.26.4, whose tarball matches the registry's
+  sha512). A download with another digest is discarded; a cached runtime is hashed
+  again once per app process, and a cache that no longer matches is deleted and
+  downloaded again only after a new confirmation. The sandbox is offered in account
+  mode too (Plugins & tools > Code sandbox).
 - Artifact edits create separate immutable files and an atomically replaced private
   history journal, retaining the original and up to 19 edits. Completed fenced
   artifacts receive a stable import identity. HTML source is untrusted even when
@@ -159,7 +175,8 @@ assumed by this scaffold.
 | `web_search` | CONFIRM: every call displays the exact query before sending it to the configured DuckDuckGo or SearXNG service. Invalid/empty/oversized queries are denied. |
 | `web_fetch`, `visit_web` | Declared SAFE with a dynamic guard: run without asking only for public HTTPS URLs of at most 200 characters, without a query string, on an exact host returned by search in this turn. Otherwise CONFIRM; malformed, private/local or non-HTTPS destinations are denied even if a user would approve. DNS checks also apply at connection time. |
 | `render_chart`, `create_artifact`, `create_web_project` | SAFE: bounded private workspace outputs using new-file semantics. No external writes or network execution. HTML networking requires a separate preview confirmation. |
-| `code_interpreter` | SAFE: cancellable isolated computation with time/output limits and no app/device access. Python runtime download has its own exact-resource confirmation; downloaded code never receives a network grant. |
+| `code_interpreter` | SAFE: cancellable isolated computation with time/output limits and no app/device access. Python runtime download has its own exact-resource confirmation and pinned SHA-256 digests; downloaded code never receives a network grant. |
+| `run_python`, `pip_install`, skill functions | Trusted execution (v1.0.0): native code with this app's rights, **not a sandbox**. Offered to the model only while Trusted execution is switched on (Plugins & tools, or Settings > Tools in the API-key client; off by default, never restored from a backup), and then every call asks first (TrustedTool, risk CONFIRM). The Run button on a Python code block is an explicit user action. |
 
 Share, Save and opening source links are explicit UI actions, not model-callable
 registered tools. Sources are numbered within each assistant turn; only registered
@@ -323,7 +340,9 @@ by this rule alone, and allowing a search query can disclose its contents.
 - Responses are capped at 1 MiB.
 - Every remote tool is registered as CONFIRM: each call shows the server, tool
   name and arguments and runs only after you approve it. Each tool can be
-  switched off in Settings → Tools, and removing a server removes its tools.
+  switched off in Settings → Tools (or Plugins & tools in account mode), and
+  removing a server removes its tools. Account mode and the API-key client
+  share the list of servers.
 - A tool server sees the arguments you approve and can return misleading text;
   treat its output like any web page.
 

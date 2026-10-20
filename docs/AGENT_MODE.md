@@ -79,6 +79,10 @@ applies to the first message of an agent turn only.
 
 ## Tools
 
+v0.6.0 tool set. In v1.0.0 the account route adds more tools and switches, and `run_python`, `pip_install` and skill
+functions become trusted execution (offered only with Trusted execution on, asking every call); see
+[TOOLS.md](TOOLS.md), which supersedes the approval column below.
+
 | Tool | dsh equivalent | What it does | Approval |
 | --- | --- | --- | --- |
 | `run_python {code, timeout_s}` | `run_code` (Python instead of TypeScript) | Python 3.13 in the chat's folder; numpy and matplotlib built in; open figures saved as PNG; variables persist per chat | No (runs in the app sandbox; sockets refused) |

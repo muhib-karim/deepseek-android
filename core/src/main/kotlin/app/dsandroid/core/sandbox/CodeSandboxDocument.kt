@@ -4,6 +4,16 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /** A trusted bootstrap only: generated code is a string consumed inside a dedicated worker. */
 object CodeSandboxDocument {
+    /**
+     * The code page's origin. A real (reserved, never resolved) https origin, so the blob worker is same-origin with its
+     * page; every request the page or worker makes is intercepted by the Android adapter and only cached runtime files
+     * are ever answered.
+     */
+    const val BASE_URL = "https://sandbox.invalid/"
+
+    /** The origin of [BASE_URL]: the only document the trusted bootstrap runs in. */
+    const val ORIGIN = "https://sandbox.invalid"
+
     fun javascriptString(text: String): String = JsonPrimitive(text).toString()
         .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
         .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -13,7 +23,18 @@ object CodeSandboxDocument {
     /** The platform serves exact pinned runtime files from cache, never from the network. */
     fun python(code: String, pollKey: String): String = document(code, pollKey, true)
 
-    private fun document(code: String, pollKey: String, python: Boolean): String {
+    /** The page: a script-free shell (carrying the CSP) and the trusted bootstrap the host runs in it once it has loaded. */
+    class Page(val shell: String, val bootstrap: String)
+
+    fun javascriptPage(code: String, pollKey: String): Page = page(code, pollKey, false)
+
+    fun pythonPage(code: String, pollKey: String): Page = page(code, pollKey, true)
+
+    /** The same page as one self-contained document, with the bootstrap inline. */
+    private fun document(code: String, pollKey: String, python: Boolean): String =
+        page(code, pollKey, python).let { it.shell.replace("<body></body>", "<body><script>\n" + it.bootstrap + "\n</script></body>") }
+
+    private fun page(code: String, pollKey: String, python: Boolean): Page {
         require(code.isNotBlank() && code.length <= CodeLimits.MAX_CODE_CHARS)
         require(pollKey.matches(Regex("[A-Za-z][A-Za-z0-9]{8,80}")))
         val source = """
@@ -83,14 +104,27 @@ object CodeSandboxDocument {
         val policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:$cached; worker-src blob:; " +
             "connect-src ${if (python) PythonRuntime.CACHE_BASE_URL else "'none'"}; style-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; " +
             "object-src 'none'; base-uri 'none'; form-action 'none'"
-        return """<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="$policy"></head><body><script>
+        val shell = "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"$policy\"></head><body></body></html>"
+        val bootstrap = """
+            (() => {
+              // Only the committed sandbox page may run it (not the empty document a fresh view starts with), and only once.
+              if (location.origin !== ${javascriptString(ORIGIN)}) return 'wait ' + location.origin + ' ' + document.readyState;
+              if (Object.prototype.hasOwnProperty.call(window, ${javascriptString(pollKey)})) return 'ok';
             (() => {
               'use strict';
               let result = null;
-              const workerUrl = URL.createObjectURL(new Blob([${javascriptString(source)}], {type:'text/javascript'}));
-              const worker = new Worker(workerUrl);
-              URL.revokeObjectURL(workerUrl);
+              // Defined first: '' while the worker runs, then the result. A page that never gets here reads as not started.
+              Object.defineProperty(window,${javascriptString(pollKey)},{value:() => result === null ? '' : result});
               const cap = ${CodeLimits.MAX_OUTPUT_CHARS};
+              const fail = message => {
+                if (result === null) result = JSON.stringify({stdout:'',stderr:String(message).slice(0,cap),value:null,hasValue:false,truncated:false,failed:true});
+              };
+              let worker;
+              try {
+                const workerUrl = URL.createObjectURL(new Blob([${javascriptString(source)}], {type:'text/javascript'}));
+                worker = new Worker(workerUrl);
+                URL.revokeObjectURL(workerUrl);
+              } catch (e) { fail('The sandbox worker could not start: ' + e); return; }
               const finish = data => {
                 if (result !== null) return;
                 worker.terminate();
@@ -105,9 +139,11 @@ object CodeSandboxDocument {
                 if (data && typeof data === 'object' && typeof data.stdout === 'string' &&
                     typeof data.stderr === 'string' && typeof data.failed === 'boolean') finish(data);
               };
-              worker.onerror = () => finish({stdout:'',stderr:'Worker execution failed',failed:true});
-              Object.defineProperty(window,${javascriptString(pollKey)},{value:() => result});
+              worker.onerror = event => finish({stdout:'',stderr:'Worker execution failed' + (event && event.message ? ': ' + event.message : ''),failed:true});
             })();
-            </script></body></html>""".trimIndent()
+              return 'ok';
+            })()
+            """.trimIndent()
+        return Page(shell, bootstrap)
     }
 }

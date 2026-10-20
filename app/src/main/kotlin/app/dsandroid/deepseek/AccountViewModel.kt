@@ -36,13 +36,21 @@ import app.dsandroid.core.llm.ChatMessage
 import app.dsandroid.core.llm.ClientIdentity
 import app.dsandroid.core.python.PythonOutputText
 import app.dsandroid.core.python.RunPythonTool
+import app.dsandroid.core.mcp.McpClient
+import app.dsandroid.core.mcp.McpEndpoint
+import app.dsandroid.core.mcp.RemoteServer
+import app.dsandroid.core.mcp.RemoteTool
 import app.dsandroid.core.skills.SkillDownloader
+import app.dsandroid.core.sandbox.PythonRuntime
+import app.dsandroid.core.skills.SkillFunctionTool
 import app.dsandroid.core.skills.SkillPack
 import app.dsandroid.core.skills.SkillPackReader
 import app.dsandroid.core.skills.SkillPrompt
 import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.tools.ToolContext
 import app.dsandroid.core.tools.ToolRegistry
+import app.dsandroid.core.tools.TrustedTool
+import app.dsandroid.core.tools.WebSearchTool
 import app.dsandroid.core.tools.MimeTypes
 import app.dsandroid.core.tools.chatRoot
 import app.dsandroid.core.tools.uniqueFile
@@ -54,6 +62,8 @@ import app.dsandroid.core.workbench.WorkbenchIds
 import app.dsandroid.core.workbench.WorkbenchStore
 import app.dsandroid.python.AgentToolkit
 import app.dsandroid.tools.CreatePdfTool
+import app.dsandroid.sandbox.WebViewCodeExecutor
+import app.dsandroid.tools.ToolCatalog
 import app.dsandroid.data.AppSettings
 import app.dsandroid.data.Appearance
 import app.dsandroid.data.Provider
@@ -78,6 +88,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
+
+/** What happened to a session offered by the sign-in page, the browser link or Paste session. Only [SIGNED_IN] unlocks the app. */
+enum class SessionCheck { SIGNED_IN, NEEDS_BIRTHDAY, REJECTED, UNVERIFIED, BUSY }
 
 class AccountViewModel @JvmOverloads constructor(
     application: Application,
@@ -105,6 +118,17 @@ class AccountViewModel @JvmOverloads constructor(
     private val drafts = LinkedHashMap<String, String>()
     private val appearancePrefs = application.getSharedPreferences("deepseek_web_appearance", 0)
     private val persistence = Mutex()
+    private val settingsWrite = Mutex()
+    /** The search service web_search uses in the current agent turn, named in its approval. */
+    @Volatile private var searchHost: String? = null
+    /** The code sandbox (code_interpreter); its one-time Python runtime download asks first, like any other download. */
+    private val codeExecutor by lazy {
+        WebViewCodeExecutor(getApplication()) {
+            confirmTool("python_runtime_download", buildJsonObject {
+                put("runtime", "Pyodide ${PythonRuntime.VERSION}"); put("url", PythonRuntime.BASE_URL); put("maximumBytes", PythonRuntime.MAX_BYTES)
+            })
+        }
+    }
     private var chats = emptyList<WebChat>()
     private var current = emptyChat()
     private val uploads = mutableListOf<Upload>()
@@ -135,8 +159,8 @@ class AccountViewModel @JvmOverloads constructor(
                 val expired = session?.isExpired(System.currentTimeMillis()) == true
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
                 val agent = appearancePrefs.getBoolean("agent_mode", false)
-                mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent, textScale = loaded.settings.fontScale,
-                    apiKeyProfile = apiProfileOf(loaded.settings)) }
+                mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent,
+                    apiKeyProfile = apiProfileOf(loaded.settings), termsAgreed = appearancePrefs.getBoolean("terms_agreed", false)).withSettings(loaded.settings) }
                 if (expired) expireSession()
                 else {
                     if (session == null && webAccount != null) {
@@ -145,6 +169,7 @@ class AccountViewModel @JvmOverloads constructor(
                     }
                     publishAccounts()
                     mutable.update { it.copy(ready = true, signedIn = session != null, history = summaries()) }
+                    revalidate()
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -156,9 +181,11 @@ class AccountViewModel @JvmOverloads constructor(
     private fun available() = state.value.ready && !state.value.busy && !state.value.importing && !sessionChanging
     fun navigate(page: AccountPage) {
         if (!available()) return
+        // Signed out, only the welcome screen, the sign-in page and the account list exist (navigation-layer gate).
+        if (session == null && page !in SIGNED_OUT_PAGES) return
         if (page != AccountPage.LOGIN) addingAccount = false
         mutable.update { it.copy(page = page, error = null, offerSwitchAccount = false) }
-        if (page == AccountPage.SKILLS) refreshToolsets()
+        if (page == AccountPage.SKILLS || page == AccountPage.PLUGINS) refreshToolsets()
         if (page == AccountPage.ACCOUNTS) viewModelScope.launch { refreshApiKey() }
     }
     fun setAgent(enabled: Boolean) {
@@ -167,6 +194,11 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun draft(value: String) { mutable.update { it.copy(draft = value.take(20_000)) } }
     fun notice(message: String) = notice(message, offerSwitchAccount = false)
+    /** The welcome screen's terms box; kept on this phone (cleared with the app's data). */
+    fun setTermsAgreed(agreed: Boolean) {
+        appearancePrefs.edit().putBoolean("terms_agreed", agreed).apply()
+        mutable.update { it.copy(termsAgreed = agreed) }
+    }
     fun dismissNotice() { mutable.update { it.copy(error = null, offerSwitchAccount = false) } }
     private fun notice(message: String, offerSwitchAccount: Boolean) { mutable.update { it.copy(error = message, offerSwitchAccount = offerSwitchAccount) } }
     fun appearance(value: Appearance) {
@@ -183,12 +215,32 @@ class AccountViewModel @JvmOverloads constructor(
                 withContext(Dispatchers.IO) { store?.saveRegistry(next) }
                 registry = next
             }
-            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config), textScale = config.fontScale) }
+            mutable.update { it.copy(hasApiKey = config.apiKey.isNotBlank(), apiKeyProfile = apiProfileOf(config)).withSettings(config) }
             publishAccounts()
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The API key settings could not be read securely. Try again.") }
     }
-    fun saveApiKey(value: String) {
+    /**
+     * "Use an API key" on the welcome screen: DeepSeek must accept the key (GET /user/balance) before it is saved and
+     * [then] opens the API-key client. The account route never switches to it by itself.
+     */
+    fun useApiKey(value: String, then: () -> Unit) {
+        if (!available()) return
+        val key = value.trim()
+        if (key.isEmpty() || key.length > 16_384 || key.any { it.code !in 33..126 }) { notice("Enter a valid API key without spaces."); return }
+        mutable.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            val reading = try { balanceClient.read(key) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+            mutable.update { it.copy(busy = false) }
+            if (reading == null || reading.error != null) {
+                notice("DeepSeek did not accept this API key. ${reading?.error ?: "Check your connection and try again."}")
+                return@launch
+            }
+            saveApiKey(key, then)
+        }
+    }
+
+    fun saveApiKey(value: String, then: () -> Unit = {}) {
         if (!available()) return
         val key = value.trim()
         if (key.length > 16_384 || key.any { it.isWhitespace() }) { notice("Enter a valid API key without spaces."); return }
@@ -214,22 +266,52 @@ class AccountViewModel @JvmOverloads constructor(
                 }
                 registry = next.first
                 publishAccounts()
-                mutable.update { it.copy(hasApiKey = key.isNotBlank(), apiKeyProfile = next.second, error = null) }
+                mutable.update { it.copy(hasApiKey = key.isNotBlank(), apiKeyProfile = next.second, error = null, busy = false) }
+                then()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { notice("The API key could not be saved securely. Try again.") }
             finally { mutable.update { it.copy(busy = false) } }
         }
     }
-    /** True only when the service says this freshly signed-in account still owes the age confirmation. */
-    suspend fun needsBirthday(token: SessionToken): Boolean = try {
-        client.needsBirthday(WebCredentials(token, DeepSeekCookies.read()))
-    } catch (cancelled: CancellationException) { throw cancelled }
-    catch (_: Exception) { false }
+    /** Sign-in for callers that only need yes or no; see [signIn]. */
+    suspend fun acceptSession(token: SessionToken): Boolean = signIn(token) == SessionCheck.SIGNED_IN
 
-    suspend fun acceptSession(token: SessionToken): Boolean {
-        if (!available() || token.bearer() == rejectedToken) return false
-        if (token.isExpired(System.currentTimeMillis())) { expireSession(); return false }
+    /**
+     * The sign-in gate: a session from the sign-in page, the browser link or Paste session unlocks chat only after DeepSeek
+     * confirms it (GET /api/v0/users/current). A rejected, unreachable or unreadable answer leaves the app locked with a notice.
+     */
+    suspend fun signIn(token: SessionToken): SessionCheck {
+        if (token.bearer() == rejectedToken) return SessionCheck.REJECTED
+        if (!available()) return SessionCheck.BUSY
+        if (token.isExpired(System.currentTimeMillis())) {
+            rejectedToken = token.bearer()
+            notice("This DeepSeek session has already expired. Sign in again.")
+            return SessionCheck.REJECTED
+        }
         sessionChanging = true
+        mutable.update { it.copy(validating = true, error = null, offerSwitchAccount = false) }
+        try {
+            val user = try {
+                client.currentUser(WebCredentials(token, DeepSeekCookies.read()))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SessionExpired) {
+                rejectedToken = token.bearer()
+                notice("DeepSeek did not accept this session. Sign in again, then send the new session.")
+                return SessionCheck.REJECTED
+            } catch (_: Exception) {
+                notice("The session could not be checked with DeepSeek. Check your connection and try again; chat stays locked until DeepSeek confirms it.")
+                return SessionCheck.UNVERIFIED
+            }
+            if (user.needBirthday) return SessionCheck.NEEDS_BIRTHDAY
+            return if (storeSession(token, user)) SessionCheck.SIGNED_IN else SessionCheck.UNVERIFIED
+        } finally {
+            sessionChanging = false
+            mutable.update { it.copy(validating = false) }
+        }
+    }
+
+    /** Stores a session DeepSeek has just confirmed; [sessionChanging] is already set by [signIn]. */
+    private suspend fun storeSession(token: SessionToken, user: WebUser): Boolean {
         return try {
             val sessions = store ?: withContext(Dispatchers.IO) { DeepSeekSessionStore(getApplication()) }.also { store = it }
             val target = registry.active?.takeIf { !addingAccount && it.type == AccountType.DEEPSEEK_WEB }
@@ -270,12 +352,34 @@ class AccountViewModel @JvmOverloads constructor(
             }
             publishAccounts()
             mutable.update { it.copy(signedIn = true, logoutPending = false, page = AccountPage.CHAT, error = null, offerSwitchAccount = false,
-                messages = displayMessages(), history = summaries(), title = current.title, conversationId = current.id, requiresNewChat = current.blocked, draft = "", attachments = emptyList()) }
+                messages = displayMessages(), history = summaries(), title = current.title, conversationId = current.id, requiresNewChat = current.blocked,
+                draft = "", attachments = emptyList(), profileEmail = user.email, profilePhone = user.phone) }
             true
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { notice("The session could not be stored securely. Login was not completed."); false }
-        finally { sessionChanging = false }
     }
+
+    /**
+     * A stored session was confirmed when it was saved; on start and on switching to it, DeepSeek is asked again in the
+     * background. An explicit rejection locks the app; being offline keeps the stored session (the next request decides).
+     */
+    private fun revalidate() {
+        val token = session ?: return
+        viewModelScope.launch {
+            try {
+                val user = client.currentUser(WebCredentials(token, DeepSeekCookies.read()))
+                if (session?.bearer() == token.bearer()) mutable.update { it.copy(profileEmail = user.email, profilePhone = user.phone) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SessionExpired) {
+                if (session?.bearer() == token.bearer() && !sessionChanging && !state.value.busy) {
+                    try { expireSession() } catch (_: Exception) { /* expireSession publishes the safe cleanup state. */ }
+                }
+            } catch (_: Exception) { /* Offline or service trouble: not a rejection. */ }
+        }
+    }
+
+    /** Chat, files, tools and code need a confirmed DeepSeek session (action-layer gate behind the welcome screen). */
+    private fun locked(): Boolean = (session == null).also { if (it) notice("Sign in to DeepSeek first.") }
     fun logout() {
         if (sessionChanging || !state.value.ready) return
         sessionChanging = true
@@ -293,7 +397,7 @@ class AccountViewModel @JvmOverloads constructor(
                     selectWebAccount(null)
                 }
                 rejectedToken = null
-                mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale, page = AccountPage.LOGIN) }
+                mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale, page = AccountPage.CHAT) }
                 publishAccounts()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
@@ -331,7 +435,7 @@ class AccountViewModel @JvmOverloads constructor(
             }
         } finally {
             mutable.update { AccountUiState(ready = true, appearance = it.appearance, hasApiKey = it.hasApiKey, textScale = it.textScale,
-                page = AccountPage.LOGIN, error = SessionExpired().message, logoutPending = !cleared) }
+                page = AccountPage.CHAT, error = SessionExpired().message, logoutPending = !cleared) }
             publishAccounts()
             sessionChanging = false
         }
@@ -343,7 +447,7 @@ class AccountViewModel @JvmOverloads constructor(
             requiresNewChat = false, error = null, offerSwitchAccount = false, pane = null, chatFiles = null, editorOutput = null) }
     }
     fun open(id: String) {
-        if (!available()) return
+        if (!available() || locked()) return
         current = chats.firstOrNull { it.id == id } ?: return
         clearUploads()
         mutable.update { it.copy(page = AccountPage.CHAT, title = current.title, conversationId = current.id, messages = displayMessages(), draft = "", attachments = emptyList(),
@@ -356,7 +460,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun delete(id: String) = changeHistory(id, delete = true)
     private fun changeHistory(id: String, delete: Boolean, title: String = "") {
-        if (!available()) return
+        if (!available() || locked()) return
         val chat = chats.firstOrNull { it.id == id } ?: return
         mutable.update { it.copy(busy = true, error = null) }
         sending = viewModelScope.launch {
@@ -384,13 +488,14 @@ class AccountViewModel @JvmOverloads constructor(
         }
     }
     fun importShared(uris: List<Uri>) {
+        if (locked()) return
         viewModelScope.launch {
             for (uri in uris.take(5)) { importAttachment(uri); importing?.join() }
             if (uris.size > 5) notice("Only the first five attachments were imported.")
         }
     }
     fun importAttachment(uri: Uri) {
-        if (!available()) return
+        if (!available() || locked()) return
         if (uploads.size >= 5) { notice("Attach up to five files per message."); return }
         mutable.update { it.copy(importing = true) }
         importing = viewModelScope.launch {
@@ -474,7 +579,8 @@ class AccountViewModel @JvmOverloads constructor(
                     final = reply
                     receivedId = reply.responseMessageId ?: receivedId
                     current = current.copy(messages = prefix + sent.copy(serverId = reply.requestMessageId) +
-                        WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf))
+                        WebMessage(replyId, false, reply.response, reply.thinking, serverId = receivedId, parentId = reply.requestMessageId, revisionOf = user.revisionOf,
+                            thinkingSeconds = reply.thinkingSeconds, citations = reply.citations))
                     mutable.update { it.copy(messages = displayMessages()) }
                 }
                 val completed = final?.takeIf { it.finished && it.responseMessageId != null } ?: throw EndpointChanged()
@@ -521,14 +627,171 @@ class AccountViewModel @JvmOverloads constructor(
     }
     fun stop() { sending?.cancel() }
     private suspend fun persist() {
+        current = current.copy(updatedAt = System.currentTimeMillis())
         val next = (listOf(current) + chats.filterNot { it.id == current.id }).take(100)
         withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
         chats = next
     }
-    private fun summaries() = chats.map { AccountHistory(it.id, it.title) }
-    private fun displayMessages() = current.messages.map { AccountMessage(it.id, it.user, it.text, it.thinking, it.prompt, it.steps, it.artifacts, it.codeRuns, it.revisionOf) }
+    private fun summaries() = chats.map { chat ->
+        // The drawer searches chat content, as the official app does ("Search chat content...").
+        val content = (listOf(chat.title) + chat.messages.map { it.text }).joinToString("\n").take(SEARCH_TEXT_LIMIT).lowercase()
+        AccountHistory(chat.id, chat.title, chat.updatedAt, chat.pinned, content)
+    }
+    private fun displayMessages() = current.messages.map {
+        AccountMessage(it.id, it.user, if (it.user) it.text else CITATION.replace(it.text) { match -> "[${match.groupValues[1]}]" }, it.thinking, it.prompt,
+            it.steps, it.artifacts, it.codeRuns, it.revisionOf, it.thinkingSeconds, it.citations)
+    }
+
+    // ---- Settings (docs/reference/SCREEN_SPEC.md "settings"): stored in the encrypted settings shared with the API-key client. ----
+
+    fun setTextScale(value: Float) = updateSettings("The text size could not be saved.") { it.copy(fontScale = value.coerceIn(0.85f, 1.3f)) }
+    fun setCollapseThinking(value: Boolean) = updateSettings("The setting could not be saved.") { it.copy(collapseThinking = value) }
+    fun setAudioLanguage(tag: String) = updateSettings("The voice language could not be saved.") { it.copy(audioLanguage = tag.take(35)) }
+
+    private fun updateSettings(failure: String, change: (AppSettings) -> AppSettings) {
+        viewModelScope.launch {
+            try { saveSettings(change) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice(failure) }
+        }
+    }
+
+    /** Read, change and save the settings in one step (switches tapped quickly never undo each other). */
+    private suspend fun saveSettings(change: (AppSettings) -> AppSettings) {
+        val saved = settingsWrite.withLock { withContext(Dispatchers.IO) { settings().let { store -> change(store.load()).also(store::save) } } }
+        mutable.update { it.withSettings(saved) }
+    }
+
+    /** What the account screens show of the settings (Settings, Plugins & tools); keys and other secrets never enter UI state. */
+    private fun AccountUiState.withSettings(config: AppSettings) = copy(textScale = config.fontScale, collapseThinking = config.collapseThinking,
+        audioLanguage = config.audioLanguage, disabledTools = config.disabledTools, remoteServers = config.remoteServers,
+        trustedExecution = config.trustedExecution)
+
+    // ---- Plugins & tools (app.dsandroid.tools.ToolCatalog). The switches are the API-key client's too: one setting per tool. ----
+
+    fun setToolEnabled(name: String, enabled: Boolean) = updateSettings("The tool setting could not be saved.") {
+        it.copy(disabledTools = ToolCatalog.switched(it.disabledTools, name, enabled))
+    }
+
+    /** Trusted execution: native Python, packages and skill functions are offered to the agent (each call still asks). */
+    fun setTrustedExecution(enabled: Boolean) = updateSettings("The setting could not be saved.") { it.copy(trustedExecution = enabled) }
+
+    /** Adds an HTTPS MCP server after reading its tool list. Its tools ask before every call, and their answers go to DeepSeek. */
+    fun addRemoteServer(name: String, url: String) {
+        if (!available() || locked() || name.isBlank()) return
+        mutable.update { it.copy(toolsetBusy = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val endpoint = McpEndpoint.validate(url.trim())
+                val tools = withContext(Dispatchers.IO) { McpClient(endpoint).listTools() }
+                saveSettings { config ->
+                    require(config.remoteServers.size < MAX_REMOTE_SERVERS)
+                    config.copy(remoteServers = config.remoteServers + RemoteServer(UUID.randomUUID().toString(), name.trim().take(100), endpoint, tools))
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The server could not be added. It must be an HTTPS MCP server that lists its tools.") }
+            finally { mutable.update { it.copy(toolsetBusy = false) } }
+        }
+    }
+
+    fun removeRemoteServer(id: String) = updateSettings("The server could not be removed.") { config ->
+        val server = config.remoteServers.firstOrNull { it.id == id }
+        if (server == null) config
+        else config.copy(remoteServers = config.remoteServers - server,
+            disabledTools = config.disabledTools - server.tools.map { RemoteTool.registryName(server.id, it.name) }.toSet())
+    }
+
+    /**
+     * Settings > Data controls > Delete all chats: each chat is deleted on DeepSeek, then on this phone with its files.
+     * A chat DeepSeek does not delete stays, so nothing disappears here while it remains on the service.
+     */
+    fun deleteAllChats() {
+        if (!available() || locked()) return
+        val all = chats
+        mutable.update { it.copy(busy = true, error = null) }
+        sending = viewModelScope.launch {
+            try {
+                val kept = mutableListOf<WebChat>()
+                for (chat in all) {
+                    val deleted = try {
+                        chat.sessionId?.let { client.deleteSession(credentials(), it) }
+                        true
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (expired: SessionExpired) { throw expired }
+                    catch (_: Exception) { false }
+                    if (deleted) withContext(Dispatchers.IO) { File(agentWorkspace.root, chatDir(chat.id)).deleteRecursively(); workbench.deleteChat(chat.id) }
+                    else kept += chat
+                }
+                withContext(Dispatchers.IO) { persistence.withLock { history.save(kept) } }
+                chats = kept
+                if (kept.none { it.id == current.id }) { current = emptyChat(); clearUploads() }
+                mutable.update { it.copy(history = summaries(), title = current.title, conversationId = current.id, messages = displayMessages(),
+                    requiresNewChat = current.blocked, pane = null, chatFiles = null) }
+                if (kept.isNotEmpty()) notice("${kept.size} chat${if (kept.size == 1) " was" else "s were"} not deleted on DeepSeek and stayed. Try again later.")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { reportFailure(error) }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    /** The open chat as Markdown, for Share chat. AI replies are marked as such. */
+    fun chatMarkdown(): String = buildString {
+        appendLine("# ${current.title}")
+        appendLine()
+        current.messages.filter { it.text.isNotBlank() }.forEach { message ->
+            appendLine(if (message.user) "**You**" else "**DeepSeek**")
+            appendLine()
+            appendLine(if (message.user) message.text.trim() else CITATION.replace(message.text.trim()) { "[${it.groupValues[1]}]" })
+            appendLine()
+        }
+        append("_Shared from DeepSeek Android, an unofficial client. Replies are AI-generated, for reference only._")
+    }
+
+    /** Share chat > Export as PDF: the whole chat laid out as a PDF card under the last reply. */
+    fun exportChatPdf() {
+        if (!available() || locked()) return
+        val last = current.messages.lastOrNull { !it.user && it.text.isNotBlank() } ?: return notice("There is nothing to export yet.")
+        val chatId = current.id
+        val title = current.title.ifBlank { "DeepSeek chat" }
+        val markdown = chatMarkdown()
+        mutable.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            try {
+                val artifact = withContext(Dispatchers.IO) {
+                    CreatePdfTool().run(buildJsonObject {
+                        put("title", title)
+                        put("markdown", markdown)
+                        put("file_path", "exports/" + title.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50).ifEmpty { "chat" } + "-chat.pdf")
+                    }, ToolContext(agentWorkspace, chatDir = chatDir(chatId))).artifacts.single()
+                }
+                if (current.id == chatId) {
+                    current = current.copy(messages = current.messages.map { if (it.id == last.id) it.copy(artifacts = (it.artifacts + artifact).distinctBy { a -> a.path }) else it })
+                    persist()
+                    mutable.update { it.copy(messages = displayMessages()) }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The PDF could not be created.") }
+            finally { mutable.update { it.copy(busy = false) } }
+        }
+    }
+
+    /** Pinning is local to this phone; pinned chats lead the drawer. */
+    fun pin(id: String, pinned: Boolean) {
+        if (!available() || locked()) return
+        val next = chats.map { if (it.id == id) it.copy(pinned = pinned) else it }
+        if (next == chats) return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { persistence.withLock { history.save(next) } }
+                chats = next
+                if (current.id == id) current = current.copy(pinned = pinned)
+                mutable.update { it.copy(history = summaries()) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { notice("The chat could not be pinned. Try again.") }
+        }
+    }
     private fun clearUploads() { uploads.forEach { it.file.delete() }; uploads.clear() }
-    private fun emptyChat() = WebChat(UUID.randomUUID().toString(), "New Chat")
+    private fun emptyChat() = WebChat(UUID.randomUUID().toString(), "New chat")
     /** Each DeepSeek account keeps its own chats, agent files and artifact versions; the first one uses the original paths. */
     private fun historyFor(id: String) = WebHistory(File(getApplication<Application>().filesDir,
         if (id == DeepSeekSessionStore.DEFAULT_SLOT) "deepseek-web-chats.json" else "deepseek-web-chats-$id.json"))
@@ -611,8 +874,21 @@ class AccountViewModel @JvmOverloads constructor(
                     }
                 }
                 val toolkit = AgentToolkit.get(getApplication())
-                val (tools, skills) = withContext(Dispatchers.IO) { toolkit.tools() to toolkit.enabledSkills() }
-                val registry = ToolRegistry(tools)
+                val config = withContext(Dispatchers.IO) { settings().load() }
+                // A configured search service that is not public HTTPS leaves web_search out rather than using another service.
+                val search = runCatching { WebSearchTool(config.searchBackend.takeIf { it == "searxng" }?.let { config.searxngUrl }) }.getOrNull()
+                searchHost = search?.let { runCatching { java.net.URI(it.searchUrl("q")).host }.getOrNull() }
+                val remote = config.remoteServers.flatMap { server -> McpClient(server.url).let { client -> server.tools.map { RemoteTool(server, it, client) } } }
+                val (all, skills) = withContext(Dispatchers.IO) { (toolkit.accountTools(search, codeExecutor) + remote).distinctBy { it.name } to toolkit.enabledSkills() }
+                // Native Python and skill code (TrustedTool) is offered only with trusted execution on; each call then asks.
+                val trustedNames = all.filter { it is TrustedTool }.map { it.name }.toSet()
+                val tools = if (config.trustedExecution) all else all.filterNot { it is TrustedTool }
+                // Switched-off tools are left out of the prompt; the switches are read again on every lookup, so a tool switched
+                // off during the turn (even while its approval is showing) is neither offered nor run afterwards.
+                val registry = ToolRegistry(tools, ToolCatalog.disabledNames(config.disabledTools)) { name ->
+                    val now = state.value
+                    ToolCatalog.isEnabled(name, now.disabledTools) && (name !in trustedNames || now.trustedExecution)
+                }
                 val llm = WebToolProtocolClient(transport) { specs -> ToolCallProtocol.systemPrompt(specs, SkillPrompt.summaries(skills)) }
                 val loop = AgentLoop(llm, registry, GuardPolicy(registry, agentWorkspace), ToolContext(agentWorkspace, chatDir = chatDir(current.id)),
                     Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = 8)
@@ -665,13 +941,23 @@ class AccountViewModel @JvmOverloads constructor(
             "pip_install" -> "Download these Python packages from PyPI and install them in this app:\n" +
                 (arguments["packages"] as? JsonArray).orEmpty().joinToString("\n") { "- " + ((it as? JsonPrimitive)?.contentOrNull ?: it.toString()) }
             "web_fetch" -> "Fetch this web page; its text is then sent to DeepSeek:\n${text("url")}"
-            else -> "$name\n${arguments.toString().take(800)}"
+            "web_search" -> "Search the web${searchHost?.let { " with $it" }.orEmpty()} for:\n${text("query")}\n\nThe query goes to that search service; the results are then sent to DeepSeek."
+            "run_python" -> "Run this Python on your phone with this app's rights (trusted execution, not a sandbox):\n\n${text("code").take(1500)}"
+            "python_runtime_download" -> "Download the Python runtime for the code sandbox (Pyodide ${PythonRuntime.VERSION}, at most " +
+                "${PythonRuntime.MAX_BYTES / (1024 * 1024)} MB) from cdn.jsdelivr.net? Each file is checked against its pinned SHA-256. Afterwards Python " +
+                "runs in the sandbox without a download."
+            else -> state.value.remoteServers.firstNotNullOfOrNull { server ->
+                server.tools.firstOrNull { RemoteTool.registryName(server.id, it.name) == name }?.let { tool ->
+                    "Call ${tool.name} on ${server.name} (${server.url}) with:\n${arguments.toString().take(800)}\n\nIts answer is then sent to DeepSeek."
+                }
+            } ?: (if ("__" in name) "Run the skill function $name as Python on your phone with this app's rights (trusted execution) with:\n" else "$name\n") +
+                arguments.toString().take(800)
         }
     }
 
     /** "Export as PDF" on an assistant message: the answer is laid out as Markdown and attached as a card. */
     fun exportPdf(id: String) {
-        if (!available()) return
+        if (!available() || locked()) return
         val chatId = current.id
         val message = current.messages.firstOrNull { it.id == id && !it.user && it.text.isNotBlank() } ?: return
         val title = current.title.ifBlank { "DeepSeek answer" }
@@ -698,7 +984,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run button on a Python code block: executes on the device in this chat's folder; output and files attach to the message. */
     fun runCode(id: String, code: String) {
-        if (!available() || code.isBlank()) return
+        if (!available() || code.isBlank() || locked()) return
         val chatId = current.id
         val callId = UUID.randomUUID().toString()
         val argsJson = buildJsonObject { put("code", code) }.toString()
@@ -740,7 +1026,8 @@ class AccountViewModel @JvmOverloads constructor(
                 val toolkit = AgentToolkit.get(getApplication())
                 val (skills, packages) = withContext(Dispatchers.IO) { toolkit.ensureBuiltIns(); toolkit.skills.list() to toolkit.installer.installed() }
                 mutable.update { state -> state.copy(
-                    skills = skills.map { SkillRow(it.manifest.name, it.manifest.description, it.manifest.version, it.builtIn, it.enabled, it.manifest.tools.size) },
+                    skills = skills.map { SkillRow(it.manifest.name, it.manifest.description, it.manifest.version, it.builtIn, it.enabled, it.manifest.tools.size,
+                        it.manifest.tools.map { spec -> SkillFunctionTool.toolName(it.manifest, spec) }) },
                     packages = packages.map { PackageRow(it.name, it.version, it.bytes) },
                     bundledPackages = "Built in: Python 3.13 with numpy ${AgentToolkit.BUNDLED["numpy"]} and matplotlib ${AgentToolkit.BUNDLED["matplotlib"]} " +
                         "(plus Pillow, fontTools, contourpy, kiwisolver, cycler, pyparsing, python-dateutil, packaging, six).",
@@ -771,7 +1058,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
 
     private fun preparePack(load: suspend () -> SkillPack) {
-        if (state.value.toolsetBusy) return
+        if (state.value.toolsetBusy || locked()) return
         mutable.update { it.copy(toolsetBusy = true, error = null) }
         viewModelScope.launch {
             try {
@@ -821,7 +1108,7 @@ class AccountViewModel @JvmOverloads constructor(
     }
 
     private fun toolsetTask(failure: String, block: suspend (AgentToolkit) -> Unit) {
-        if (state.value.toolsetBusy) return
+        if (state.value.toolsetBusy || locked()) return
         mutable.update { it.copy(toolsetBusy = true, error = null) }
         viewModelScope.launch {
             try { block(AgentToolkit.get(getApplication())) }
@@ -875,8 +1162,7 @@ class AccountViewModel @JvmOverloads constructor(
         if (!available()) return
         val target = registry.account(id) ?: return
         if (id == registry.activeId) {
-            val page = if (target.type == AccountType.DEEPSEEK_WEB && session == null) AccountPage.LOGIN else AccountPage.CHAT
-            mutable.update { it.copy(page = page, error = null, offerSwitchAccount = false) }
+            mutable.update { it.copy(page = AccountPage.CHAT, error = null, offerSwitchAccount = false) }
             return
         }
         sessionChanging = true
@@ -897,9 +1183,10 @@ class AccountViewModel @JvmOverloads constructor(
                     chats = if (session != null) loaded else emptyList()
                     current = emptyChat()
                     rejectedToken = null
-                    mutable.update { it.copy(signedIn = session != null, page = if (session != null) AccountPage.CHAT else AccountPage.LOGIN,
+                    mutable.update { it.copy(signedIn = session != null, page = AccountPage.CHAT,
                         title = current.title, conversationId = current.id, messages = emptyList(), history = summaries(), draft = "",
-                        attachments = emptyList(), requiresNewChat = false, pane = null, chatFiles = null) }
+                        attachments = emptyList(), requiresNewChat = false, pane = null, chatFiles = null, profileEmail = null, profilePhone = null) }
+                    revalidate()
                 } else {
                     val settings = settings()
                     val hasKey = withContext(Dispatchers.IO) {
@@ -1061,6 +1348,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Preview" on an HTML, SVG or Markdown code block. A revision reply reopens the artifact it revised. */
     fun previewCode(messageId: String, revisionOf: String?, language: String, code: String) {
+        if (locked()) return
         val kind = ArtifactKind.fromFence(language, code) ?: return
         val chatId = current.id
         val bench = workbench
@@ -1080,6 +1368,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Edit" on any other code block: a buffer in the editor, saved into this chat's folder on Save. */
     fun editCode(language: String, code: String) {
+        if (locked()) return
         val editorLanguage = EditorLanguage.forFence(language) ?: return
         val key = "code-" + WorkbenchIds.forFence(current.id, "editor", language, code)
         mutable.update { it.copy(pane = WorkbenchPane.Editor(EditorFile(key, editorLanguage.fileName("snippet"), code, editorLanguage, null, current.id)), editorOutput = null) }
@@ -1087,6 +1376,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Agent files: HTML, SVG and Markdown open in the panel (a rewritten file becomes a new version); returns false for others. */
     fun openArtifactFile(artifact: Artifact): Boolean {
+        if (locked()) return true
         val kind = ArtifactKind.fromFileName(artifact.fileName) ?: return false
         val chatId = current.id
         val bench = workbench
@@ -1114,6 +1404,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** "Edit" on a text file card or in Files in this chat: the workspace file itself, saved in place. */
     fun editArtifactFile(artifact: Artifact) {
+        if (locked()) return
         val language = EditorLanguage.forFileName(artifact.fileName) ?: return notice("This file type cannot be edited here.")
         val chatId = current.id
         viewModelScope.launch {
@@ -1132,6 +1423,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run in the panel: edited source becomes the next version. */
     fun runArtifact(id: String, source: String) {
+        if (locked()) return
         val bench = workbench
         viewModelScope.launch {
             try {
@@ -1203,6 +1495,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Editor Save: back into its workspace file, or a new file in this chat's folder for a code block. */
     fun saveEditor(text: String) {
+        if (locked()) return
         val file = (state.value.pane as? WorkbenchPane.Editor)?.file ?: return
         if (text.toByteArray(Charsets.UTF_8).size > MAX_EDITOR_BYTES) { notice("This file is larger than 1 MB; use Save as instead."); return }
         val chatDirectory = chatDir(file.chatId)
@@ -1232,6 +1525,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Run on a Python file: the chat's on-device run_python worker; output appears under the editor. */
     fun runEditorPython(code: String) {
+        if (locked()) return
         val file = (state.value.pane as? WorkbenchPane.Editor)?.file ?: return
         if (state.value.editorBusy || code.isBlank()) return
         val chatDirectory = chatDir(file.chatId)
@@ -1252,7 +1546,7 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Files in this chat's folder (agent files, saved editor files), for the editor and the panel. */
     fun showChatFiles() {
-        if (!available()) return
+        if (!available() || locked()) return
         val root = File(agentWorkspace.root, chatDir(current.id))
         viewModelScope.launch {
             try {
@@ -1275,6 +1569,12 @@ class AccountViewModel @JvmOverloads constructor(
     companion object {
         /** The API key saved through Settings > API-key mode is also listed as this profile. */
         const val QUICK_KEY_ID = "api-key"
+        /** Pages that exist while signed out; everything else waits for a confirmed session. */
+        val SIGNED_OUT_PAGES = setOf(AccountPage.CHAT, AccountPage.LOGIN, AccountPage.ACCOUNTS)
+        /** DeepSeek's Search replies cite pages as [citation:N]; the chat shows [N]. */
+        private val CITATION = Regex("\\[citation:(\\d{1,3})]")
+        private const val SEARCH_TEXT_LIMIT = 4000
+        private const val MAX_REMOTE_SERVERS = 8
         private const val MAX_EDITOR_BYTES = 1024 * 1024
     }
 }

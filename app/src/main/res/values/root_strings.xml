@@ -63,6 +63,8 @@
     <string name="tools">Tools</string>
     <string name="tools_notice">Turn built-in tools on or off, and add your own HTTPS tool servers. Remote tools always ask before running.</string>
     <string name="tools_builtin">Built-in tools</string>
+    <string name="tools_trusted_execution">Trusted execution: native Python and skill code</string>
+    <string name="tools_trusted_notice">Runs Python, Python packages and skill functions on this phone with this app\'s rights. This is not a sandbox: switch it on only for code you trust. Each run asks first.</string>
     <string name="tools_custom">Custom tool servers</string>
     <string name="tools_empty">No tool servers added.</string>
     <string name="tools_add_server">Add tool server</string>

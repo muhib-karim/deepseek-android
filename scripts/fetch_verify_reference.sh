@@ -2,12 +2,15 @@
 # CI only (reference.yml): download the official DeepSeek app from APKPure, verify it, and stage its split APKs for the
 # emulator. Nothing here installs or runs the APK; capture_reference.sh does that on a disposable emulator.
 #
+# REFERENCE_BUILD=current (default) fetches 2.6.2; REFERENCE_ABI picks its build: arm64-v8a (default; needs an API 32+
+# image) or armeabi-v7a (API 29+; 32-bit ARM translation). REFERENCE_BUILD=pre-pairip fetches the pinned 1.4.1 APK, the
+# newest official build without Google's PairIP license check (see docs/reference/SOURCE.json "older_builds").
 # Verification before anything is installed:
-#   1. the XAPK manifest names com.deepseek.chat and the requested versionCode,
+#   1. the XAPK manifest names com.deepseek.chat, the requested versionCode and the requested ABI's split,
 #   2. apksigner (latest SDK build-tools) verifies every split's signatures,
 #   3. scripts/apk_signers.py finds only the two signer certificates pinned below (and in docs/reference/SOURCE.json),
 #   4. aapt2 badging of the base APK repeats package, version and SDK levels,
-#   5. for the pinned version, every split's SHA-256 equals docs/reference/SOURCE.json.
+#   5. for the pinned version, every split's SHA-256 equals that ABI's variant in docs/reference/SOURCE.json.
 # The publisher's Digital Asset Links file is fetched again for the report; it must still list both pins.
 set -euo pipefail
 if [[ "${GITHUB_ACTIONS:-}" != "true" ]]; then
@@ -17,6 +20,14 @@ fi
 
 PACKAGE=com.deepseek.chat
 VERSION_CODE="${REFERENCE_VERSION_CODE:-282}"
+ABI="${REFERENCE_ABI:-arm64-v8a}"
+BUILD="${REFERENCE_BUILD:-current}"
+[[ "$BUILD" == "current" || "$BUILD" == "pre-pairip" ]] || { echo 'build must be current or pre-pairip' >&2; exit 1; }
+if [[ "$BUILD" == "pre-pairip" ]]; then
+  VERSION_CODE="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["older_builds"]["pre-pairip"]["version_code"])' docs/reference/SOURCE.json)"
+  ABI=arm64-v8a
+fi
+[[ "$ABI" == "arm64-v8a" || "$ABI" == "armeabi-v7a" ]] || { echo 'abi must be arm64-v8a or armeabi-v7a' >&2; exit 1; }
 # Independently established: chat.deepseek.com/.well-known/assetlinks.json and APKPure's certificate SHA-1 (SOURCE.json).
 PINS="1E:EC:C4:6F:DC:21:73:43:7D:70:14:0F:16:3A:AA:97:94:1D:41:B0:4D:91:DA:3E:B6:89:AE:C4:F3:39:AB:EB,C6:89:3C:53:68:F7:B5:12:2F:EC:DA:FC:6C:4E:CF:49:E0:B3:DC:4E:42:BD:16:6C:DB:64:69:07:78:8C:7F:FA"
 [[ "$VERSION_CODE" =~ ^[0-9]{1,6}$ ]] || { echo 'version_code must be a number' >&2; exit 1; }
@@ -30,31 +41,65 @@ rm -rf "$WORK" && mkdir -p "$WORK/apks" "$REPORT"
 TOOLS="$(ls -d "${ANDROID_HOME:?}"/build-tools/*/ | sort -V | tail -1)"
 echo "Using build-tools $(basename "$TOOLS")"
 
-curl -fsS --retry 3 -m 60 -H 'x-cv: 3172501' -H 'x-sv: 29' -H 'x-abis: arm64-v8a,armeabi-v7a,x86_64' -H 'x-gp: 1' \
+# x-sv 34 lists every build of a version (one per ABI); the pinned variant token is tried first.
+curl -fsS --retry 3 -m 60 -H 'x-cv: 3172501' -H 'x-sv: 34' -H 'x-abis: arm64-v8a,armeabi-v7a,armeabi' -H 'x-gp: 1' \
   -o "$WORK/versions.bin" "https://api.pureapk.com/m/v3/cms/app_version?hl=en-US&package_name=$PACKAGE"
-python3 -I - "$WORK/versions.bin" "$PACKAGE" "$VERSION_CODE" "$WORK/url.txt" <<'PY'
-import base64, re, sys
-data, package, code, out = open(sys.argv[1], "rb").read(), sys.argv[2], sys.argv[3], sys.argv[4]
+if [[ "$BUILD" == "pre-pairip" ]]; then
+  # Exactly the pinned file: its SHA-256 must match before anything else looks at it.
+  python3 -I - "$WORK/versions.bin" "$REPO/docs/reference/SOURCE.json" "$WORK" "$REPORT/xapk.json" <<'PY'
+import base64, hashlib, json, re, subprocess, sys
+data, source, work, report = open(sys.argv[1], "rb").read(), json.load(open(sys.argv[2])), sys.argv[3], sys.argv[4]
+pin = source["older_builds"]["pre-pairip"]
+for match in re.finditer(rb"https://download\.pureapk\.com/b/APK/([A-Za-z0-9=_-]+)\?[\x21-\x7e]+", data):
+    token = match.group(1).decode()
+    name = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode(errors="replace")
+    if name == pin["file"]:
+        subprocess.run(["curl", "-fsS", "--retry", "3", "-m", "300", "-L", "-o", f"{work}/apks/com.deepseek.chat.apk", match.group(0).decode()], check=True)
+        digest = hashlib.sha256(open(f"{work}/apks/com.deepseek.chat.apk", "rb").read()).hexdigest()
+        if digest != pin["sha256"]:
+            sys.exit("The pre-PairIP APK differs from its pinned SHA-256")
+        json.dump({"package": "com.deepseek.chat", "version_code": pin["version_code"], "version_name": pin["version_name"], "abi": "arm64-v8a",
+                   "variant": pin["file"], "build": "pre-pairip", "min_sdk": pin["min_sdk"], "splits": ["com.deepseek.chat.apk"], "xapk_sha256": None},
+                  open(report, "w"), indent=2)
+        print(f"Mirror offers {name}; SHA-256 matches the pin")
+        sys.exit(0)
+sys.exit(f"The mirror no longer offers {pin['file']}")
+PY
+else
+python3 -I - "$WORK/versions.bin" "$PACKAGE" "$VERSION_CODE" "$ABI" "$REPO/docs/reference/SOURCE.json" "$WORK" <<'PY'
+import base64, json, re, subprocess, sys, zipfile
+data, package, code, abi, source, work = open(sys.argv[1], "rb").read(), *sys.argv[2:7]
+pinned = json.load(open(source))
+preferred = pinned["variants"].get(abi, {}).get("xapk") if str(pinned["version_code"]) == code else None
+candidates = []
 for match in re.finditer(rb"https://download\.pureapk\.com/b/XAPK/([A-Za-z0-9=_-]+)\?[\x21-\x7e]+", data):
     token = match.group(1).decode()
     name = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode(errors="replace")
-    if name.startswith(f"{package}_{code}_"):
-        open(out, "w").write(match.group(0).decode())
-        print(f"Mirror offers {name}")
+    if name.startswith(f"{package}_{code}_") and all(name != n for n, _ in candidates):
+        candidates.append((name, match.group(0).decode()))
+candidates.sort(key=lambda c: c[0] != preferred)
+split = "config." + abi.replace("-", "_")
+for name, url in candidates:
+    # The signed link is short-lived; it goes to curl and is never printed.
+    subprocess.run(["curl", "-fsS", "--retry", "3", "-m", "300", "-L", "-o", f"{work}/official.xapk", url], check=True)
+    with zipfile.ZipFile(f"{work}/official.xapk") as archive:
+        configs = json.loads(archive.read("manifest.json")).get("split_configs") or []
+    if split in configs:
+        open(f"{work}/variant.txt", "w").write(name)
+        print(f"Mirror offers {name} with {split}")
         sys.exit(0)
-sys.exit(f"The mirror does not offer {package} versionCode {code}")
+    print(f"{name} has no {split}; trying the next build")
+sys.exit(f"The mirror does not offer {package} versionCode {code} for {abi}")
 PY
-# The signed link is short-lived; it is passed to curl and never printed.
-curl -fsS --retry 3 -m 300 -L -o "$WORK/official.xapk" "$(cat "$WORK/url.txt")"
-rm -f "$WORK/url.txt"
 
-python3 -I - "$WORK/official.xapk" "$WORK/apks" "$PACKAGE" "$VERSION_CODE" "$REPORT/xapk.json" <<'PY'
+python3 -I - "$WORK/official.xapk" "$WORK/apks" "$PACKAGE" "$VERSION_CODE" "$REPORT/xapk.json" "$ABI" "$(cat "$WORK/variant.txt")" <<'PY'
 import hashlib, json, os, sys, zipfile
-xapk, target, package, code, report = sys.argv[1:6]
+xapk, target, package, code, report, abi, variant = sys.argv[1:8]
 with zipfile.ZipFile(xapk) as archive:
     manifest = json.loads(archive.read("manifest.json"))
     assert manifest.get("package_name") == package, "XAPK names another package"
     assert str(manifest.get("version_code")) == code, "XAPK has another versionCode"
+    assert "config." + abi.replace("-", "_") in (manifest.get("split_configs") or []), "XAPK lacks the requested ABI split"
     names = []
     for info in archive.infolist():
         name = info.filename
@@ -65,12 +110,13 @@ with zipfile.ZipFile(xapk) as archive:
             names.append(name)
 assert f"{package}.apk" in names, "XAPK has no base APK"
 json.dump({
-    "package": package, "version_code": int(code), "version_name": manifest.get("version_name"),
+    "package": package, "version_code": int(code), "version_name": manifest.get("version_name"), "abi": abi, "variant": variant,
     "min_sdk": manifest.get("min_sdk_version"), "target_sdk": manifest.get("target_sdk_version"),
-    "splits": sorted(names), "xapk_sha256": hashlib.sha256(open(xapk, "rb").read()).hexdigest(),
+    "splits": sorted(names), "xapk_sha256": hashlib.sha256(open(xapk, "rb").read()).hexdigest(), "build": "current",
 }, open(report, "w"), indent=2)
 print(f"Extracted {len(names)} APKs")
 PY
+fi
 
 status=0
 for apk in "$WORK"/apks/*.apk; do
@@ -84,11 +130,14 @@ python3 -I scripts/apk_signers.py --pins "$PINS" --json "$REPORT/signers.json" "
 "$TOOLS/aapt2" dump badging "$WORK/apks/$PACKAGE.apk" > "$REPORT/badging.txt" || status=1
 grep -q "^package: name='$PACKAGE' versionCode='$VERSION_CODE'" "$REPORT/badging.txt" || { echo 'Badging package/version mismatch' >&2; status=1; }
 
-python3 -I - "$REPO/docs/reference/SOURCE.json" "$WORK/apks" "$VERSION_CODE" "$REPORT/hashes.json" <<'PY' || status=1
+python3 -I - "$REPO/docs/reference/SOURCE.json" "$WORK/apks" "$VERSION_CODE" "$REPORT/hashes.json" "$ABI" "$BUILD" <<'PY' || status=1
 import hashlib, json, os, sys
-source, directory, code, report = json.load(open(sys.argv[1])), sys.argv[2], int(sys.argv[3]), sys.argv[4]
+source, directory, code, report, abi, build = json.load(open(sys.argv[1])), sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5], sys.argv[6]
 actual = {name: hashlib.sha256(open(os.path.join(directory, name), "rb").read()).hexdigest() for name in sorted(os.listdir(directory))}
-pinned = source["apk_sha256"] if code == source["version_code"] else {}
+if build == "pre-pairip":
+    pinned = {"com.deepseek.chat.apk": source["older_builds"]["pre-pairip"]["sha256"]}
+else:
+    pinned = source["variants"][abi]["apk_sha256"] if code == source["version_code"] else {}
 mismatch = sorted(name for name in set(actual) | set(pinned) if pinned and actual.get(name) != pinned.get(name))
 json.dump({"pinned_version": code == source["version_code"], "apk_sha256": actual, "mismatch": mismatch}, open(report, "w"), indent=2)
 if mismatch:
@@ -118,4 +167,4 @@ if (( status != 0 )); then
   exit 1
 fi
 echo "REFERENCE_APK_DIR=$WORK/apks" >> "$GITHUB_ENV"
-echo "Verified $PACKAGE versionCode $VERSION_CODE: signatures intact, signer pinned, hashes match."
+echo "Verified $PACKAGE versionCode $VERSION_CODE ($BUILD, $ABI): signatures intact, signer pinned, hashes match."

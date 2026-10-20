@@ -59,6 +59,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         private const val CREATE = "/api/v0/chat_session/create"
         private const val RENAME = "/api/v0/chat_session/update_title"
         private const val DELETE = "/api/v0/chat_session/delete"
+        private const val CURRENT = "/api/v0/users/current"
     }
     @get:Rule val compose = createAndroidComposeRule<SmokeActivity>()
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
@@ -89,6 +90,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
                 overrides[path]?.poll()?.let { return it }
                 return when (path) {
                     CREATE -> envelope("""{"chat_session":{"id":"remote-${sequence.incrementAndGet()}"}}""")
+                    CURRENT -> envelope("""{"id":"user","email":"t***@example.com","mobile_number":"","need_birthday":false}""")
                     "/api/v0/chat/create_pow_challenge" -> envelope("""{"challenge":{"algorithm":"DeepSeekHashV1","challenge":"abcdef","salt":"salt","difficulty":64,"expire_at":9999999999999,"signature":"signature"}}""")
                     COMPLETION -> reply("Hello", " world.")
                     RENAME, DELETE -> envelope("{}")
@@ -169,6 +171,16 @@ class AccountFeaturesTest(private val dark: Boolean) {
     private fun bodies(path: String) = requests.filter { it.path == path }.map { Json.parseToJsonElement(it.body).jsonObject }
     private fun screenshot(feature: String) = captureOfficialScreenshot(compose, dark, feature, TOKEN, "mocked-server")
     private fun drawer() { compose.onNodeWithContentDescription("Open navigation").performClick() }
+    /** Official drawer: Rename, Pin and Delete are in each chat's "..." menu. */
+    private fun historyAction(title: String, action: String) {
+        compose.onNodeWithContentDescription("More options for $title").performClick()
+        compose.onNodeWithContentDescription("$action $title").performClick()
+    }
+    /** Official chat: Copy, Edit and Share for your own message are on long press. */
+    private fun userMessageMenu(id: String) {
+        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("user-bubble-$id"))
+        compose.onNodeWithTag("user-bubble-$id").performTouchInput { longClick() }
+    }
     private fun settings() { drawer(); compose.onNodeWithText("Settings").performClick() }
     private fun clipboard(): String = compose.runOnIdle {
         (compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
@@ -216,28 +228,28 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithContentDescription("New Chat").performClick()
         drawer(); compose.onNodeWithTag("history-open-$id").performClick()
         compose.onNodeWithText("Hello world.").assertIsDisplayed()
-        drawer(); compose.onNodeWithContentDescription("Rename History chat").performClick()
+        drawer(); historyAction("History chat", "Rename")
         compose.onNodeWithTag("rename-title").performTextReplacement("Renamed chat")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(10_000) { vm.state.value.history.single().title == "Renamed chat" }
         assertEquals("Renamed chat", bodies(RENAME).single()["title"]!!.jsonPrimitive.content)
         assertEquals("Renamed chat", WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().single().title)
         queue(RENAME, MockResponse().setResponseCode(500))
-        compose.onNodeWithContentDescription("Rename Renamed chat").performClick()
+        historyAction("Renamed chat", "Rename")
         compose.onNodeWithTag("rename-title").performTextReplacement("Should fail")
         compose.onNodeWithText("Save").performClick()
         compose.waitUntil(10_000) { vm.state.value.error != null }
         assertEquals("Renamed chat", vm.state.value.history.single().title)
         queue(DELETE, MockResponse().setResponseCode(500))
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Delete", substring = false).performClick()
         compose.waitUntil(10_000) { bodies(DELETE).size == 1 && !vm.state.value.busy }
         assertEquals(1, vm.state.value.history.size)
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(1, bodies(DELETE).size)
         screenshot("feature04-history")
-        compose.onNodeWithContentDescription("Delete Renamed chat").performClick()
+        historyAction("Renamed chat", "Delete")
         compose.onNodeWithText("Delete", substring = false).performClick()
         compose.waitUntil(10_000) { vm.state.value.history.isEmpty() }
         assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())
@@ -297,7 +309,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         assertEquals(2, requests.count { it.path == "/api/v0/file/upload_file" })
         assertEquals("file-1", bodies(COMPLETION).last()["ref_file_ids"]!!.jsonArray.single().jsonPrimitive.content)
         val imageUser = vm.state.value.messages.last { it.user }.id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$imageUser"))
+        userMessageMenu(imageUser)
         compose.onNodeWithTag("edit-$imageUser").performClick()
         compose.onNodeWithTag("edit-message").assertTextContains("Describe image")
         compose.onNodeWithText("Cancel").performClick()
@@ -311,6 +323,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { speech.result?.invoke("Dictated words") }
         compose.onNodeWithTag("account-composer").assertTextEquals("Dictated words")
         screenshot("feature08-voice")
+        // Official composer: the microphone shows while the field is empty; text turns it into Send.
+        compose.onNodeWithContentDescription("Dictate message").assertDoesNotExist()
+        compose.onNodeWithTag("account-composer").performTextReplacement("")
         compose.onNodeWithContentDescription("Dictate message").performClick()
         compose.runOnIdle { speech.failed?.invoke() }
         compose.onNodeWithTag("account-error").assertTextContains("Speech recognition is unavailable", substring = true)
@@ -318,8 +333,9 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.runOnIdle { quickLaunch.value = LaunchRequest(QuickAction.VOICE) }
         compose.waitUntil(10_000) { speech.starts > starts }
         compose.runOnIdle { speech.result?.invoke("Voice shortcut") }
-        settings(); compose.onNodeWithText("Back", substring = false).performClick()
+        settings(); compose.onNodeWithContentDescription("Back").performClick()
         compose.runOnIdle { assertEquals(starts + 1, speech.starts) }
+        compose.onNodeWithTag("account-composer").performTextReplacement("")
         compose.onNodeWithContentDescription("Dictate message").performClick()
         val oldResult = compose.runOnIdle { checkNotNull(speech.result) }
         compose.onNodeWithContentDescription("New Chat").performClick()
@@ -341,6 +357,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         launch(); send("Original prompt"); finished()
         compose.runOnIdle { vm.rename(vm.state.value.history.single().id, "Keep this title") }
         compose.waitUntil(10_000) { !vm.state.value.busy && vm.state.value.title == "Keep this title" }
+        userMessageMenu(vm.state.value.messages.first { it.user }.id)
         compose.onNodeWithContentDescription("Copy user message").performClick()
         assertEquals("Original prompt", clipboard())
         compose.onNodeWithContentDescription("Copy assistant message").performClick()
@@ -359,7 +376,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithContentDescription("Regenerate response").performScrollTo().performClick(); finished()
         assertEquals(previousParent, bodies(COMPLETION).last()["parent_message_id"])
         val laterUser = vm.state.value.messages.last { it.user }.id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$laterUser"))
+        userMessageMenu(laterUser)
         compose.onNodeWithTag("edit-$laterUser").performClick()
         compose.onNodeWithTag("edit-message").performTextReplacement("Edited later turn")
         queue(COMPLETION, reply("Later edited"))
@@ -367,7 +384,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         assertEquals(4, vm.state.value.messages.size)
         assertEquals(previousParent, bodies(COMPLETION).last()["parent_message_id"])
         val firstUser = vm.state.value.messages.first().id
-        compose.onNodeWithTag("message-list").performScrollToNode(hasTestTag("edit-$firstUser"))
+        userMessageMenu(firstUser)
         compose.onNodeWithTag("edit-$firstUser").performClick()
         compose.onNodeWithTag("edit-message").performTextReplacement("Edited prompt")
         queue(COMPLETION, reply("Edited answer"))
@@ -381,11 +398,18 @@ class AccountFeaturesTest(private val dark: Boolean) {
         screenshot("feature10-actions")
     }
 
+    /** Official settings: Appearance opens a radio dialog with Confirm. */
+    private fun chooseAppearance(value: Appearance) {
+        compose.onNodeWithTag("settings-appearance").performScrollTo().performClick()
+        compose.onNodeWithTag("choice-${value.name}").performClick()
+        compose.onNodeWithTag("choice-confirm").performClick()
+    }
+
     @Test fun feature11_settings() {
         launch(); send(); finished(); settings()
-        compose.onNodeWithText("System", substring = false).performClick()
+        chooseAppearance(Appearance.SYSTEM)
         assertEquals(Appearance.SYSTEM, vm.state.value.appearance)
-        compose.onNodeWithText(if (dark) "Dark" else "Light", substring = false).performClick()
+        chooseAppearance(theme)
         assertEquals(theme.name, app.getSharedPreferences("deepseek_web_appearance", 0).getString("theme", null))
         lateinit var reloaded: AccountViewModel
         val reloadBase = server.url("/").toString()
@@ -426,7 +450,10 @@ class AccountFeaturesTest(private val dark: Boolean) {
         compose.onNodeWithText("Log out", substring = false).performScrollTo().performClick()
         compose.onAllNodesWithText("Log out", substring = false).onLast().performClick()
         compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy }
-        assertEquals(AccountPage.LOGIN, vm.state.value.page)
+        // Logging out locks the app on the welcome screen.
+        assertEquals(AccountPage.CHAT, vm.state.value.page)
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithTag("account-composer").assertDoesNotExist()
         assertNull(DeepSeekSessionStore(app).load())
         assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())
         assertFalse(DeepSeekCookies.read().contains("synthetic-cookie"))
@@ -434,7 +461,11 @@ class AccountFeaturesTest(private val dark: Boolean) {
 
     @Test fun feature12_loginWebView() {
         launch(signedIn = false)
-        compose.onNodeWithText("Log in with DeepSeek").performClick()
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
+        compose.onNodeWithText("Log in with phone or email").performClick()
+        // The terms box is not ticked yet, so the route asks first, as in the official app.
+        compose.onNodeWithText("Terms of Use and Privacy Policy").assertIsDisplayed()
+        compose.onNodeWithTag("consent-agree").performClick()
         compose.onNodeWithTag("login-webview").assertIsDisplayed()
         compose.waitUntil(15_000) { compose.runOnIdle { browser.view.title == "Mock sign-in" } }
         assertTrue(requests.any { it.path == "/sign_in" })
@@ -450,7 +481,8 @@ class AccountFeaturesTest(private val dark: Boolean) {
 
     @Test fun feature13_sessionExpiry() {
         launch(); queue(CREATE, MockResponse().setResponseCode(401)); send()
-        compose.waitUntil(15_000) { vm.state.value.page == AccountPage.LOGIN && !vm.state.value.busy }
+        compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy && vm.state.value.page == AccountPage.CHAT }
+        compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
         compose.onNodeWithTag("account-error").assertTextEquals(EXPIRED)
         assertNull(DeepSeekSessionStore(app).load()); assertFalse(vm.state.value.signedIn)
         assertTrue(vm.state.value.history.isEmpty())
@@ -465,7 +497,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
             if (index == 2) queue(COMPLETION, MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: $body\n\n"))
             else queue(CREATE, MockResponse().setHeader("Content-Type", "application/json").setBody(body))
             send("Expired again")
-            compose.waitUntil(15_000) { vm.state.value.page == AccountPage.LOGIN && !vm.state.value.busy }
+            compose.waitUntil(15_000) { !vm.state.value.signedIn && !vm.state.value.busy && vm.state.value.page == AccountPage.CHAT }
             compose.onNodeWithTag("account-error").assertTextEquals(EXPIRED)
             assertNull(DeepSeekSessionStore(app).load())
             assertTrue(WebHistory(File(app.filesDir, "deepseek-web-chats.json")).load().isEmpty())
