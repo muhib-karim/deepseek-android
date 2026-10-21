@@ -31,7 +31,12 @@ class ApiAgentJourneyTest {
         button.click()
         // Dialogs are their own window: no test tags as resource ids there, so the field and button are found by class and text.
         e2e.type(By.clazz("android.widget.EditText"), Fixture.FIXTURE_PROFILE_VALUE, "API key field")
-        e2e.tap(By.text("Check and use"), "Check and use")
+        // The keyboard is still opening after typing; tap once the button is enabled, again if the dialog stays.
+        for (attempt in 1..3) {
+            e2e.find(By.text("Check and use"))?.takeIf { it.isEnabled }?.click()
+                ?: e2e.waitFor(By.text("Check and use").enabled(true), "Check and use, enabled", 10_000).click()
+            if (e2e.device.wait(Until.gone(By.text("Check and use")), 8_000) == true) break
+        }
 
         e2e.waitFor(E2eDriver.res("api-fallback-ui"), "API mode after the key was accepted", 60_000)
         val chip = e2e.waitFor(E2eDriver.res("api-agent-chip"), "the Agent chip", 30_000)
@@ -52,7 +57,7 @@ class ApiAgentJourneyTest {
         e2e.step("api-tool-card")
         card.click()
         waitScrolling(E2eDriver.res("tool-step-details"), "the expanded tool card", 10_000)
-        waitScrolling(By.textContains("file_path: report.pdf"), "the tool arguments", 10_000)
+        waitScrolling(By.textContains("(1 page)"), "the tool result in the expanded card", 10_000)
         e2e.step("api-tool-card-expanded")
         waitScrolling(By.desc("Share report.pdf"), "Share on the PDF's file card", 30_000)
         waitScrolling(By.textContains("Native tool call finished."), "the streamed final answer", 60_000)

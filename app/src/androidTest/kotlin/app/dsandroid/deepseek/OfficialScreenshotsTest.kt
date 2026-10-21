@@ -126,17 +126,17 @@ class OfficialScreenshotsTest(private val dark: Boolean) {
         compose.runOnIdle { assertEquals(0, logins) }
         compose.onNodeWithTag("consent-agree").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, logins) }
-        compose.onAllNodes(hasText("API key", substring = true, ignoreCase = true)).assertCountEquals(0)
+        // The API key button is on the welcome screen (v1.2.0), but a sign-in route never asks for a key.
+        compose.onNodeWithTag("welcome-api-key-field").assertDoesNotExist()
         // Signed out, there is no chat to type into at all, and no drawer.
         compose.onNodeWithTag("account-composer").assertDoesNotExist()
         compose.onNodeWithContentDescription("Open navigation").assertDoesNotExist()
     }
-    @Test fun apiKeyRouteIsBehindMoreOptionsAndNeedsAnExplicitKey() {
+    @Test fun apiKeyRouteIsOnTheWelcomeScreenAndNeedsAnExplicitKey() {
         val keys = mutableListOf<String>()
         compose.setContent { AccountTheme(theme) { DeepSeekShell(AccountUiState(ready = true, appearance = theme), onUseApiKey = { keys += it }) } }
-        compose.onNodeWithTag("welcome-api-key").assertDoesNotExist()
-        compose.onNodeWithTag("welcome-more").performScrollTo().performClick()
-        compose.onNodeWithTag("welcome-api-key").performScrollTo().performClick()
+        // v1.2.0: a front door, shown without "More sign-in options"; nothing is used until a key is typed and checked.
+        compose.onNodeWithTag("welcome-api-key").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithTag("welcome-api-key-field").performTextInput("synthetic-welcome-key")
         compose.onNodeWithText("Check and use").performClick()
         compose.runOnIdle { assertEquals(listOf("synthetic-welcome-key"), keys) }

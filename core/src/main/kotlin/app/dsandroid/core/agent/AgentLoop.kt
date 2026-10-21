@@ -107,6 +107,8 @@ class AgentLoop(
         for (step in initial.assistantStep until maxSteps) {
             coroutineContext.ensureActive()
             currentStep = step
+            // A later step is announced as it starts, so the counter moves on while the next reply is awaited.
+            if (step > initial.assistantStep) publish()
             val committedTimeline = timeline.toList()
             var attempt = 0
             var assistant = checkpoint.pendingAssistant

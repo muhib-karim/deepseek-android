@@ -195,7 +195,7 @@ class ApiAgentJourneyTest {
         compose.onNodeWithTag("tool-step-details", useUnmergedTree = true).assertDoesNotExist()
         compose.onNode(hasContentDescription("Created report.pdf", substring = true) and hasClickAction()).performClick()
         compose.waitUntil(5_000) { exists(hasTestTag("tool-step-details")) }
-        compose.onNodeWithText("file_path: report.pdf", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("(1 page)", substring = true, useUnmergedTree = true).assertExists()
         capture("v120-api-tool-card")
         compose.onNodeWithContentDescription("Share report.pdf").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("artifact-card-report.pdf", useUnmergedTree = true).assertExists()

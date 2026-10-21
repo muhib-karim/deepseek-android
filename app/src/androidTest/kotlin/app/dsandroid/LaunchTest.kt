@@ -21,7 +21,9 @@ class LaunchTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Log in with phone or email").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("welcome-screen").assertIsDisplayed()
         compose.onNodeWithText("Log in with phone or email").assertIsDisplayed()
-        compose.onNodeWithText("API key", substring = true, ignoreCase = true).assertDoesNotExist()
+        // v1.2.0: the API key is a front door on the welcome screen, but no key dialog opens by itself.
+        compose.onNodeWithTag("welcome-api-key").assertExists()
+        compose.onNodeWithTag("welcome-api-key-field").assertDoesNotExist()
         // Nothing loads DeepSeek's page until the person picks the in-app route.
         compose.onNodeWithTag("login-webview").assertDoesNotExist()
     }
