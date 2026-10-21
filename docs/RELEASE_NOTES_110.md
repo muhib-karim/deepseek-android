@@ -68,14 +68,16 @@ the branch is pushed. Rows below say PENDING until a run fills them in.
 
 | Check | Where | Result |
 |---|---|---|
-| Unit tests (`:core:test` incl. DeepSeekHashV1Test, LiveSearchStreamTest, WebSyncTest; `:app:testDebugUnitTest`) | CI | PENDING |
-| Android lint | CI | PENDING |
-| Debug and release builds; merged release permissions | CI | PENDING |
-| Emulator androidTests, light and dark (incl. OfficialScreenshotsTest timeline, chips, attach panel, reply actions) | Emulator smoke | PENDING |
-| Release E2E, mocked backend with live shapes, API 35 light (all journeys, tool coverage, think_search, upload, server_history) | Release E2E | PENDING |
-| Release E2E, mocked backend, API 35 dark and API 26 light (baseline, native proof of work) | Release E2E | PENDING |
-| Release E2E, live login-page check | Release E2E | PENDING |
-| Live service, signed-in test account on a real phone: upload, Search, DeepThink + Search, history, Like | Supervisor (cloud phone) | PENDING |
-| Signed release APK published with SHA256SUMS.txt | Tag workflow | PENDING |
+| Unit tests (`:core:test` incl. DeepSeekHashV1Test, LiveSearchStreamTest, WebSyncTest; `:app:testDebugUnitTest`) | CI | PASS (run 39515962199 on 5312041; main 39517571195) |
+| Android lint | CI | PASS |
+| Debug and release builds; merged release permissions | CI | PASS |
+| Emulator androidTests, light and dark (incl. OfficialScreenshotsTest timeline, chips, attach panel, reply actions) | Emulator smoke | PASS (run 39515962173, 123 tests) |
+| Release E2E, mocked backend with live shapes, API 35 light (all journeys, tool coverage, think_search, upload, server_history) | Release E2E | PASS (39515962092; tag run 39517662211) |
+| Release E2E, mocked backend, API 35 dark and API 26 light (baseline, native proof of work) | Release E2E | PASS (API 35 dark failed once on the tag run with an emulator certificate-trust setup error before any request reached the fixture; rerun PASS (job 118958844911)) |
+| Release E2E, live login-page check | Release E2E | PASS |
+| Live service, signed-in test account on a cloud Pixel 7 (Android 14): first message, DeepThink + Search with timeline and citations, Agent file + Download, Document upload, server history, Like, settings, dark | Supervisor (cloud phone) | PASS (release APK sha256 a437d37c…, 2026-10-21) |
+| Signed release APK published with SHA256SUMS.txt | Tag workflow | PASS |
+
+Not verified on a virtual phone: voice input, camera, the recent-photos strip (no photos on the device), and the Google browser sign-in round trip on a physical phone.
 
 The mocked suite covers the protocol and the interface, not DeepSeek's real model replies.
