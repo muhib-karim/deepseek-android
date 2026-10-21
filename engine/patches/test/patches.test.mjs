@@ -38,6 +38,7 @@ test("the shipped patch set is consistent", () => {
 test("glob targets pick the hashed bundle that carries the anchor; required failures are reported", () => {
 	const root = mkdtempSync(join(tmpdir(), "patches-"));
 	mkdirSync(join(root, "@deepseek-ai/x/lib"), { recursive: true });
+	writeFileSync(join(root, "@deepseek-ai/x/package.json"), "{}");
 	writeFileSync(join(root, "@deepseek-ai/x/lib/boot-AAA.js"), "nothing here\n");
 	writeFileSync(join(root, "@deepseek-ai/x/lib/boot-BBB.js"), "await link(a, b);\n");
 	const globbed = { ...patch, file: "@deepseek-ai/x/lib/boot-*.js" };
@@ -46,6 +47,26 @@ test("glob targets pick the hashed bundle that carries the anchor; required fail
 	assert.equal(result.status, "applied");
 	assert.match(result.file, /boot-BBB\.js$/);
 	assert.equal(applyAll(root, [{ ...patch, file: "@deepseek-ai/missing/index.js" }])[0].status, "missing");
+});
+
+test("nested copies of a package (npm version conflicts) are all patched", () => {
+	const root = mkdtempSync(join(tmpdir(), "nested-"));
+	for (const dir of ["@deepseek-ai/x", "@deepseek-ai/dsh/node_modules/@deepseek-ai/x", "other/node_modules/@deepseek-ai/x"]) {
+		mkdirSync(join(root, dir, "lib"), { recursive: true });
+		writeFileSync(join(root, dir, "package.json"), "{}");
+		writeFileSync(join(root, dir, "lib/index.js"), "await link(a, b);\n");
+	}
+	mkdirSync(join(root, "other"), { recursive: true });
+	writeFileSync(join(root, "other/package.json"), "{}");
+	const results = applyAll(root, [patch]);
+	assert.equal(results.length, 3);
+	assert.ok(results.every((r) => r.status === "applied"));
+	const nestedOnly = mkdtempSync(join(tmpdir(), "nested-only-"));
+	mkdirSync(join(nestedOnly, "@deepseek-ai/dsh/node_modules/@deepseek-ai/x/lib"), { recursive: true });
+	writeFileSync(join(nestedOnly, "@deepseek-ai/dsh/package.json"), "{}");
+	writeFileSync(join(nestedOnly, "@deepseek-ai/dsh/node_modules/@deepseek-ai/x/package.json"), "{}");
+	writeFileSync(join(nestedOnly, "@deepseek-ai/dsh/node_modules/@deepseek-ai/x/lib/index.js"), "await link(a, b);\n");
+	assert.equal(applyAll(nestedOnly, [patch])[0].status, "applied");
 });
 
 test("P12 links the android ripgrep platform package to the bundled rg", () => {

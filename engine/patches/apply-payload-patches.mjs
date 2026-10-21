@@ -33,14 +33,51 @@ export function parseArgs(argv) {
 	return options;
 }
 
-/** Files a patch targets: an exact path, or a basename with one `*` (hashed bundle names such as profile-boot-*.js). */
+/** Directories of every installed copy of a package: top-level and nested node_modules (npm nests on version conflicts). */
+export function packageCopies(root, pkg) {
+	const found = [];
+	const visit = (modules, depth) => {
+		if (depth > 8 || !existsSync(modules)) return;
+		const direct = join(modules, pkg);
+		if (existsSync(join(direct, "package.json"))) found.push(direct);
+		for (const entry of readdirSync(modules, { withFileTypes: true })) {
+			if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+			const dirs = entry.name.startsWith("@")
+				? readdirSync(join(modules, entry.name), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(modules, entry.name, d.name))
+				: [join(modules, entry.name)];
+			for (const dir of dirs) visit(join(dir, "node_modules"), depth + 1);
+		}
+	};
+	visit(root, 0);
+	return found;
+}
+
+/** The package a patch file path belongs to: "@scope/name/..." or "name/...". */
+function packageOf(file) {
+	const parts = file.split("/");
+	return parts[0].startsWith("@") ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+/**
+ * Files a patch targets in every copy of its package: an exact path, or a basename with one `*` (hashed bundle names
+ * such as profile-boot-*.js).
+ */
 export function targetsOf(root, file) {
-	const name = basename(file);
-	if (!name.includes("*")) return [join(root, file)];
-	const dir = join(root, dirname(file));
-	if (!existsSync(dir)) return [];
-	const [head, tail] = name.split("*");
-	return readdirSync(dir).filter((entry) => entry.startsWith(head) && entry.endsWith(tail)).sort().map((entry) => join(dir, entry));
+	const pkg = packageOf(file);
+	const inner = file.slice(pkg.length + 1);
+	const out = [];
+	for (const copy of packageCopies(root, pkg)) {
+		const name = basename(inner);
+		if (!name.includes("*")) {
+			out.push(join(copy, inner));
+			continue;
+		}
+		const dir = join(copy, dirname(inner));
+		if (!existsSync(dir)) continue;
+		const [head, tail] = name.split("*");
+		for (const entry of readdirSync(dir).sort()) if (entry.startsWith(head) && entry.endsWith(tail)) out.push(join(dir, entry));
+	}
+	return out;
 }
 
 function occurrences(text, needle) {
@@ -68,9 +105,19 @@ export function applyAll(root, patches, { check = false } = {}) {
 			continue;
 		}
 		const outcomes = files.map((path) => ({ path, ...patchText(readFileSync(path, "utf8"), patch) }));
-		// A glob matches several hashed bundles; the patch belongs to the one that carries its anchor or marker.
-		const relevant = outcomes.filter((o) => o.status !== "mismatch");
-		const chosen = relevant.length > 0 ? relevant : outcomes.slice(0, 1);
+		// Every copy of the package is patched. A glob matches several hashed bundles per copy; the patch belongs to the
+		// one that carries its anchor or marker, so within a copy the other bundles do not count as mismatches.
+		const byCopy = new Map();
+		for (const o of outcomes) {
+			const key = patch.file.includes("*") ? dirname(o.path) : o.path;
+			if (!byCopy.has(key)) byCopy.set(key, []);
+			byCopy.get(key).push(o);
+		}
+		const chosen = [];
+		for (const group of byCopy.values()) {
+			const relevant = group.filter((o) => o.status !== "mismatch");
+			chosen.push(...(relevant.length > 0 ? relevant : group.slice(0, 1)));
+		}
 		for (const outcome of chosen) {
 			if (outcome.status === "applied" && !check) writeFileSync(outcome.path, outcome.text);
 			results.push({ patch, status: outcome.status, file: relative(root, outcome.path) });
