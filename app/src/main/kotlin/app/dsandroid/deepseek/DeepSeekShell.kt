@@ -333,7 +333,7 @@ fun DeepSeekShell(
                             if (state.messages.isEmpty() && state.loadingChat) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("Loading this chat from DeepSeek…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             }
-                            else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
+                            else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth(), agent = state.agent, onExample = onDraft)
                             else MessageList(state, Modifier.weight(1f).fillMaxWidth(), onRegenerate = onRegenerate,
                                 onEdit = { message -> editTarget = message; editText = message.prompt ?: message.text },
                                 onShareText = { onShareText(shareableText(it)) }, onSources = { sources = it }, actions = actions, onFeedback = onFeedback,

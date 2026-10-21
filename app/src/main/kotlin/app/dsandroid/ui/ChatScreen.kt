@@ -115,6 +115,10 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                 verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(painterResource(R.drawable.ic_mark), contentDescription = null, modifier = Modifier.size(90.dp))
                 Text(stringResource(R.string.greeting), style = MaterialTheme.typography.headlineSmall)
+                if (agentEnabled) {
+                    Spacer(Modifier.height(20.dp))
+                    app.dsandroid.deepseek.AgentExamplesCard({ draft = it })
+                }
             }
         } else {
             LazyColumn(Modifier.weight(1f).widthIn(max = 840.dp).fillMaxWidth(), state = listState,

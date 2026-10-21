@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -127,13 +128,55 @@ private fun SheetRow(glyph: Glyph, label: String, tag: String, onClick: () -> Un
     }
 }
 
-/** An empty chat: the mark above the greeting, centred. */
+/** An empty chat: the mark above the greeting, centred; with Agent on, the "What Agent can do" examples below it. */
 @Composable
-internal fun EmptyChat(modifier: Modifier = Modifier) {
-    Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+internal fun EmptyChat(modifier: Modifier = Modifier, agent: Boolean = false, onExample: (String) -> Unit = {}) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally) {
         AppMark(Modifier.size(52.dp))
         Spacer(Modifier.height(16.dp))
         Text("How can I help you?", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        if (agent) {
+            Spacer(Modifier.height(20.dp))
+            AgentExamplesCard(onExample)
+        }
+    }
+}
+
+/** First-run examples that exercise tools (search + fetch + PDF, code + chart, file input, a file to keep). */
+val AGENT_EXAMPLES = listOf(
+    "Make a one-page PDF summary of today's top AI news",
+    "Calculate compound interest on \$10k at 7% for 20 years and chart it",
+    "Turn this into a CSV",
+    "Write a Python script that renames files by date and give me the file",
+)
+
+/**
+ * "What Agent can do", on an empty chat (not a modal): four example prompts; a tap puts one in the composer to edit or send.
+ * Shared by the account route and API mode.
+ */
+@Composable
+fun AgentExamplesCard(onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(modifier.widthIn(max = 520.dp).fillMaxWidth().testTag("agent-examples"), shape = RoundedCornerShape(16.dp), color = colors.surface,
+        border = BorderStroke(0.5.dp, colors.outlineVariant)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp), color = colors.primary)
+                Text("What Agent can do", style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
+            }
+            Text("Searches the web, runs code, reads your files and hands you PDFs, spreadsheets, charts and scripts. Tap an example.",
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            AGENT_EXAMPLES.forEachIndexed { index, prompt ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(colors.surfaceVariant)
+                    .clickable(onClickLabel = "Put this example in the message box") { onPick(prompt) }
+                    .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp).testTag("agent-example-$index"),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AppIcon(listOf(Glyph.SEARCH, Glyph.TOOL, Glyph.DOCUMENT, Glyph.EDIT)[index], modifier = Modifier.size(16.dp), color = colors.onSurfaceVariant)
+                    Text(prompt, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
+                }
+            }
+        }
     }
 }
 
