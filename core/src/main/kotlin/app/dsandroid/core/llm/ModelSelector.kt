@@ -13,6 +13,19 @@ data class ModelInfo(val id: String, val created: Long? = null, @SerialName("own
 @Serializable
 data class ModelCapabilities(val vision: Boolean? = null, val reasoning: Boolean? = null) {
     fun isVision(id: String): Boolean = vision ?: ModelSelector.isVision(id)
+    /**
+     * The API route's model for one turn. DeepSeek's function calling runs on the chat model, so a turn that offers tools (Agent
+     * on) uses deepseek-chat (or the first non-reasoning model listed) even with DeepThink selected; deepseek-reasoner is used
+     * only when no tools are offered. A custom endpoint that lists only reasoning models keeps its own choice.
+     */
+    fun forAgentTurn(models: List<ModelInfo>, choice: String, think: Boolean, toolsOffered: Boolean, overrides: Map<String, ModelCapabilities>): String {
+        if (!toolsOffered) return forTurn(models, choice, think, overrides)
+        val selected = selected(models, choice)
+        fun reasoning(id: String) = (overrides[id] ?: ModelCapabilities()).isReasoning(id)
+        if (!reasoning(selected)) return selected
+        val chat = models.firstOrNull { it.id == OFFLINE_FALLBACK && !reasoning(it.id) }?.id ?: ranked(models).firstOrNull { !reasoning(it.id) }?.id
+        return chat ?: if (models.isEmpty() && selected.startsWith("deepseek-")) OFFLINE_FALLBACK else selected
+    }
     fun isReasoning(id: String): Boolean = reasoning ?: ModelSelector.isReasoning(id)
 }
 

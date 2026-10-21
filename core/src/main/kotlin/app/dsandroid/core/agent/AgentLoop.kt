@@ -25,7 +25,8 @@ fun interface Confirmer {
 }
 
 sealed interface AgentEvent {
-    data class StepsUpdated(val steps: List<TurnStep>) : AgentEvent
+    /** [step] is the 1-based assistant step being worked on and [maxSteps] the run's limit (both 0 when not known). */
+    data class StepsUpdated(val steps: List<TurnStep>, val step: Int = 0, val maxSteps: Int = 0) : AgentEvent
     data class TextDelta(val text: String, val turn: Int) : AgentEvent
     data class ReasoningDelta(val text: String, val turn: Int) : AgentEvent
     data class ToolStarted(val callId: String, val name: String) : AgentEvent
@@ -58,10 +59,14 @@ class AgentLoop(
     /** Wall-clock limit for one tool execution; a timed-out tool reports an error result to the model. */
     private val toolTimeoutMs: Long = DEFAULT_TOOL_TIMEOUT_MS,
 ) {
-    init { require(maxSteps in 1..ResearchPolicy.MAX_STEPS && budgetRequestReserve >= 0 && toolTimeoutMs > 0) }
+    init { require(maxSteps in 1..MAX_STEPS_LIMIT && budgetRequestReserve >= 0 && toolTimeoutMs > 0) }
 
     companion object {
         const val DEFAULT_TOOL_TIMEOUT_MS = 180_000L
+        /** Settings > Agent > Maximum steps: default and allowed range. */
+        const val DEFAULT_MAX_STEPS = 8
+        const val MAX_STEPS_LIMIT = 20
+        fun clampSteps(value: Int): Int = value.coerceIn(1, MAX_STEPS_LIMIT)
     }
 
     /** Caller owns history and must not mutate it while a run is active. */
@@ -96,10 +101,12 @@ class AgentLoop(
             if (last is TurnStep.Reasoning && !last.complete) timeline[timeline.lastIndex] = last.copy(
                 durationMs = (System.nanoTime() - reasoningStarted) / 1_000_000, complete = true)
         }
-        suspend fun publish() { emit(AgentEvent.StepsUpdated(timeline.toList())) }
+        var currentStep = initial.assistantStep
+        suspend fun publish() { emit(AgentEvent.StepsUpdated(timeline.toList(), currentStep + 1, maxSteps)) }
         var retryElapsedMs = 0L
         for (step in initial.assistantStep until maxSteps) {
             coroutineContext.ensureActive()
+            currentStep = step
             val committedTimeline = timeline.toList()
             var attempt = 0
             var assistant = checkpoint.pendingAssistant
@@ -237,7 +244,12 @@ class AgentLoop(
                     // Looked up again after any approval: a tool switched off meanwhile is never run.
                     val tool = if (allowed) registry[call.function.name] else null
                     denied = !allowed || tool == null
-                    if (!allowed) ToolResult(if (decision == Decision.DENY) "Denied by safety policy or unknown tool" else "User declined this tool call", isError = true)
+                    if (!allowed) ToolResult(when {
+                        decision != Decision.DENY -> "User declined this tool call"
+                        registry[call.function.name] == null ->
+                            "Denied by safety policy or unknown tool: no tool named \"${call.function.name.take(80)}\" is offered in this request"
+                        else -> "Denied by safety policy or unknown tool"
+                    }, isError = true)
                     else if (tool == null) ToolResult("This tool was switched off before it ran", isError = true)
                     else {
                         coroutineContext.ensureActive()
