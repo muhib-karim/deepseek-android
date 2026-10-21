@@ -58,7 +58,7 @@ public final class Engine {
         return new PluginStore(dshHome(app), profile(app), new File(app.getCacheDir(), "plugins"), new PluginStore.DependencyInstaller() {
             @Override
             public void install(File packageDir) throws IOException {
-                Run r = npm(app, packageDir, Arrays.asList("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+                Run r = npm(app, packageDir, Arrays.asList("install", "--omit=dev", "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund",
                         "--os=android", "--cpu=" + nodeArch(), "--loglevel=error"), TimeUnit.MINUTES.toMillis(10));
                 if (r.exit != 0) {
                     throw new IOException("npm exited " + r.exit + ": " + lastLines(r.output, 6));
@@ -146,7 +146,7 @@ public final class Engine {
                 } catch (org.json.JSONException e) {
                     throw new IOException(e);
                 }
-                Run r = npm(app, dir, Arrays.asList("install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+                Run r = npm(app, dir, Arrays.asList("install", "--omit=dev", "--ignore-scripts", "--legacy-peer-deps", "--no-audit", "--no-fund",
                         "--os=android", "--cpu=" + nodeArch(), "--loglevel=error"), TimeUnit.MINUTES.toMillis(20));
                 if (r.exit != 0) {
                     throw new IOException("npm exited " + r.exit + ": " + lastLines(r.output, 6));

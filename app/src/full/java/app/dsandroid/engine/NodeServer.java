@@ -417,10 +417,59 @@ public class NodeServer extends Service {
                 }
             }
         }
+        linked += linkNested(bundled, modules, 0);
         EngineLog.append(this, "profile node_modules: " + linked + " bundled packages linked from " + bundled);
         ensurePluginRows(web, modules);
         DshCredentials.ensure(dshHome());
         writeAgentInstructions();
+    }
+
+    /**
+     * npm nests a package when versions conflict; the loader resolves plugin names from the profile, so a package that
+     * exists only nested gets a profile link too (the first copy found; top-level copies always win).
+     */
+    private static int linkNested(File modules, File view, int depth) {
+        if (depth > 6) {
+            return 0;
+        }
+        int linked = 0;
+        File[] entries = modules.listFiles();
+        if (entries == null) {
+            return 0;
+        }
+        for (File entry : entries) {
+            File[] pkgs = entry.getName().startsWith("@") ? entry.listFiles() : new File[]{entry};
+            if (pkgs == null || entry.getName().startsWith(".")) {
+                continue;
+            }
+            for (File pkg : pkgs) {
+                File nested = new File(pkg, "node_modules");
+                if (!nested.isDirectory()) {
+                    continue;
+                }
+                File[] inner = nested.listFiles();
+                if (inner != null) {
+                    for (File child : inner) {
+                        File[] innerPkgs = child.getName().startsWith("@") ? child.listFiles() : new File[]{child};
+                        if (innerPkgs == null || child.getName().startsWith(".")) {
+                            continue;
+                        }
+                        for (File p : innerPkgs) {
+                            String name = child.getName().startsWith("@") ? child.getName() + "/" + p.getName() : p.getName();
+                            File target = new File(view, name);
+                            if (!target.exists() && !Files.isSymbolicLink(target.toPath()) && new File(p, "package.json").isFile()) {
+                                File parent = target.getParentFile();
+                                if (parent.isDirectory() || parent.mkdirs()) {
+                                    linked += link(p, target);
+                                }
+                            }
+                        }
+                    }
+                }
+                linked += linkNested(nested, view, depth + 1);
+            }
+        }
+        return linked;
     }
 
     private static int link(File target, File view) {

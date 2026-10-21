@@ -105,7 +105,9 @@ cat > "$RT/dsh/package.json" <<EOF
 }
 EOF
 # No install scripts (they would fetch host binaries); android/arch so npm skips linux-only optional packages.
-(cd "$RT/dsh" && npm install --omit=dev --ignore-scripts --no-audit --no-fund --os=android --cpu="$NODE_ARCH" --loglevel=warn)
+# --legacy-peer-deps: dsh-web-mobile's peers (react, @deepseek-ai/dsh-client-*) come from the harness's own tree; letting
+# npm auto-install them pulls other versions and nests the harness's packages, which the profile view cannot resolve.
+(cd "$RT/dsh" && npm install --omit=dev --ignore-scripts --legacy-peer-deps --no-audit --no-fund --os=android --cpu="$NODE_ARCH" --loglevel=warn)
 rm -f "$RT/dsh/package-lock.json"
 # LibreOffice WASM (145 MB) only serves Office-to-PDF; the harness boots and serves its UI without it.
 rm -f "$RT/dsh/node_modules/@deepseek-ai/libreoffice-kit-wasm/assets/soffice.wasm" \
@@ -126,7 +128,11 @@ for sentinel in usr/bin/node usr/bin/bash usr/bin/rg usr/bin/git usr/bin/ls usr/
     dsh/node_modules/@deepseek-ai/dsh/lib/bin.js dsh/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js \
     dsh/node_modules/dsh-web-mobile/package.json dsh/node_modules/pnpm/bin/pnpm.cjs engine/patches/payload-patches.json \
     usr/lib/node_modules/npm/bin/npm-cli.js; do
-  [[ -e "$RT/$sentinel" ]] || { echo "::error::payload incomplete: $sentinel is missing" >&2; exit 1; }
+  if [[ ! -e "$RT/$sentinel" ]]; then
+    echo "::error::payload incomplete: $sentinel is missing" >&2
+    find "$RT/dsh/node_modules" -path "*/$(echo "$sentinel" | sed -E 's|^dsh/node_modules/||; s|/lib/.*||; s|/package.json||')/package.json" 2>/dev/null | head -5 >&2
+    exit 1
+  fi
 done
 want_machine=$([[ "$NODE_ARCH" == arm64 ]] && echo AArch64 || echo X86-64)
 readelf -h "$RT/usr/bin/node" | grep -q "Machine:.*$want_machine" || { echo "::error::node is not $want_machine" >&2; exit 1; }
