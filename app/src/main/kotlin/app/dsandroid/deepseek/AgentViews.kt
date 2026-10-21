@@ -27,12 +27,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.dsandroid.core.agent.ToolStatus
+import app.dsandroid.core.agent.ToolStepKind
+import app.dsandroid.core.agent.ToolStepTitle
 import app.dsandroid.core.agent.TurnStep
 import app.dsandroid.core.attachments.DocxTextExtractor
 import app.dsandroid.core.tools.Artifact
@@ -63,69 +66,89 @@ fun AgentTimeline(messageId: String, steps: List<TurnStep>, working: Boolean, on
     }
 }
 
-/** One tool call as a single compact line; tapping shows its input and result. */
+/**
+ * One tool call as a collapsible card, as ChatGPT and Claude show tool use: an icon for the kind of tool, a human title
+ * ("Searched the web: …", "Created report.pdf"), its status (spinner, done, error) and, on tap, the arguments and the
+ * result in monospace (bounded). [title] lets API mode pass its translated title; [details] replaces the default
+ * arguments and result (the code interpreter's code and output channels).
+ */
 @Composable
-fun ToolStepRow(step: TurnStep.ToolCall) {
+fun ToolStepRow(step: TurnStep.ToolCall, title: String = toolLabel(step), details: (@Composable () -> Unit)? = null) {
     var expanded by rememberSaveable(step.id) { mutableStateOf(false) }
-    val label = toolLabel(step)
     val status = statusText(step.status)
-    Column(Modifier.fillMaxWidth().testTag("tool-step-${step.name}")) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { expanded = !expanded }.heightIn(min = 40.dp)
-            .semantics { contentDescription = "$label, $status" },
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            when (step.status) {
-                ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
-                ToolStatus.DONE -> AppIcon(Glyph.CHECK, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary)
-                ToolStatus.WAITING -> AppIcon(Glyph.SHIELD, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ToolStatus.ERROR, ToolStatus.DENIED -> AppIcon(Glyph.ERROR, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.error)
-                ToolStatus.STOPPED -> AppIcon(Glyph.STOP, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val colors = MaterialTheme.colorScheme
+    val failed = step.status == ToolStatus.ERROR || step.status == ToolStatus.DENIED
+    Surface(Modifier.fillMaxWidth().testTag("tool-step-${step.name}"), shape = RoundedCornerShape(12.dp), color = colors.surface,
+        border = BorderStroke(0.5.dp, if (failed) colors.error.copy(alpha = .5f) else colors.outlineVariant)) {
+        Column {
+            Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Hide details" else "Show details") { expanded = !expanded }
+                .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "$title, $status"
+                    stateDescription = if (expanded) "Details shown" else "Details hidden"
+                },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(colors.surfaceVariant), contentAlignment = Alignment.Center) {
+                    AppIcon(kindGlyph(step.name), modifier = Modifier.size(16.dp), color = colors.onSurfaceVariant)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(title, color = colors.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(status.replaceFirstChar { it.uppercase() } + (step.durationMs?.let { " \u00B7 " + duration(it) } ?: ""),
+                        Modifier.testTag("tool-step-status"), color = if (failed) colors.error else colors.onSurfaceVariant, fontSize = 12.sp)
+                }
+                when (step.status) {
+                    ToolStatus.RUNNING -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 1.8.dp)
+                    ToolStatus.DONE -> AppIcon(Glyph.CHECK, modifier = Modifier.size(16.dp), color = colors.primary)
+                    ToolStatus.WAITING -> AppIcon(Glyph.SHIELD, modifier = Modifier.size(16.dp), color = colors.onSurfaceVariant)
+                    ToolStatus.ERROR, ToolStatus.DENIED -> AppIcon(Glyph.ERROR, modifier = Modifier.size(16.dp), color = colors.error)
+                    ToolStatus.STOPPED -> AppIcon(Glyph.STOP, modifier = Modifier.size(16.dp), color = colors.onSurfaceVariant)
+                }
+                AppIcon(Glyph.CHEVRON, modifier = Modifier.size(16.dp).rotate(if (expanded) 180f else 0f), color = colors.onSurfaceVariant)
             }
-            Text(label, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            step.durationMs?.let { Text(duration(it), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp) }
-            AppIcon(Glyph.CHEVRON, modifier = Modifier.size(16.dp).rotate(if (expanded) 180f else 0f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (expanded) Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp)) {
-            Column(Modifier.padding(10.dp).heightIn(max = 320.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Input", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                Code(input(step))
-                if (step.resultPreview.isNotBlank()) {
-                    Text(if (step.status == ToolStatus.ERROR || step.status == ToolStatus.DENIED) "Error" else "Result",
-                        style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                    Code(output(step))
+            if (expanded) {
+                HorizontalDivider(color = colors.outlineVariant.copy(alpha = .6f), thickness = 0.5.dp)
+                Column(Modifier.fillMaxWidth().padding(12.dp).heightIn(max = 360.dp).verticalScroll(rememberScrollState()).testTag("tool-step-details"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (details != null) details()
+                    else {
+                        Text("Arguments", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                        Code(input(step))
+                        if (step.resultPreview.isNotBlank()) {
+                            Text(if (failed) "Error" else "Result", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium,
+                                color = if (failed) colors.error else colors.onSurface)
+                            Code(ToolStepTitle.truncate(output(step), 4000))
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+private fun kindGlyph(name: String) = when (ToolStepTitle.kind(name)) {
+    ToolStepKind.SEARCH -> Glyph.SEARCH
+    ToolStepKind.WEB -> Glyph.MAGNIFY
+    ToolStepKind.CODE -> Glyph.TOOL
+    ToolStepKind.FILE -> Glyph.DOCUMENT
+    ToolStepKind.READ -> Glyph.FOLDER
+    ToolStepKind.OTHER -> Glyph.PUZZLE
+}
+
 @Composable
 private fun Code(text: String) {
-    SelectionContainer {
-        Text(text, Modifier.horizontalScroll(rememberScrollState()), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 17.sp,
-            color = MaterialTheme.colorScheme.onSurface)
+    Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp)) {
+        SelectionContainer {
+            Text(text, Modifier.horizontalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurface)
+        }
     }
 }
 
 private fun arguments(step: TurnStep.ToolCall): JsonObject? = runCatching { Json.parseToJsonElement(step.argsJson).jsonObject }.getOrNull()
 
-/** Human label: what the tool did, never raw JSON. */
-fun toolLabel(step: TurnStep.ToolCall): String {
-    val args = arguments(step)
-    fun arg(key: String) = (args?.get(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
-    return when (step.name) {
-        "create_pdf" -> "Create PDF \u00B7 ${arg("title").ifBlank { arg("file_path") }}"
-        "write_file" -> "Create ${arg("file_path")}"
-        "write" -> "Write ${arg("file_path")}"
-        "read" -> "Read ${arg("file_path")}"
-        "present" -> "Present files"
-        "run_python" -> "Run Python"
-        "pip_install" -> "Install ${(args?.get("packages") as? JsonArray)?.joinToString { (it as? JsonPrimitive)?.contentOrNull.orEmpty() }.orEmpty()}"
-        "skill" -> "Load skill ${arg("name")}"
-        "web_fetch" -> "Read ${arg("url").substringAfter("://").substringBefore('/')}"
-        else -> if ("__" in step.name) "Run ${step.name.substringBefore("__").replace('_', '-')} \u00B7 ${step.name.substringAfter("__")}" else step.name
-    }
-}
+/** Human title: what the tool did, never raw JSON (app.dsandroid.core.agent.ToolStepTitle). */
+fun toolLabel(step: TurnStep.ToolCall): String = ToolStepTitle.title(step)
 
 private fun statusText(status: ToolStatus) = when (status) {
     ToolStatus.RUNNING -> "running"
@@ -257,7 +280,7 @@ fun ArtifactCard(artifact: Artifact, file: File?, onOpen: () -> Unit, onSave: ()
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
                 TextButton(onClick = onOpen, modifier = Modifier.semantics { contentDescription = "Open ${artifact.fileName}" }) { Text("Open") }
                 if (onEdit != null) TextButton(onClick = onEdit, modifier = Modifier.semantics { contentDescription = "Edit ${artifact.fileName}" }) { Text("Edit") }
-                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Download") }
+                TextButton(onClick = onSave, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} to Downloads" }) { Text("Save to Downloads") }
                 if (onSaveAs != null) TextButton(onClick = onSaveAs, modifier = Modifier.semantics { contentDescription = "Save ${artifact.fileName} as" }) { Text("Save as") }
                 TextButton(onClick = onShare, modifier = Modifier.semantics { contentDescription = "Share ${artifact.fileName}" }) { Text("Share") }
             }
