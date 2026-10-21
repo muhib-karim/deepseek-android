@@ -213,24 +213,37 @@
     return s;
   }
 
-  /** Anchor: the "Built-in plugins" heading of Settings > Plugins (English or Chinese UI). */
+  /**
+   * Anchor: the "Built-in plugins" heading of Settings > Plugins (English or Chinese UI). Headings first; the settings
+   * tab with the same label (a button or role=tab) is never an anchor.
+   */
+  var LABEL = /^(Built-in plugins|内置插件)(\s*[(（]?\d+[)）]?)?$/;
+  function findHeading() {
+    var groups = ["h1, h2, h3, h4, h5, h6, [role=heading]", "div, span, p, summary"];
+    for (var g = 0; g < groups.length; g++) {
+      var candidates = document.querySelectorAll(groups[g]);
+      for (var i = 0; i < candidates.length; i++) {
+        var c = candidates[i];
+        if (c.children.length > 1 || c.closest("button, [role=tab], [role=tablist], nav")) continue;
+        if (LABEL.test((c.textContent || "").trim())) return c;
+      }
+    }
+    return null;
+  }
+
   function mountPlugins() {
     if (document.getElementById("dsa-user-plugins")) return;
-    var candidates = document.querySelectorAll("h1, h2, h3, h4, h5, h6, div, span, p, summary, button");
-    for (var i = 0; i < candidates.length; i++) {
-      var c = candidates[i];
-      if (c.children.length > 1) continue;
-      var t = (c.textContent || "").trim();
-      if (!/^(Built-in plugins|内置插件)(\s*[(（]?\d+[)）]?)?$/.test(t)) continue;
-      var anchor = c;
-      while (anchor.parentElement && anchor.parentElement.children.length === 1) anchor = anchor.parentElement;
-      section = buildSection();
-      anchor.parentElement.insertBefore(section, anchor);
-      var listed = call("plugins");
-      render(listed ? JSON.parse(listed) : [], "", bridge ? "" : "The app bridge is unavailable.");
+    var heading = findHeading();
+    if (!heading) {
+      section = null;
       return;
     }
-    section = null;
+    var anchor = heading;
+    while (anchor.parentElement && anchor.parentElement.children.length === 1) anchor = anchor.parentElement;
+    section = buildSection();
+    anchor.parentElement.insertBefore(section, anchor);
+    var listed = call("plugins");
+    render(listed ? JSON.parse(listed) : [], "", bridge ? "" : "The app bridge is unavailable.");
   }
 
   // ---------------------------------------------------------------- downloads
