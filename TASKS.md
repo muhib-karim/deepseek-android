@@ -20,5 +20,8 @@ Status: TODO / WIP / DONE (commit) / CI (run id green).
 Also: GitHub fork muhib-karim/dsh-android (DONE); pinned upstream commit d799c76e1cad9113bd2efe76688f865610d76c18 (app 1.0.18).
 Harness update check in overflow menu (TODO). Plugin install/manage in Settings > Plugins (TODO).
 
+## Parked
+2026-10-21 13:20Z: owner pivot to the DSHAPP fork; this branch is parked as draft PR #33 (no merge, no tag).
+
 ## CI record
 Draft PR #33 opened on 0f09bd6.

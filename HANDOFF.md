@@ -1,5 +1,9 @@
 # HANDOFF — v1.3.0 "Official DeepSeek engine"
 
+PARKED 2026-10-21 13:20Z (owner pivot to a fork of pht88888888/DSHAPP). Draft PR #33 stays open as a draft; nothing to
+merge or tag. Last state: payload pipeline fixed through npm/peer-deps (fa81e37), full-flavor compile and engine
+emulator journey not yet seen green in CI. To resume: re-run CI on PR #33 and continue from TASKS.md.
+
 Branch feature/v1.3.0 (from origin/main a1683b4). Progress: TASKS.md. Never run Gradle, the emulator or the payload build
 locally; CI is the compiler. Push only with the gated push script; never force-push; never tag or merge.
 
