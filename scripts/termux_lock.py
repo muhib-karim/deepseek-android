@@ -15,8 +15,10 @@ import urllib.request
 
 REPO = "https://packages.termux.dev/apt/termux-main"
 ARCHES = ("aarch64", "x86_64")
-# What the harness runs: node (LTS), bash, ripgrep, GNU coreutils, git (plugin installs from git URLs), TLS roots.
-ROOTS = ("nodejs-lts", "bash", "ripgrep", "coreutils", "git", "ca-certificates", "openssl")
+# What the harness runs: node (LTS), bash, ripgrep, GNU coreutils/grep/sed/findutils/gawk/tar/gzip (toybox lacks options
+# agents rely on), git (plugin installs from git URLs), TLS roots.
+ROOTS = ("nodejs-lts", "bash", "ripgrep", "coreutils", "grep", "sed", "findutils", "gawk", "tar", "gzip", "git",
+         "ca-certificates", "openssl")
 # Termux's own helper scripts and git's pager are not needed inside the app (GIT_PAGER=cat).
 SKIP = {"termux-tools", "termux-am", "termux-exec", "less", "dash", "termux-keyring", "termux-licenses"}
 LOCK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine", "termux-packages.lock")
