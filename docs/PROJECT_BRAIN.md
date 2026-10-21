@@ -12,6 +12,8 @@ timeline with favicons, Like/Dislike via message_feedback, magnifier, neutral 20
 a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.1.0 / 11. Draft PR only; never merge or tag.
 
 ## Status
+- v1.2.0 "Agent-first" on feature/v1.2.0, draft PR #32 (versionCode 12): agent on by default, API key on the welcome
+  screen, tool step cards, deepseek-chat for tool turns, step limit 1-20, examples card, docs. Fixing CI only (owner).
 - v1.1.0 in progress on feature/v1.1.0, draft PR #31. Live contracts verified 2026-10-20 (QA account, probes outside the
   repo): PoW = SHA3-256 sponge with Keccak rounds 1..23 over "<salt>_<expire_at>_<n>"; upload_file needs X-DS-PoW-Response
   for its own path (40300 MISSING_HEADER, 40301 INVALID_POW_RESPONSE), then GET fetch_files?file_ids= until SUCCESS;
@@ -41,7 +43,7 @@ a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
-Confirm CI, emulator smoke and Release E2E green on 7ab2fd1 (PR #31); then write DONE_110.md in the task folder (outside the
+Get CI, Emulator and Release E2E green on PR #32; add docs/screenshots/v120-*.png from the emulator artifact; stop.
 repo) and stop. The supervising lane merges, tags and runs the signed-in live check; RELEASE_NOTES_110 rows stay PENDING
 for it. Do not edit scripts/capture_reference.sh, e2e/reference/driver.py, scripts/check_reference.py or
 .github/workflows/reference.yml (reviewer's).
@@ -93,3 +95,4 @@ Design: web account "default" keeps legacy slots (session key "session", deepsee
 - 2026-10-20 16:10Z Claude Code (Opus 5.5): sandbox fix for UPDATE 15 (a1f8ee2), expiry journey (c6e8c09), removed tracked .pyc (e7176f6); next: CI results.
 - 2026-10-20 22:55Z Claude Code (Opus 5.5): v1.1.0 core + app + UI parity + live-shape E2E fixture committed and pushed (PR #31); next: CI results, UI tests, docs, version.
 - 2026-10-20 23:30Z Claude Code (Opus 5.5): v1.1.0 complete on PR #31 (live fixes A1-A8, parity B2-B7/B9/B12/B13/B18, live-shape E2E fixture, tests, docs, 1.1.0/11); next: final CI confirmation, DONE_110.md, supervisor merges/tags.
+- 2026-10-21 11:30Z Claude Code (Opus 5.5): v1.2.0 items 1-11 committed on PR #32; next: CI fixes only, then DS120_DONE.
