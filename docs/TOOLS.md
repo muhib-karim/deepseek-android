@@ -1,19 +1,23 @@
-# Tools and plugins (v1.0.0)
+# Tools and plugins (v1.0.0, agent-first since v1.2.0)
 
 Agent mode lets DeepSeek use tools on the phone: it makes real files (code, Markdown, CSV, Word, PDF, Excel, PowerPoint,
-SVG and PNG), runs code in a sandbox, searches and reads the web, and calls remote MCP tools you add. Every tool has a
-switch in **Plugins & tools** (drawer, or Settings > Agent). The API-key client's Settings > Tools shows the same
-switches. One list, `app/src/main/kotlin/app/dsandroid/tools/ToolCatalog.kt`, feeds both screens and both agent runs.
+SVG and PNG), runs code in a sandbox, searches and reads the web, and calls remote MCP tools you add. **Agent mode is on by
+default on both routes since v1.2.0**; it is off only after you switch it off yourself (the composer's Agent pill, or the
+Chat chip in API mode), and that choice is remembered. Each reply may take up to 8 steps by default (Settings > Agent >
+Maximum steps per reply, 1 to 20). Every tool has a switch in **Plugins & tools** (drawer, or Settings > Agent). API
+mode's Settings > Tools shows the same switches. One list, `app/src/main/kotlin/app/dsandroid/tools/ToolCatalog.kt`, feeds both screens and both agent runs.
 
 ## Two routes
 
 | Route | Used by | How tools are called |
 |---|---|---|
 | **Account** | Signed in with a DeepSeek account (the default) | DeepSeek's web chat has no function-calling API, so the app sends the tool list and rules as text with each agent request and reads one fenced `tool` block per reply (`core/.../agent/ToolCallProtocol.kt`, `WebToolProtocolClient.kt`). Results go back as the next message in the same chat. |
-| **API** | The separate API-key client (Settings > Advanced) | DeepSeek's API function calling (`tools` in the request, `tool_calls` in the reply). |
+| **API** | API mode: your DeepSeek API key (welcome screen, Settings > Accounts > Add API key) | DeepSeek's API function calling (`tools` in the request, `tool_calls` in the reply). Tool turns use `deepseek-chat`; `deepseek-reasoner` only with Agent off. |
 
 Both routes run the same `AgentLoop` with the same guard (`core/.../guard/GuardPolicy.kt`), approval dialogs and
-workspace rules. Tools that need the API-key client's own screens are offered only there (last table).
+workspace rules. Tools that need API mode's own screens are offered only there (last table). Each call shows as a card with
+the tool's title and status; tap it for the arguments and the result. Files arrive as cards with Open, Save to Downloads
+and Share.
 
 ## Rules for every tool
 
@@ -42,7 +46,7 @@ workspace rules. Tools that need the API-key client's own screens are offered on
 | ZIP archives | `zip_files` | Packs files from the chat's folder | No |
 | Code sandbox | `code_interpreter` | JavaScript, or Python (Pyodide 0.26.4) in a disposable WebView worker: no network, app files or Android access; 15 s and 16,000 characters of output | Before the one-time Python runtime download (each file checked against a pinned SHA-256) |
 | Skills | `skill` | Loads the instructions of an enabled skill | No |
-| Web search | `web_search` | Searches (DuckDuckGo, or the SearXNG server set in the API-key client) and numbers the sources | Every search, showing the query and the service |
+| Web search | `web_search` | Searches (DuckDuckGo, or the SearXNG server set in API mode) and numbers the sources | Every search, showing the query and the service |
 | Read web pages | `web_fetch` (alias `visit_web`) | Reads a public HTTPS page | Pages that did not come from the current search, long addresses and query strings |
 | Python on this phone | `run_python` | Python 3.13 with numpy and matplotlib in the app's Python worker | Every run (trusted execution) |
 | Python packages | `pip_install` | Pure-Python wheels from PyPI | Every download (trusted execution) |
@@ -64,9 +68,9 @@ Downloads/DeepSeek on Android 10 and later, the system file picker before), Save
 file's own name and type) and Share (the system share sheet, with a read grant for that one file). Saving and sharing
 are always your action, never the model's.
 
-## API-key client only
+## API mode only
 
-These tools need the API-key client's screens or its function calling. The account route lists them as "In the API-key
+These tools need API mode's screens or its function calling. The account route lists them as "In the API-key
 client" and never offers them.
 
 | Switch | Tool names |
@@ -79,7 +83,7 @@ client" and never offers them.
 | Draft a text message, Draft an email, Add a calendar event, Open a map | `draft_sms`, `draft_email`, `add_calendar_event`, `open_map` |
 | Memory, Scheduled prompts, Parallel research | `remember`, `schedule_prompt`, `parallel_agents` |
 
-Connectors (read-only search and read tools for services you configure) are also API-key client only; see
+Connectors (read-only search and read tools for services you configure) are also API mode only; see
 [CONNECTORS.md](CONNECTORS.md).
 
 ## Tests
