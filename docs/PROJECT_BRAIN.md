@@ -12,6 +12,10 @@ timeline with favicons, Like/Dislike via message_feedback, magnifier, neutral 20
 a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.1.0 / 11. Draft PR only; never merge or tag.
 
 ## Status
+- v1.3.0 "Official DeepSeek engine" on feature/v1.3.0, draft PR #33 (versionCode 13): full flavor (default,
+  app.dsandroid.full, targetSdk 28) runs @deepseek-ai/dsh 0.2.1-rc.2 on a bundled Termux node (dsh-android port,
+  MIT, d799c76); play flavor = v1.2.0. Payload built in CI (payload.yml); engine code in app/src/full; tests in
+  app/src/testFull + androidTestFull; emulator job "engine". Progress: TASKS.md; design: HANDOFF.md, docs/DSH_ENGINE.md.
 - v1.2.0 "Agent-first" on feature/v1.2.0, draft PR #32 (versionCode 12): agent on by default, API key on the welcome
   screen, tool step cards, deepseek-chat for tool turns, step limit 1-20, examples card, docs. Fixing CI only (owner).
 - v1.1.0 in progress on feature/v1.1.0, draft PR #31. Live contracts verified 2026-10-20 (QA account, probes outside the
@@ -43,6 +47,8 @@ a reply as an image card), mocked E2E fixture emitting the live shapes, docs, 1.
 - CI green (unit tests, lint, debug + signed release) and 62/62 emulator androidTests; docs/AGENT_MODE.md rows 1-14 PASS, row 15 (live account agent turn) NOT RUN.
 
 ## Next step
+v1.3.0: get CI, Emulator (engine job) and Release E2E green on PR #33; commit docs/screenshots/v130/*.png from the
+v130-screenshots artifact; update PR body; print DS130_DONE. Older notes follow.
 Get CI, Emulator and Release E2E green on PR #32; add docs/screenshots/v120-*.png from the emulator artifact; stop.
 The supervising lane merges and tags. Do not edit scripts/capture_reference.sh, e2e/reference/driver.py, scripts/check_reference.py or
 .github/workflows/reference.yml (reviewer's).
@@ -95,3 +101,4 @@ Design: web account "default" keeps legacy slots (session key "session", deepsee
 - 2026-10-20 22:55Z Claude Code (Opus 5.5): v1.1.0 core + app + UI parity + live-shape E2E fixture committed and pushed (PR #31); next: CI results, UI tests, docs, version.
 - 2026-10-20 23:30Z Claude Code (Opus 5.5): v1.1.0 complete on PR #31 (live fixes A1-A8, parity B2-B7/B9/B12/B13/B18, live-shape E2E fixture, tests, docs, 1.1.0/11); next: final CI confirmation, DONE_110.md, supervisor merges/tags.
 - 2026-10-21 11:30Z Claude Code (Opus 5.5): v1.2.0 items 1-11 committed on PR #32; next: CI fixes only, then DS120_DONE.
+- 2026-10-21 13:10Z Claude Code (Opus 5.5): v1.3.0 engine, flavors, payload pipeline, UI, tests and docs pushed (PR #33); next: CI fixes, screenshots.
