@@ -19,7 +19,7 @@ import java.util.zip.ZipFile;
  * the APK), or nativeLibraryDir when the installer extracted native libraries. The ".so" name is only how ABI splits
  * keep one runtime per APK; the file is the gzip tar built by scripts/build-dsh-payload.sh.
  */
-final class PayloadSource {
+public final class PayloadSource {
     static final String NAME = "libdshpayload.so";
 
     final String description;
@@ -39,7 +39,7 @@ final class PayloadSource {
     }
 
     /** The payload for this device's ABI, or null when this build carries none (a build without the CI payload). */
-    static PayloadSource find(Context context) throws IOException {
+    public static PayloadSource find(Context context) throws IOException {
         ApplicationInfo info = context.getApplicationInfo();
         File native_ = info.nativeLibraryDir == null ? null : new File(info.nativeLibraryDir, NAME);
         if (native_ != null && native_.isFile() && native_.length() > 0) {
