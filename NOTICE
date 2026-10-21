@@ -70,3 +70,14 @@ Agent tools:
   Tool names and argument shapes for write, read, skill, present and web_fetch follow the
   deepseek-harness tool catalog (MIT, Copyright DeepSeek). The implementation is original.
   The built-in skills (pdf-report, data-analysis, web-summary) are original.
+
+Official DeepSeek engine (full build, v1.3.0):
+  dsh-android, https://github.com/yhm080315-sudo/dsh-android (commit d799c76)
+  MIT License, Copyright (c) 2026 DSH for Android contributors
+  Its engine code (NodeServer, TarExtractor, RuntimeProbe, FileBridge, WebView host) and Android payload patches are
+  ported into this project with the licence text kept in each file; see THIRD-PARTY.md.
+
+  DeepSeek Harness (@deepseek-ai/dsh), MIT License, Copyright DeepSeek; runs unmodified apart from the Android payload
+  patches in engine/patches. dsh-web-mobile, MIT License, Copyright mexiaosh. pnpm, MIT License.
+  Node.js, bash, GNU coreutils/grep/sed/findutils/gawk/tar/gzip, ripgrep, git and libraries: Termux packages under their
+  own licences (MIT, GPL-3.0, GPL-2.0, Unlicense and others); full list, versions and source links in THIRD-PARTY.md.
