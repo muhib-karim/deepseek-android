@@ -1,0 +1,132 @@
+[
+ {
+  "id": "P2",
+  "label": "flock is a no-op on Android (single-process runtime)",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/node-addon-system/lib/flock.js",
+  "anchor": "export async function tryLockExclusive(fd) {\n    const errno = await new Promise((resolve) => {",
+  "replacement": "export async function tryLockExclusive(fd) {\n    /*\n     * Android: no native binding exists for bionic, and the module's own design\n     * note records that a single-process runtime already excludes writers\n     * in-process -- the browser worker stubs this entry for the same reason.\n     */\n    if (process.platform === 'android') {\n        return;\n    }\n    const errno = await new Promise((resolve) => {",
+  "marker": "single-process runtime already excludes writers"
+ },
+ {
+  "id": "P3",
+  "label": "session publish: lock + rename instead of link() (helper)",
+  "required": true,
+  "origin": "deepseek-android (rewrite of dsh-android P3a/P3b/P3c, which call an undefined publishExclusive)",
+  "file": "@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
+  "anchor": "import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from \"node:fs/promises\";",
+  "replacement": "import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from \"node:fs/promises\";\nimport { rename as dshAndroidRename } from \"node:fs/promises\";\n/*\n * Android (deepseek-android P3): the app domain is denied link(2). Publish with a lock file for exclusivity and\n * rename(2) for atomicity. Never a copyFile fallback: it truncates and refills the target and corrupts sessions.\n */\nasync function dshAndroidPublishExclusive(source, target) {\n\ttry {\n\t\tawait link(source, target);\n\t\treturn;\n\t} catch (error) {\n\t\tconst code = error?.code;\n\t\tif (code !== \"EACCES\" && code !== \"EPERM\" && code !== \"ENOTSUP\" && code !== \"EOPNOTSUPP\" && code !== \"EXDEV\") throw error;\n\t}\n\tconst lockPath = `${target}.dsh-publish.lock`;\n\tfor (let attempt = 0; ; attempt += 1) {\n\t\tlet lock;\n\t\ttry {\n\t\t\tlock = await open(lockPath, \"wx\", 384);\n\t\t} catch (error) {\n\t\t\tif (error?.code !== \"EEXIST\") throw error;\n\t\t\ttry {\n\t\t\t\tconst age = Date.now() - (await stat(lockPath)).mtimeMs;\n\t\t\t\tif (age > 30000) {\n\t\t\t\t\tconsole.error(`[session] breaking a stale publish-lock (${Math.round(age / 1000)}s old): ${lockPath}`);\n\t\t\t\t\tawait rm(lockPath, { force: true });\n\t\t\t\t\tcontinue;\n\t\t\t\t}\n\t\t\t} catch {\n\t\t\t\tcontinue;\n\t\t\t}\n\t\t\tif (attempt >= 200) throw Object.assign(new Error(`EBUSY: publish lock is held, '${lockPath}'`), { code: \"EBUSY\", path: lockPath });\n\t\t\tawait new Promise((resolve) => setTimeout(resolve, 25));\n\t\t\tcontinue;\n\t\t}\n\t\ttry {\n\t\t\tlet exists = true;\n\t\t\ttry {\n\t\t\t\tawait lstat(target);\n\t\t\t} catch (error) {\n\t\t\t\tif (error?.code !== \"ENOENT\") throw error;\n\t\t\t\texists = false;\n\t\t\t}\n\t\t\tif (exists) throw Object.assign(new Error(`EEXIST: file already exists, link '${source}' -> '${target}'`), { code: \"EEXIST\", errno: -17, syscall: \"link\", path: source, dest: target });\n\t\t\tawait dshAndroidRename(source, target);\n\t\t\treturn;\n\t\t} finally {\n\t\t\tawait lock.close().catch(() => {});\n\t\t\tawait rm(lockPath, { force: true }).catch(() => {});\n\t\t}\n\t}\n}",
+  "marker": "async function dshAndroidPublishExclusive("
+ },
+ {
+  "id": "P3a",
+  "label": "session materialize publishes through the helper",
+  "required": true,
+  "origin": "deepseek-android (rewrite of dsh-android P3a/P3b/P3c, which call an undefined publishExclusive)",
+  "file": "@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
+  "anchor": "\t\t\tawait link(tmp, finalPath);",
+  "replacement": "\t\t\tawait dshAndroidPublishExclusive(tmp, finalPath);",
+  "marker": "await dshAndroidPublishExclusive(tmp, finalPath);"
+ },
+ {
+  "id": "P3b",
+  "label": "current-generation publish goes through the helper",
+  "required": true,
+  "origin": "deepseek-android (rewrite of dsh-android P3a/P3b/P3c, which call an undefined publishExclusive)",
+  "file": "@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js",
+  "anchor": "\t\tawait internals.fs.link(staged, currentPath);",
+  "replacement": "\t\tawait dshAndroidPublishExclusive(staged, currentPath);",
+  "marker": "await dshAndroidPublishExclusive(staged, currentPath);"
+ },
+ {
+  "id": "P4",
+  "label": "directory fsync tolerates EACCES/EPERM above the app data dir",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/dsh-attachment-local/lib/index.js",
+  "anchor": "async function syncDirectory(path) {\n\t/* v8 ignore next -- Windows cannot open directory handles; NTFS metadata journaling owns entry durability there. */\n\tif (process.platform === \"win32\") return;\n\t/* v8 ignore start -- Windows cannot exercise directory fsync; POSIX behavior tests enforce this peer. */\n\tconst handle = await open(path, constants.O_RDONLY);\n\ttry {\n\t\tawait handle.sync();\n\t} finally {\n\t\tawait handle.close();\n\t}\n\t/* v8 ignore stop */\n}",
+  "replacement": "async function syncDirectory(path) {\n\t/* v8 ignore next -- Windows cannot open directory handles; NTFS metadata journaling owns entry durability there. */\n\tif (process.platform === \"win32\") return;\n\t/* v8 ignore start -- Windows cannot exercise directory fsync; POSIX behavior tests enforce this peer. */\n\ttry {\n\t\tconst handle = await open(path, constants.O_RDONLY);\n\t\ttry {\n\t\t\tawait handle.sync();\n\t\t} finally {\n\t\t\tawait handle.close();\n\t\t}\n\t} catch (error) {\n\t\t/*\n\t\t * Android: the durability walk reaches ancestors above the app's own data\n\t\t * directory, which the sandbox does not let the app open. Entry durability\n\t\t * there is best effort; the file content is synced by its writer.\n\t\t */\n\t\tconst code = error?.code;\n\t\tif (code !== \"EACCES\" && code !== \"EPERM\" && code !== \"ENOTSUP\" && code !== \"EOPNOTSUPP\" && code !== \"ENOENT\" && code !== \"EBADF\") throw error;\n\t}\n\t/* v8 ignore stop */\n}",
+  "marker": "the durability walk reaches ancestors above the app"
+ },
+ {
+  "id": "P9h",
+  "label": "define resolveSpecifierFromBase (missing upstream)",
+  "required": true,
+  "origin": "deepseek-android (dsh-android P9 calls it but never defines it)",
+  "file": "@deepseek-ai/cordis-plugin-loader/lib/index.js",
+  "anchor": "import { createRequire } from \"node:module\";",
+  "replacement": "import { createRequire } from \"node:module\";\nimport { pathToFileURL as dshAndroidPathToFileURL } from \"node:url\";\n/* Android (deepseek-android P9h): resolve a bare package name the way Node would from the profile directory. */\nfunction resolveSpecifierFromBase(name, baseUrl) {\n\tif (baseUrl === void 0 || baseUrl === null || /^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|\\.{0,2}\\/)/.test(name)) return name;\n\ttry {\n\t\tconst base = String(baseUrl);\n\t\tconst parent = base.endsWith(\"/\") ? `${base}__dsh_resolve__.js` : `${base}/__dsh_resolve__.js`;\n\t\treturn dshAndroidPathToFileURL(createRequire(parent).resolve(name)).href;\n\t} catch {\n\t\treturn name;\n\t}\n}",
+  "marker": "function resolveSpecifierFromBase(name, baseUrl)"
+ },
+ {
+  "id": "P9",
+  "label": "bare plugin names resolve from the profile baseUrl",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/cordis-plugin-loader/lib/index.js",
+  "anchor": "\t\t\telse return await import(__rewriteRelativeImportExtension(\n\t\t\t\t/* @vite-ignore */\n\t\t\t\tname\n\t\t\t));",
+  "replacement": "\t\t\telse {\n\t\t\t\t/*\n\t\t\t\t * Android: without Node's internal loader, `import(name)` resolves a\n\t\t\t\t * bare specifier against THIS file -- the harness installation -- so a\n\t\t\t\t * plugin installed into the profile is not found.\n\t\t\t\t */\n\t\t\t\tconst resolved = resolveSpecifierFromBase(name, this.ctx.baseUrl);\n\t\t\t\treturn await import(__rewriteRelativeImportExtension(\n\t\t\t\t\t/* @vite-ignore */\n\t\t\t\t\tresolved\n\t\t\t\t));\n\t\t\t}",
+  "marker": "const resolved = resolveSpecifierFromBase(name, this.ctx.baseUrl);"
+ },
+ {
+  "id": "P11",
+  "label": "fs Write creates new files with lock + rename (link() refused)",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/dsh-fs-local/lib/index.js",
+  "anchor": "\t\tif (createIfAbsent !== void 0) try {\n\t\t\tawait linkFile(tempPath, absolutePath);\n\t\t} catch (error) {\n\t\t\tawait throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget);\n\t\t}",
+  "replacement": "\t\t/*\n\t\t * Android: an app domain is denied link(2), so the no-replace publication\n\t\t * above can never succeed there. A lock file keeps the exclusivity and the\n\t\t * rename keeps the atomicity -- the same serialization\n\t\t * dsh-session-persistence-jsonl uses for its logs. copyFile would keep\n\t\t * neither: it truncates the target and fills it over time.\n\t\t */\n\t\tif (createIfAbsent !== void 0) try {\n\t\t\tawait linkFile(tempPath, absolutePath);\n\t\t} catch (error) {\n\t\t\tconst code = error?.code;\n\t\t\tif (code !== \"EACCES\" && code !== \"EPERM\" && code !== \"ENOTSUP\" && code !== \"EOPNOTSUPP\" && code !== \"EXDEV\") {\n\t\t\t\tawait throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget);\n\t\t\t}\n\t\t\tconst lockPath = `${absolutePath}.dsh-create.lock`;\n\t\t\tconst STALE_LOCK_MS = 30000;\n\t\t\tlet lock;\n\t\t\tfor (let attempt = 0; ; attempt += 1) {\n\t\t\t\ttry {\n\t\t\t\t\tlock = await open(lockPath, \"wx\", 384);\n\t\t\t\t\tbreak;\n\t\t\t\t} catch (lockError) {\n\t\t\t\t\tif (lockError?.code !== \"EEXIST\") {\n\t\t\t\t\t\tthrow lockError;\n\t\t\t\t\t}\n\t\t\t\t\t/*\n\t\t\t\t\t * A lock left behind by a killed process would otherwise make this\n\t\t\t\t\t * filename permanently uncreatable -- and the report would blame the\n\t\t\t\t\t * target, which does not exist. Break a lock that is old enough that\n\t\t\t\t\t * no live writer can still hold it (the retry window is 500 ms).\n\t\t\t\t\t */\n\t\t\t\t\ttry {\n\t\t\t\t\t\tconst age = Date.now() - (await stat(lockPath)).mtimeMs;\n\t\t\t\t\t\tif (age > STALE_LOCK_MS) {\n\t\t\t\t\t\t\tconsole.error(`[dsh-fs] breaking a stale create-lock (${Math.round(age / 1000)}s old): ${lockPath}`);\n\t\t\t\t\t\t\tawait rm(lockPath, { force: true });\n\t\t\t\t\t\t\tcontinue;\n\t\t\t\t\t\t}\n\t\t\t\t\t} catch {\n\t\t\t\t\t\tcontinue;\n\t\t\t\t\t}\n\t\t\t\t\tif (attempt >= 20) {\n\t\t\t\t\t\t/*\n\t\t\t\t\t\t * The lock is held. Only bypass it when it is old enough that no live\n\t\t\t\t\t\t * writer can still be inside the (tiny) inspect-and-rename window --\n\t\t\t\t\t\t * otherwise two writers would both rename and the later one would\n\t\t\t\t\t\t * silently overwrite the earlier, which is precisely what link(2)\n\t\t\t\t\t\t * exclusivity prevented.\n\t\t\t\t\t\t */\n\t\t\t\t\t\tlet heldMs = 0;\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\theldMs = Date.now() - (await stat(lockPath)).mtimeMs;\n\t\t\t\t\t\t} catch {\n\t\t\t\t\t\t\theldMs = 0;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tlet present;\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tpresent = await inspectPublicationTarget(absolutePath);\n\t\t\t\t\t\t} catch (inspectError) {\n\t\t\t\t\t\t\tif (!isENOENT(inspectError) && !isENOTDIR(inspectError)) throw inspectError;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (present !== void 0) {\n\t\t\t\t\t\t\tawait throwGuardedCreateFailure(lockError, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget);\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (heldMs < 2000) {\n\t\t\t\t\t\t\t/* Fresh lock, absent target: someone is mid-publish. Say so clearly\n\t\t\t\t\t\t\t * instead of guessing, and don't touch their lock. */\n\t\t\t\t\t\t\tconst busy = new Error(`EBUSY: another writer holds ${lockPath} (${Math.round(heldMs)} ms)`);\n\t\t\t\t\t\t\tbusy.code = \"EBUSY\";\n\t\t\t\t\t\t\tthrow busy;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tconsole.error(`[dsh-fs] create-lock abandoned for ${Math.round(heldMs / 1000)}s; taking it over: ${absolutePath}`);\n\t\t\t\t\t\tawait rm(lockPath, { force: true });\n\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\tawait rename(tempPath, absolutePath);\n\t\t\t\t\t\t} finally {\n\t\t\t\t\t\t\t/* Rename consumed the staging file; the lock is gone too, so the\n\t\t\t\t\t\t\t * next writer starts clean. */\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tawait new Promise((resolve) => setTimeout(resolve, 25));\n\t\t\t\t}\n\t\t\t}\n\t\t\ttry {\n\t\t\t\tlet existing;\n\t\t\t\ttry {\n\t\t\t\t\texisting = await inspectPublicationTarget(absolutePath);\n\t\t\t\t} catch (inspectError) {\n\t\t\t\t\tif (!isENOENT(inspectError) && !isENOTDIR(inspectError)) throw inspectError;\n\t\t\t\t}\n\t\t\t\tif (existing !== void 0) {\n\t\t\t\t\tconst conflict = new Error(`EEXIST: ${absolutePath} already exists`);\n\t\t\t\t\tconflict.code = \"EEXIST\";\n\t\t\t\t\tawait throwGuardedCreateFailure(conflict, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget);\n\t\t\t\t}\n\t\t\t\tawait rename(tempPath, absolutePath);\n\t\t\t} finally {\n\t\t\t\tawait lock.close().catch(() => {});\n\t\t\t\tawait rm(lockPath, { force: true }).catch(() => {});\n\t\t\t}\n\t\t}",
+  "marker": "dsh-create.lock"
+ },
+ {
+  "id": "P13",
+  "label": "ptc worker keeps LD_LIBRARY_PATH, OpenSSL and TMPDIR",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/dsh-ptc-runtime-node/lib/index.js",
+  "anchor": "const STARTUP_ENVIRONMENT_NAMES = new Set([\n\t\"PATH\",\n\t\"PATHEXT\",\n\t\"SYSTEMROOT\",\n\t\"WINDIR\",\n\t\"TEMP\",\n\t\"TMP\"\n]);",
+  "replacement": "/*\n * Android: this node is a bionic build, so it cannot start without its library\n * path, and its OpenSSL paths are compiled in pointing at the Termux prefix\n * (see PITFALLS #11). Clearing these in a worker is not a clean environment, it\n * is a broken one -- and TMPDIR would fall back to an unwritable /tmp.\n */\nconst STARTUP_ENVIRONMENT_NAMES = new Set([\n\t\"PATH\",\n\t\"PATHEXT\",\n\t\"SYSTEMROOT\",\n\t\"WINDIR\",\n\t\"TEMP\",\n\t\"TMP\",\n\t\"LD_LIBRARY_PATH\",\n\t\"OPENSSL_CONF\",\n\t\"SSL_CERT_FILE\",\n\t\"SSL_CERT_DIR\",\n\t\"TMPDIR\"\n]);",
+  "marker": "this node is a bionic build, so it cannot start"
+ },
+ {
+  "id": "P17",
+  "label": "SIGINT from a tool interrupt no longer stops the harness",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/dsh/lib/profile-boot-*.js",
+  "anchor": "\t\tprocess.on(\"SIGINT\", () => {\n\t\t\tinterrupt(130);\n\t\t});",
+  "replacement": "\t\tprocess.on(\"SIGINT\", () => {\n\t\t\t/* dsh-sigint-ignored */\n\t\t\tconsole.error(\"[dsh] SIGINT ignored (the shell tool's interrupt reached the harness)\");\n\t\t});",
+  "marker": "dsh-sigint-ignored"
+ },
+ {
+  "id": "P17b",
+  "label": "SIGTERM is logged",
+  "required": true,
+  "origin": "dsh-android d799c76 patches/apply-payload-patches.sh",
+  "file": "@deepseek-ai/dsh/lib/profile-boot-*.js",
+  "anchor": "\t\tprocess.on(\"SIGTERM\", () => {\n\t\t\tinterrupt(0);\n\t\t});",
+  "replacement": "\t\tprocess.on(\"SIGTERM\", () => {\n\t\t\t/* dsh-sigterm-logged */\n\t\t\tconsole.error(\"[dsh] SIGTERM received -> shutting down (exit 0)\");\n\t\t\tinterrupt(0);\n\t\t});",
+  "marker": "dsh-sigterm-logged"
+ },
+ {
+  "id": "P1",
+  "label": "dsh-app-boot: Node internals via --expose-internals when node-addon-require-builtin has no Android build",
+  "required": true,
+  "origin": "deepseek-android (dsh-android lists P1 as manual)",
+  "file": "@deepseek-ai/dsh-app-boot/lib/index.js",
+  "anchor": "\tconst addon = createRequire(import.meta.url)(\"node-addon-require-builtin\");",
+  "replacement": "\t/* Android (deepseek-android P1): no prebuilt addon exists for bionic; the app starts node with --expose-internals. */\n\tlet addon;\n\ttry {\n\t\taddon = createRequire(import.meta.url)(\"node-addon-require-builtin\");\n\t} catch (error) {\n\t\tif (!process.execArgv.includes(\"--expose-internals\")) throw error;\n\t\tconst requireInternal = createRequire(import.meta.url);\n\t\taddon = { requireBuiltin: (id) => requireInternal(id) };\n\t}",
+  "marker": "deepseek-android P1"
+ },
+ {
+  "id": "P5",
+  "label": "attachments: pure-JS image header probe when sharp's native library cannot load",
+  "required": true,
+  "origin": "deepseek-android (dsh-android lists P5 as manual)",
+  "file": "@deepseek-ai/dsh-attachment-local/lib/index.js",
+  "anchor": "const requireSharp = createLazyRequire(\"sharp\", import.meta.url);",
+  "replacement": "/*\n * Android (deepseek-android P5): sharp's native library is a glibc build that cannot load on bionic. When it cannot\n * load, a header-only stand-in reports the format, size and alpha of PNG, JPEG, GIF and WebP images, so an image that\n * needs no re-encoding passes through unchanged (the app strips EXIF before a picked image reaches the harness).\n * Re-encoding (resize, colour conversion) is unavailable then and reports an error instead.\n */\nconst requireSharpNative = createLazyRequire(\"sharp\", import.meta.url);\nfunction dshAndroidImageHeader(data) {\n\tconst b = Buffer.isBuffer(data) ? data : Buffer.from(data.buffer ?? data, data.byteOffset ?? 0, data.byteLength ?? data.length);\n\tconst base = { orientation: void 0, pages: 1, depth: \"uchar\", space: \"srgb\", hasProfile: false };\n\tif (b.length >= 26 && b.readUInt32BE(0) === 0x89504e47 && b.readUInt32BE(4) === 0x0d0a1a0a && b.toString(\"latin1\", 12, 16) === \"IHDR\") {\n\t\tconst colorType = b[25];\n\t\tlet hasAlpha = colorType === 4 || colorType === 6;\n\t\tlet pages = 1;\n\t\tfor (let at = 8; at + 8 <= b.length;) {\n\t\t\tconst length = b.readUInt32BE(at);\n\t\t\tconst type = b.toString(\"latin1\", at + 4, at + 8);\n\t\t\tif (type === \"tRNS\") hasAlpha = true;\n\t\t\tif (type === \"acTL\" && at + 12 <= b.length) pages = Math.max(1, b.readUInt32BE(at + 8));\n\t\t\tif (type === \"IDAT\" || type === \"IEND\") break;\n\t\t\tat += 12 + length;\n\t\t}\n\t\treturn { ...base, format: \"png\", width: b.readUInt32BE(16), height: b.readUInt32BE(20), depth: b[24] === 16 ? \"ushort\" : \"uchar\", hasAlpha, pages };\n\t}\n\tif (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {\n\t\tfor (let at = 2; at + 9 < b.length;) {\n\t\t\tif (b[at] !== 0xff) return void 0;\n\t\t\tconst marker = b[at + 1];\n\t\t\tif (marker === 0xff) { at += 1; continue; }\n\t\t\tif (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { at += 2; continue; }\n\t\t\tconst length = b.readUInt16BE(at + 2);\n\t\t\tif (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {\n\t\t\t\treturn { ...base, format: \"jpeg\", width: b.readUInt16BE(at + 7), height: b.readUInt16BE(at + 5), hasAlpha: false };\n\t\t\t}\n\t\t\tif (marker === 0xda || length < 2) return void 0;\n\t\t\tat += 2 + length;\n\t\t}\n\t\treturn void 0;\n\t}\n\tif (b.length >= 10 && (b.toString(\"latin1\", 0, 6) === \"GIF87a\" || b.toString(\"latin1\", 0, 6) === \"GIF89a\")) {\n\t\treturn { ...base, format: \"gif\", width: b.readUInt16LE(6), height: b.readUInt16LE(8), hasAlpha: true };\n\t}\n\tif (b.length >= 30 && b.toString(\"latin1\", 0, 4) === \"RIFF\" && b.toString(\"latin1\", 8, 12) === \"WEBP\") {\n\t\tconst chunk = b.toString(\"latin1\", 12, 16);\n\t\tif (chunk === \"VP8 \") return { ...base, format: \"webp\", width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff, hasAlpha: false };\n\t\tif (chunk === \"VP8L\") {\n\t\t\tconst width = 1 + (((b[22] & 0x3f) << 8) | b[21]);\n\t\t\tconst height = 1 + (((b[24] & 0x0f) << 10) | (b[23] << 2) | ((b[22] & 0xc0) >> 6));\n\t\t\treturn { ...base, format: \"webp\", width, height, hasAlpha: ((b[24] >> 4) & 1) === 1 };\n\t\t}\n\t\tif (chunk === \"VP8X\") {\n\t\t\tconst flags = b[20];\n\t\t\treturn { ...base, format: \"webp\", width: 1 + b.readUIntLE(24, 3), height: 1 + b.readUIntLE(27, 3), hasAlpha: (flags & 0x10) !== 0, pages: (flags & 0x02) !== 0 ? 2 : 1 };\n\t\t}\n\t}\n\treturn void 0;\n}\nfunction dshAndroidHeaderSharp(data) {\n\tconst header = dshAndroidImageHeader(data);\n\tlet encoding = false;\n\tconst unsupported = () => new Error(\"unsupported or malformed image data (header-only probe)\");\n\tconst pipeline = {\n\t\tmetadata: async () => {\n\t\t\tif (header === void 0) throw unsupported();\n\t\t\treturn { ...header };\n\t\t},\n\t\ttoBuffer: async () => {\n\t\t\tif (header === void 0) throw unsupported();\n\t\t\tif (encoding) throw new Error(\"image re-encoding is unavailable on Android (no sharp native library)\");\n\t\t\treturn Buffer.alloc(0);\n\t\t},\n\t\traw: () => pipeline,\n\t\trotate: () => pipeline,\n\t\ttoColourspace: () => pipeline,\n\t\tresize: () => pipeline,\n\t\tclone: () => pipeline,\n\t\tjpeg: () => { encoding = true; return pipeline; },\n\t\tpng: () => { encoding = true; return pipeline; },\n\t\twebp: () => { encoding = true; return pipeline; },\n\t\tgif: () => { encoding = true; return pipeline; }\n\t};\n\treturn pipeline;\n}\nlet dshAndroidSharpChoice;\nconst requireSharp = () => {\n\tif (dshAndroidSharpChoice === void 0) try {\n\t\tdshAndroidSharpChoice = requireSharpNative();\n\t} catch (error) {\n\t\tconsole.error(`[attachments] sharp is unavailable (${error?.message ?? error}); using the header-only image probe`);\n\t\tdshAndroidSharpChoice = dshAndroidHeaderSharp;\n\t}\n\treturn dshAndroidSharpChoice;\n};",
+  "marker": "dshAndroidHeaderSharp"
+ }
+]

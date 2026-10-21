@@ -1,6 +1,6 @@
 name: Release E2E
 
-# UiAutomator journeys against the release APK on emulators, recorded on video with numbered step screenshots.
+# UiAutomator journeys against the play-flavor release APK (app.dsandroid) on emulators, recorded on video with numbered step screenshots.
 #   build:      pull requests and manual runs build the release configuration (R8, resource shrinking, not debuggable)
 #               signed with a throwaway key made for this run; the tag pipeline passes the exact signed APK instead.
 #   mocked:     the unmodified APK talks to a host fixture through emulator-only routing and a throwaway CA
@@ -59,9 +59,9 @@ jobs:
           keytool -genkeypair -keystore "$DSA_KEYSTORE_PATH" -storetype PKCS12 -storepass "$DSA_KEYSTORE_PASSWORD" \
             -keypass "$DSA_KEY_PASSWORD" -alias e2e -keyalg RSA -keysize 2048 -validity 7 \
             -dname "CN=DeepSeek Android E2E throwaway" > /dev/null
-          gradle --no-daemon --no-configuration-cache :app:assembleRelease
+          gradle --no-daemon --no-configuration-cache :app:assemblePlayRelease
           mkdir -p under-test
-          cp app/build/outputs/apk/release/app-release.apk under-test/app-release.apk
+          cp app/build/outputs/apk/play/release/app-play-universal-release.apk under-test/app-release.apk
       - name: Build the UiAutomator driver
         run: gradle --no-daemon :e2e:assembleDebug :e2e:assembleDebugAndroidTest
       - name: Check the APK under test (package, SDK levels, permissions, ABIs, not debuggable, signature)

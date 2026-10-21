@@ -15,8 +15,13 @@ object AgentModePrefs {
     /** API mode's Chat / Agent chips. */
     const val API = "api_agent_mode"
 
-    fun read(prefs: SharedPreferences, key: String): Boolean =
-        AgentModeDefault.resolve(if (prefs.contains(key)) prefs.getBoolean(key, true) else null, prefs.getBoolean(key + AgentModeDefault.SET_BY_USER_SUFFIX, false))
+    fun read(prefs: SharedPreferences, key: String): Boolean {
+        val stored = if (prefs.contains(key)) prefs.getBoolean(key, true) else null
+        val setByUser = prefs.getBoolean(key + AgentModeDefault.SET_BY_USER_SUFFIX, false)
+        // The full build's engine is DeepSeek's own harness (v1.3.0): this app's agent stays off unless the person turns it on.
+        if (app.dsandroid.BuildConfig.DSH_ENGINE) return setByUser && stored == true
+        return AgentModeDefault.resolve(stored, setByUser)
+    }
 
     fun write(prefs: SharedPreferences, key: String, enabled: Boolean) {
         prefs.edit().putBoolean(key, enabled).putBoolean(key + AgentModeDefault.SET_BY_USER_SUFFIX, true).apply()

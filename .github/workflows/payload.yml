@@ -1,0 +1,50 @@
+name: Engine payload
+
+# Builds the official DeepSeek engine payload (bionic Node runtime + @deepseek-ai/dsh + Android patches) for each ABI
+# with scripts/build-dsh-payload.sh and hands it to the calling workflow as artifact dsh-payload-<abi>. Cached by the
+# inputs that define it, so most runs only restore it. Never committed, never built outside Actions.
+on:
+  workflow_call:
+    inputs:
+      abis:
+        description: 'JSON list of ABIs to build'
+        type: string
+        default: '["arm64-v8a", "x86_64"]'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  payload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: ${{ fromJSON(inputs.abis || '["arm64-v8a", "x86_64"]') }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Check the payload patches (no payload needed)
+        run: node --test engine/patches/test/patches.test.mjs
+      - name: Restore the cached payload
+        id: cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: engine/payload/jniLibs/${{ matrix.abi }}
+          key: dsh-payload-${{ matrix.abi }}-${{ hashFiles('engine/VERSION', 'engine/termux-packages.lock', 'engine/patches/**', 'engine/licenses/**', 'scripts/build-dsh-payload.sh') }}
+      - name: Build the payload (pinned Termux debs with sha256, npm dsh, Android patches)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-dsh-payload.sh "${{ matrix.abi }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dsh-payload-${{ matrix.abi }}
+          path: engine/payload/jniLibs/${{ matrix.abi }}/libdshpayload.so
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

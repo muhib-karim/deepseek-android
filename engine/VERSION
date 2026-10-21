@@ -1,0 +1,9 @@
+# Single source for the bundled DeepSeek Harness (read by app/build.gradle.kts and scripts/build-dsh-payload.sh).
+# DSH_VERSION          @deepseek-ai/dsh from npm (MIT), pinned exactly; the payload patches are checked against it
+# DSH_WEB_MOBILE       dsh-web-mobile from npm (MIT, mexiaosh): the harness's portrait/phone layout plugin
+# PNPM_VERSION         pnpm (MIT), bundled so the harness's own plugin manager can install plugins on the phone
+# DSH_ANDROID_COMMIT   upstream dsh-android commit the engine code and patches were ported from (MIT)
+DSH_VERSION=0.2.1-rc.2
+DSH_WEB_MOBILE=3.2.1
+PNPM_VERSION=11.28.6
+DSH_ANDROID_COMMIT=d799c76e1cad9113bd2efe76688f865610d76c18

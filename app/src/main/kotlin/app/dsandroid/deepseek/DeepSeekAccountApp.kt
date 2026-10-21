@@ -88,7 +88,7 @@ private const val PASTE_STEPS = "If the Open in DeepSeek Android button doesn't 
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
+fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), startBuiltIn: Boolean = false, sharedInput: SharedInput? = null, sharedConsumed: () -> Unit = {},
     launchRequest: LaunchRequest? = null, launchConsumed: () -> Unit = {},
     loginBrowser: DeepSeekWebView? = null, speechInput: AccountSpeechInput? = null, apiClient: LlmClient? = null) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -96,7 +96,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
     val scope = rememberCoroutineScope()
     val browser = remember(context, loginBrowser) { loginBrowser ?: DeepSeekWebView(context, notice = vm::notice) }
     DisposableEffect(browser) { onDispose { browser.destroy() } }
-    var apiFallback by rememberSaveable { mutableStateOf(false) }
+    // Full build: overflow > Advanced > "Open the built-in engine" starts this app's own API-key agent directly.
+    var apiFallback by rememberSaveable { mutableStateOf(startBuiltIn) }
     var cameraName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingSend by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
     var pendingResend by remember { mutableStateOf<(() -> Unit)?>(null) }

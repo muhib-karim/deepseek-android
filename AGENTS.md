@@ -16,10 +16,14 @@
 - Tests first; CI green before any merge or tag. Never force-push.
 - Run a secret scan (gitleaks) before every push. No secrets, tokens, signing keys, `local.properties` or machine paths in the repo.
 - Keep changes small and committed: one working step = one commit, so a killed session loses one step at most.
-- Preserve minSdk 26 and targetSdk 35. Install permission: INTERNET only; microphone and photo access (the attach panel's
-  recent-photos strip, v1.1.0) are runtime only and asked at the moment of use.
+- Preserve minSdk 26. Two flavors (v1.3.0): `full` (default, official DeepSeek engine, targetSdk 28 on purpose: W^X, see
+  docs/DSH_ENGINE.md) and `play` (targetSdk 35). Install permissions: play = INTERNET only; full = INTERNET plus the
+  engine service's FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC, POST_NOTIFICATIONS and WAKE_LOCK
+  (scripts/check_release_manifest.py). Microphone and photo access are runtime only and asked at the moment of use.
+- Engine payload: built only in CI (scripts/build-dsh-payload.sh, pins in engine/); never commit binaries. Re-check
+  engine/patches on every harness upgrade (CI fails when a required patch stops applying).
 - Anything that leaves the app or changes the device needs a per-action confirmation (see SECURITY.md).
-- Licence: MIT. Builds on deepseek-harness (MIT) with attribution. GPL/AGPL projects are ideas only; never copy their code. Original code and assets only.
+- Licence: MIT. Builds on deepseek-harness (MIT) and, for the full flavor, dsh-android (MIT) with attribution (THIRD-PARTY.md). GPL/AGPL projects are ideas only; never copy their code. Original code and assets only.
 - No automatic account switching.
 
 ## Memory
