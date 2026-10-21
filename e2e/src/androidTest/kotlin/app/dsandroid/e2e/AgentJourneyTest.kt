@@ -43,6 +43,11 @@ class AgentJourneyTest {
         e2e.type(By.clazz("android.widget.EditText"), Fixture.AGENT_TOKEN, "session field")
         e2e.tap(By.text("Sign in"), "Sign in")
         e2e.waitFor(E2eDriver.res("account-composer").enabled(true), "a usable composer after sign-in", 30_000)
+        // Agent mode is on by default since v1.2.0; the chat-shape checks below run with it switched off, as a person would.
+        e2e.waitFor(By.desc("Agent mode on"), "Agent on by default", 10_000)
+        e2e.step("agent-on-by-default")
+        e2e.tap(E2eDriver.res("agent-toggle"), "Agent mode (off for the chat checks)")
+        e2e.waitFor(By.desc("Agent mode off"), "Agent switched off", 10_000)
 
         e2e.tap(By.text("Think"), "the Think pill")
         send("Explain the E2E thinking check")
@@ -91,7 +96,8 @@ class AgentJourneyTest {
         e2e.step("server-chat-continued")
         e2e.tap(By.desc("New Chat"), "a new chat for the agent cases")
 
-        e2e.tap(E2eDriver.res("agent-toggle"), "Agent mode")
+        e2e.tap(E2eDriver.res("agent-toggle"), "Agent mode (on again)")
+        e2e.waitFor(By.desc("Agent mode on"), "Agent switched on", 10_000)
         listOf("write_file", "write", "read", "present", "write_file_docx", "write_file_md").forEach { agent(it) }
         agent("create_pdf")
         shareBack("report.pdf", "application/pdf")
