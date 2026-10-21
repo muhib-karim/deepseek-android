@@ -3,6 +3,7 @@ package app.dsandroid.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -14,12 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import app.dsandroid.R
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.dsandroid.core.agent.ToolStatus
@@ -30,15 +31,13 @@ import app.dsandroid.core.tools.Artifact
 import app.dsandroid.core.artifacts.FencedArtifact
 import app.dsandroid.core.artifacts.FencedArtifacts
 import app.dsandroid.core.guard.WorkspacePath
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, shareArtifact: (Artifact) -> Unit = {}, collapseThinking: Boolean = true,
+fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Artifact) -> Unit, shareArtifact: (Artifact) -> Unit = {},
+    saveArtifact: (Artifact) -> Unit = {}, collapseThinking: Boolean = true,
     workspace: WorkspacePath, openFence: (Int, FencedArtifact) -> Unit,
     speech: app.dsandroid.voice.SpeechPlayer? = null, speechError: (String) -> Unit = {}) {
-    var detailsIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     var sourcesVisible by remember(item.id) { mutableStateOf(false) }
     var selectedSource by remember(item.id) { mutableStateOf<Int?>(null) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -62,30 +61,9 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         }
                     }
                 }
-                is TurnStep.ToolCall -> TimelineRow {
-                    var outputExpanded by rememberSaveable(item.id, index) { mutableStateOf(false) }
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary)
-                            Text(phoneActionLabel(step.name)?.let { stringResource(it) } ?: step.name, Modifier.weight(1f), color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            TextButton(onClick = { detailsIndex = index }, contentPadding = PaddingValues(horizontal = 4.dp)) { Text(stringResource(R.string.details), style = MaterialTheme.typography.labelMedium) }
-                            ToolStatusIcon(step.status)
-                        }
-                        Text(toolLabel(step), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(statusLabel(step.status), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                        if (step.name == "code_interpreter") InterpreterCardContent(step)
-                        if (step.resultPreview.isNotEmpty() && step.name != "code_interpreter") {
-                            TextButton(onClick = { outputExpanded = !outputExpanded }) {
-                                Text(stringResource(if (outputExpanded) R.string.tool_output_hide else R.string.tool_output_show))
-                            }
-                            if (outputExpanded) SelectionContainer {
-                                Text(step.resultPreview, Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
+                // The same collapsible card as the account route: icon, title, status; tap for arguments and result.
+                is TurnStep.ToolCall -> app.dsandroid.deepseek.ToolStepRow(step, title = toolLabel(step),
+                    details = if (step.name == "code_interpreter") ({ InterpreterCardContent(step) }) else null)
                 is TurnStep.Answer -> Column {
                     val answer = app.dsandroid.core.chat.FollowUps.display(step.text, working)
                     val speechId = "${item.id}:$index"
@@ -111,7 +89,7 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
             Text(stringResource(R.string.sources_count, item.sources.size))
         }
         item.artifacts.forEach { artifact ->
-            OutlinedCard(onClick = { openArtifact(artifact) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            OutlinedCard(onClick = { openArtifact(artifact) }, modifier = Modifier.fillMaxWidth().testTag("artifact-card-${artifact.fileName}"), shape = RoundedCornerShape(16.dp)) {
                 if (artifact.mimeType == "image/svg+xml") InlineSvgArtifact(artifact, workspace) { openArtifact(artifact) }
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     AppIcon(Glyph.DOCUMENT, color = MaterialTheme.colorScheme.primary)
@@ -120,15 +98,17 @@ fun AssistantTurn(item: ChatItem.Assistant, working: Boolean, openArtifact: (Art
                         Text(stringResource(R.string.tap_preview), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                    TextButton(onClick = { openArtifact(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.library_open)) }
-                    TextButton(onClick = { shareArtifact(artifact) }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.viewer_share)) }
+                val open = stringResource(R.string.library_open)
+                val share = stringResource(R.string.viewer_share)
+                val download = stringResource(R.string.save_to_downloads)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
+                    TextButton(onClick = { openArtifact(artifact) }, modifier = Modifier.semantics { contentDescription = "$open ${artifact.fileName}" }) { Text(open) }
+                    TextButton(onClick = { saveArtifact(artifact) }, modifier = Modifier.semantics { contentDescription = "$download: ${artifact.fileName}" }) { Text(download) }
+                    TextButton(onClick = { shareArtifact(artifact) }, modifier = Modifier.semantics { contentDescription = "$share ${artifact.fileName}" }) { Text(share) }
                 }
             }
         }
     }
-    val detail = detailsIndex?.let { item.steps.getOrNull(it) as? TurnStep.ToolCall }
-    if (detail != null) ModalBottomSheet(onDismissRequest = { detailsIndex = null }) { ToolDetails(detail) }
     if (sourcesVisible) SourcesSheet(item.sources, selectedSource) { sourcesVisible = false }
 }
 
@@ -144,38 +124,22 @@ private fun TimelineRow(content: @Composable () -> Unit) {
 private fun toolLabel(step: TurnStep.ToolCall): String {
     val args = remember(step.argsJson) { runCatching { LlmJson.parseToJsonElement(step.argsJson) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
     fun arg(key: String): String = (args?.get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-    val resultName = if(step.status == ToolStatus.DONE && step.resultPreview.startsWith("Created ")) step.resultPreview.lineSequence().first().removePrefix("Created ") else ""
+    val resultName = if (step.status == ToolStatus.DONE) Regex("^Created (\\S+)").find(step.resultPreview.lineSequence().first())?.groupValues?.get(1).orEmpty() else ""
     val done = step.status == ToolStatus.DONE
     val zippedCount = if(done) Regex("^Zipped (\\d+) files").find(step.resultPreview)?.groupValues?.get(1)?.toIntOrNull() else null
     phoneActionLabel(step.name)?.let { return stringResource(it) }
     return when {
-        step.name == "code_interpreter" -> stringResource(if (done) R.string.interpreter_ran else R.string.interpreter_running)
+        step.name == "code_interpreter" -> if (!done) stringResource(R.string.interpreter_running)
+            else stringResource(if (arg("language").equals("python", ignoreCase = true)) R.string.ran_python else R.string.ran_javascript)
         step.name == "render_chart" -> stringResource(if (done) R.string.chart_rendered else R.string.chart_rendering)
         step.name == "web_search" -> stringResource(if(done) R.string.searched_query else R.string.searching_query, arg("query"))
         step.name in listOf("web_fetch", "visit_web") -> stringResource(if(done) R.string.visited_site else R.string.visiting_site, runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty())
         step.name == "zip_files" -> if(zippedCount != null) stringResource(R.string.zipped_files, zippedCount) else stringResource(if(done) R.string.zipped_archive else R.string.zipping_files)
-        step.name.startsWith("create_") -> listOf(resultName, arg("path"), arg("fileName")).firstOrNull { it.isNotBlank() }?.let { stringResource(if(done) R.string.created_file else R.string.creating_file, it.substringAfterLast('/')) } ?: stringResource(if(done) R.string.created_artifact else R.string.creating_artifact)
+        step.name.startsWith("create_") -> listOf(resultName, arg("file_path"), arg("path"), arg("fileName")).firstOrNull { it.isNotBlank() }?.let { stringResource(if(done) R.string.created_file else R.string.creating_file, it.substringAfterLast('/')) } ?: stringResource(if(done) R.string.created_artifact else R.string.creating_artifact)
         step.name == "read_file" -> stringResource(R.string.read_file)
         step.name in listOf("list_files", "list_dir", "list_zip") -> stringResource(R.string.browse_files)
         else -> step.name.replace('_', ' ')
     }
-}
-
-@Composable
-private fun statusLabel(status: ToolStatus): String = stringResource(when(status) {
-    ToolStatus.RUNNING -> R.string.status_running
-    ToolStatus.WAITING -> R.string.status_waiting
-    ToolStatus.DONE -> R.string.status_done
-    ToolStatus.ERROR -> R.string.status_error
-    ToolStatus.DENIED -> R.string.status_denied
-    ToolStatus.STOPPED -> R.string.status_stopped
-})
-
-@Composable
-private fun ToolStatusIcon(status: ToolStatus) {
-    if (status == ToolStatus.RUNNING) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-    else AppIcon(when (status) { ToolStatus.DONE -> Glyph.CHECK; ToolStatus.WAITING -> Glyph.SHIELD; else -> Glyph.CLOSE },
-        statusLabel(status), Modifier.size(16.dp), if (status == ToolStatus.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -186,24 +150,5 @@ private fun TypingIndicator() {
             val alpha by transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(500, delayMillis = index * 150), RepeatMode.Reverse), label = "Dot $index")
             Box(Modifier.size(6.dp).alpha(alpha).background(MaterialTheme.colorScheme.onSurfaceVariant, CircleShape))
         }
-    }
-}
-
-@Suppress("DEPRECATION")
-@Composable
-private fun ToolDetails(step: TurnStep.ToolCall) {
-    val clipboard = LocalClipboardManager.current
-    val arguments = remember(step.argsJson) {
-        runCatching { Json(LlmJson) { prettyPrint = true }.encodeToString(JsonElement.serializer(), LlmJson.parseToJsonElement(step.argsJson)) }.getOrDefault(step.argsJson)
-    }
-    Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(step.name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
-        Text(statusLabel(step.status) + (step.durationMs?.let { " · " + stringResource(R.string.duration_ms, it) } ?: ""))
-        Text(stringResource(R.string.arguments), style = MaterialTheme.typography.titleSmall)
-        SelectionContainer { Text(arguments, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-        Text(stringResource(R.string.result), style = MaterialTheme.typography.titleSmall)
-        TextButton(onClick = { clipboard.setText(AnnotatedString(step.resultPreview)) }, enabled = step.resultPreview.isNotEmpty()) { Text(stringResource(R.string.copy_result)) }
-        SelectionContainer { Text(step.resultPreview.ifBlank { stringResource(R.string.no_result) }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-        Spacer(Modifier.height(24.dp))
     }
 }

@@ -183,7 +183,7 @@
     <string name="creating_artifact">একটি আর্টিফ্যাক্ট তৈরি হচ্ছে</string>
     <string name="mode_chat">চ্যাট</string>
     <string name="mode_agent">এজেন্ট</string>
-    <string name="mode_description">এজেন্ট টুল ব্যবহার করতে পারে। সার্চ কোয়েরি ও অচেনা ওয়েব ঠিকানার আগে অনুমতি চায়।</string>
+    <string name="mode_description">এজেন্ট ওয়েবে সার্চ করতে, কোড চালাতে ও ফাইল বানাতে পারে: PDF, Word, Excel, চার্ট।</string>
     <string name="turn_retry">আবার চেষ্টা</string>
     <string name="turn_regenerate">আবার তৈরি করুন</string>
     <string name="turn_edit">সম্পাদনা</string>
@@ -525,4 +525,13 @@
     <string name="diagnostics_clear">সমস্যার বিবরণ মুছুন</string>
     <string name="diagnostics_clear_title">ডিভাইসে রাখা সমস্যার বিবরণ মুছবেন?</string>
     <string name="diagnostics_failed">ডিভাইসে সমস্যার বিবরণ পড়া বা সংরক্ষণ করা যায়নি।</string>
+    <string name="agent_step_counter">ধাপ %1$d (সর্বোচ্চ %2$d)</string>
+    <string name="agent_think_note">এজেন্ট চালু থাকলে উত্তর টুলসহ deepseek-chat ব্যবহার করে। এজেন্ট বন্ধ থাকলে DeepThink (deepseek-reasoner) কাজ করে।</string>
+    <string name="save_to_downloads">ডাউনলোডে সংরক্ষণ করুন</string>
+    <string name="saved_to_downloads">ডাউনলোডে সংরক্ষিত হয়েছে</string>
+    <string name="ran_javascript">JavaScript চালানো হয়েছে</string>
+    <string name="ran_python">Python চালানো হয়েছে</string>
+    <string name="agent_max_steps">প্রতি উত্তরে সর্বোচ্চ ধাপ</string>
+    <string name="agent_max_steps_value">%1$d ধাপ</string>
+    <string name="agent_max_steps_note">প্রতিটি ধাপ মডেলের একটি উত্তর, যা টুল ব্যবহার করতে পারে। এতগুলো ধাপের পর এজেন্ট থামে ও জানায়; থামান চাপলে সঙ্গে সঙ্গে থামে।</string>
 </resources>

@@ -47,6 +47,7 @@ interface SettingsActions {
     fun openLink(url: String) {}
     fun deleteAllChats() {}
     fun logout() {}
+    fun agentMaxSteps(steps: Int) {}
     object None : SettingsActions
 }
 
@@ -55,7 +56,7 @@ private val VOICE_LANGUAGES = listOf("" to "Use app language", "en-US" to "Engli
 
 /**
  * Official settings (docs/reference/SCREEN_SPEC.md "settings"): white groups on a light-grey page, Profile, App, Audio and
- * About, then Log out and the AI notice. Agent and Advanced (the API-key client) are this app's additions.
+ * About, then Log out and the AI notice. Agent and Advanced (API mode) are this app's additions.
  */
 @Composable
 internal fun SettingsPage(state: AccountUiState, actions: SettingsActions, appLanguage: String, onNavigate: (AccountPage) -> Unit, modifier: Modifier) {
@@ -83,13 +84,15 @@ internal fun SettingsPage(state: AccountUiState, actions: SettingsActions, appLa
             SettingsRow("Plugins & tools", value = "${ToolCatalog.forRoute(ToolRoute.ACCOUNT).count { ToolCatalog.isEnabled(it.name, state.disabledTools) }} on",
                 tag = "settings-plugins") { onNavigate(AccountPage.PLUGINS) }
             SettingsRow("Skills and Python toolsets", tag = "settings-skills") { onNavigate(AccountPage.SKILLS) }
-            Text("Agent mode lets DeepSeek use tools on this phone: files, PDFs and documents, Python, skills and web pages. Downloads and network access ask first.",
+            SettingsRow("Maximum steps per reply", value = "${state.agentMaxSteps}", tag = "settings-max-steps") { dialog = "steps" }
+            Text("Agent mode is on by default: DeepSeek can use tools on this phone (files, PDFs and documents, code, skills and web pages), " +
+                "up to the maximum steps per reply. Downloads and network access ask first. Switch it off with the Agent pill in the composer.",
                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = muted)
         }
         SettingsGroup("Advanced") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("API-key mode", style = MaterialTheme.typography.bodyLarge)
-                Text("Uses the separate API chat client and may use paid API credits. You can return to your DeepSeek account at any time.",
+                Text("API mode", style = MaterialTheme.typography.bodyLarge)
+                Text("Chats through DeepSeek's API with native function calling. API use is billed to your DeepSeek platform balance. You can return to your DeepSeek account at any time.",
                     style = MaterialTheme.typography.bodySmall, color = muted)
                 OutlinedTextField(apiKey, { apiKey = it }, label = { Text("DeepSeek API key") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), enabled = !state.busy,
@@ -117,7 +120,7 @@ internal fun SettingsPage(state: AccountUiState, actions: SettingsActions, appLa
         "appearance" -> ChoiceDialog("Appearance", Appearance.entries.map { it.name to appearanceLabel(it) }, state.appearance.name,
             onConfirm = { actions.theme(Appearance.valueOf(it)); dialog = null }, onDismiss = { dialog = null })
         "language" -> ChoiceDialog("Language", LANGUAGES, appLanguage, onConfirm = { actions.appLanguage(it); dialog = null }, onDismiss = { dialog = null },
-            note = "Chat and account screens are in English; বাংলা also applies to the API-key client.")
+            note = "Chat and account screens are in English; বাংলা also applies to API mode.")
         "voice" -> ChoiceDialog("Main language", VOICE_LANGUAGES, state.audioLanguage, onConfirm = { actions.audioLanguage(it); dialog = null },
             onDismiss = { dialog = null }, note = "The primary language you speak when dictating, for better recognition.")
         "font" -> FontSizeDialog(state.textScale, onConfirm = { actions.textScale(it); dialog = null }, onDismiss = { dialog = null })
@@ -126,6 +129,7 @@ internal fun SettingsPage(state: AccountUiState, actions: SettingsActions, appLa
             confirmButton = { TextButton(onClick = { actions.openLink(TERMS_URL) }) { Text("Terms of Use") } },
             dismissButton = { TextButton(onClick = { actions.openLink(PRIVACY_URL) }) { Text("Privacy Policy") } })
         "logout" -> LogoutDialog(onConfirm = { dialog = null; actions.logout() }, onDismiss = { dialog = null })
+        "steps" -> MaxStepsDialog(state.agentMaxSteps, onConfirm = { actions.agentMaxSteps(it); dialog = null }, onDismiss = { dialog = null })
     }
 }
 
@@ -274,3 +278,20 @@ private fun FontSizeDialog(current: Float, onConfirm: (Float) -> Unit, onDismiss
 }
 
 private fun appearanceLabel(value: Appearance) = when (value) { Appearance.SYSTEM -> "System"; Appearance.LIGHT -> "Light"; Appearance.DARK -> "Dark" }
+
+/** Settings > Agent > Maximum steps per reply: 1 to 20 assistant steps (each may call tools); default 8. */
+@Composable
+internal fun MaxStepsDialog(current: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var steps by remember { mutableStateOf(current.coerceIn(1, 20).toFloat()) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Maximum steps per reply") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${steps.roundToInt()} steps", style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("max-steps-value"))
+                Slider(steps, { steps = it }, valueRange = 1f..20f, steps = 18, modifier = Modifier.testTag("max-steps-slider"))
+                Text("Each step is one model reply that may call tools. The agent stops after this many and says so; Stop ends it at once.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(steps.roundToInt()) }, modifier = Modifier.testTag("max-steps-save")) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}

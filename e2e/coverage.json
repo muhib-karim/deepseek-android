@@ -1,8 +1,8 @@
 {
   "about": "Required account-route tool cases for the full mocked release E2E run (AgentJourneyTest). check_e2e_evidence.py --coverage matches them against the fixture's own request log: for each case, an agent turn that requested the tool (with or without it in the offered list) followed by that tool's result with the expected ok flag. ToolCatalogCoverageTest keeps this list in step with ToolCatalog's account route.",
   "route": "account",
-  "journeys": ["expire", "think_search", "upload", "server_history"],
-  "journeys_about": "expire: the session ends mid-chat; think_search: a DeepThink + Search reply in the live stream shape; upload: a shared file uploaded with its own proof of work and referenced only after fetch_files said SUCCESS; server_history: the chat from another device opened from the drawer and continued from its current message.",
+  "journeys": ["expire", "think_search", "upload", "server_history", "api_agent"],
+  "journeys_about": "expire: the session ends mid-chat; think_search: a DeepThink + Search reply in the live stream shape; upload: a shared file uploaded with its own proof of work and referenced only after fetch_files said SUCCESS; server_history: the chat from another device opened from the drawer and continued from its current message; api_agent (ApiAgentJourneyTest, v1.2.0): fresh install, the API key from the welcome screen, Agent on without a tap, a native tool_calls round trip on deepseek-chat with the tools offered.",
   "cases": [
     {"tool": "write_file", "ok": true, "offered": true, "note": "CSV, then Word and Markdown through the same tool"},
     {"tool": "write", "ok": true, "offered": true},

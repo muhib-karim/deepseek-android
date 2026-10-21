@@ -1,5 +1,6 @@
 package app.dsandroid.deepseek
 
+import app.dsandroid.TestAgentMode
 import android.Manifest
 import android.app.Application
 import android.content.ClipboardManager
@@ -80,6 +81,7 @@ class AccountFeaturesTest(private val dark: Boolean) {
         DeepSeekSessionStore(app).clear()
         WebHistory(File(app.filesDir, "deepseek-web-chats.json")).clear()
         app.getSharedPreferences("deepseek_web_appearance", 0).edit().clear().commit()
+        TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
         val settings = SettingsStore(app)
         settings.save(settings.load().copy(apiKey = ""))
         runBlocking { DeepSeekCookies.clear() }

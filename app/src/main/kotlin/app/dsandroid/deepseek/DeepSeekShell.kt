@@ -134,6 +134,8 @@ interface AccountActions {
     fun remove(id: String) {}
     fun rename(id: String, label: String) {}
     fun refreshBalances(id: String?) {}
+    /** "Add API key": the welcome screen's key dialog (checked with DeepSeek, saved encrypted, then API mode). */
+    fun useApiKey(key: String) {}
     object None : AccountActions
 }
 /** A drawer row: [updatedAt] and [pinned] place it in a group; [searchText] is lowercase title and message text. */
@@ -155,7 +157,10 @@ data class AccountUiState(
     val requiresNewChat: Boolean = false,
     val error: String? = null,
     val attachments: List<String> = emptyList(),
-    val agent: Boolean = false,
+    /** Agent mode (the composer's Agent pill); on by default since v1.2.0 (app.dsandroid.data.AgentModePrefs). */
+    val agent: Boolean = true,
+    /** While an agent turn runs: the step being worked on and Settings > Agent > Maximum steps ("Step 3 of up to 8"). */
+    val agentStep: Pair<Int, Int>? = null,
     val confirmation: AgentConfirmation? = null,
     val skills: List<SkillRow> = emptyList(),
     val packages: List<PackageRow> = emptyList(),
@@ -189,6 +194,8 @@ data class AccountUiState(
     val remoteServers: List<RemoteServer> = emptyList(),
     /** Plugins & tools > Trusted execution: native Python, packages and skill functions may be offered (each call asks). */
     val trustedExecution: Boolean = false,
+    /** Settings > Agent > Maximum steps per reply (1-20, default 8), shared with API mode. */
+    val agentMaxSteps: Int = 8,
     /** The welcome screen's terms box (DeepSeek's Terms of Use and Privacy Policy); remembered on this phone once ticked. */
     val termsAgreed: Boolean = false,
     /** A chat from DeepSeek's list is loading its messages; nothing can be sent until it has. */
@@ -239,6 +246,7 @@ fun DeepSeekShell(
     onShareChat: () -> Unit = {}, onExportChatPdf: () -> Unit = {}, onTerms: (Boolean) -> Unit = {},
     onRetry: () -> Unit = {}, onFeedback: (String, String?) -> Unit = { _, _ -> }, onHistoryRefresh: () -> Unit = {},
     onCreateImage: (String) -> Unit = {}, onAddPhotos: (List<android.net.Uri>) -> Unit = {},
+    onAgentMaxSteps: (Int) -> Unit = {},
 ) {
     // The sign-in gate (navigation layer): until DeepSeek confirms a session only the welcome screen, the sign-in page and
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
@@ -272,6 +280,7 @@ fun DeepSeekShell(
         override fun openLink(url: String) = onOpenLink(url)
         override fun deleteAllChats() = onDeleteAllChats()
         override fun logout() = onLogout()
+        override fun agentMaxSteps(steps: Int) = onAgentMaxSteps(steps)
     }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     // The attach panel is inline under the composer; Back closes it first.
@@ -324,7 +333,7 @@ fun DeepSeekShell(
                             if (state.messages.isEmpty() && state.loadingChat) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("Loading this chat from DeepSeek…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                             }
-                            else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth())
+                            else if (state.messages.isEmpty()) EmptyChat(Modifier.weight(1f).fillMaxWidth(), agent = state.agent, onExample = onDraft)
                             else MessageList(state, Modifier.weight(1f).fillMaxWidth(), onRegenerate = onRegenerate,
                                 onEdit = { message -> editTarget = message; editText = message.prompt ?: message.text },
                                 onShareText = { onShareText(shareableText(it)) }, onSources = { sources = it }, actions = actions, onFeedback = onFeedback,

@@ -2,20 +2,102 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/muhib-karim/deepseek-android/ci.yml?branch=main&label=CI)](https://github.com/muhib-karim/deepseek-android/actions/workflows/ci.yml?query=branch%3Amain) [![Latest release](https://img.shields.io/github/v/release/muhib-karim/deepseek-android)](https://github.com/muhib-karim/deepseek-android/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-An English, open-source Android agent app for DeepSeek and OpenAI-compatible
-models. MIT licensed. **Unofficial. Not affiliated with or endorsed by DeepSeek.**
+**An agent app for DeepSeek: tools, files, code, web.** Ask for a PDF, a spreadsheet, a chart or a script and get the
+file; ask about today's news and it searches and reads the pages first. Open source (MIT), for Android 8.0 and newer.
+**Unofficial. Not affiliated with or endorsed by DeepSeek.**
 
-Latest release: **v1.0.0**, released 2026-10-20 ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v1.0.0)).
-Not independently audited. From v1.0.0 a GitHub release carries the signed, minified release APK and SHA256SUMS.txt
-(earlier releases also carried a debug APK). Builds, unit tests and lint run on GitHub Actions.
-Android 8.0 (API 26) or newer on a 64-bit device (arm64-v8a) is required; x86_64 is supported for
-emulators.
+The official DeepSeek app answers in text. This app gives DeepSeek tools, as ChatGPT and Claude have them: every tool call
+shows as a step you can open, and every file it makes comes back as a card you can open, share or save.
 
-## v1.1.0 (in progress, not released)
+Latest release: **v1.1.0** ([release page](https://github.com/muhib-karim/deepseek-android/releases/tag/v1.1.0)).
+v1.2.0 "Agent-first" is in review (below). Not independently audited. A GitHub release carries the signed, minified
+release APK and SHA256SUMS.txt. Builds, unit tests, lint and emulator tests run on GitHub Actions. A 64-bit device
+(arm64-v8a) is required; x86_64 is supported for emulators.
 
-On branch `feature/v1.1.0`; versionCode 11, versionName 1.1.0. Fixes what a signed-in run against the live service found,
-and closes the remaining differences from the official app. Nothing has been compiled locally: GitHub Actions builds and
-tests it, and [docs/RELEASE_NOTES_110.md](docs/RELEASE_NOTES_110.md) records each result (PENDING for now).
+## Quick start (3 steps)
+
+1. **Install** the APK from the [latest release](https://github.com/muhib-karim/deepseek-android/releases/latest) (check
+   it against SHA256SUMS.txt).
+2. **Paste your API key.** Create one at [platform.deepseek.com](https://platform.deepseek.com) (API keys), open the app,
+   tap **Use your DeepSeek API key (agent with tools)** and paste it. API use is billed to your DeepSeek platform balance.
+   Prefer your DeepSeek account? The sign-in buttons above it use your chat.deepseek.com account instead.
+3. **Ask.** Agent is already on. Try one of the examples on the empty chat, such as *"Make a one-page PDF summary of
+   today's top AI news"* or *"Calculate compound interest on $10k at 7% for 20 years and chart it"*.
+
+## What the agent can do
+
+- **Search and read the web:** `web_search` and `web_fetch`, with the sources it read listed under the answer. A search
+  query and an unfamiliar address ask before they leave the phone.
+- **Make files:** PDF, Word (DOCX), Excel (XLSX), PowerPoint (PPTX), CSV, Markdown, HTML, SVG and PNG charts and images,
+  ZIP archives, and plain code files. Each arrives as a file card with **Open**, **Save to Downloads** and **Share**.
+- **Run code:** JavaScript and Python (Pyodide, WebAssembly) in an isolated sandbox with no network access; native Python
+  with packages and skills when you switch on Trusted execution (each run asks).
+- **Read your files:** attach documents, PDFs (text extracted on the phone), spreadsheets, images (on-device text
+  recognition) and photos; the agent can turn them into new files.
+- **Work in steps:** up to 8 steps per reply by default (Settings > Agent > Maximum steps, 1 to 20), with a counter
+  ("Step 3 of up to 8") and **Stop**, which ends the run at once and keeps the finished steps.
+- **Connect tools:** remote MCP servers and skills; every tool has a switch in Plugins & tools.
+
+## How tools work
+
+DeepSeek's API supports function calling. In API mode the app sends the list of tools with each request, DeepSeek
+answers with `tool_calls`, the app runs them on the phone and sends the results back, until DeepSeek writes the answer:
+
+```
+ you ──► app ──── messages + tools[] ────────────────► api.deepseek.com (deepseek-chat)
+          ▲  ◄─── tool_calls: create_pdf({...}) ──────┘
+          │  run on the phone: guard ▸ ask if needed ▸ tool ▸ file in the chat's folder
+          │  ──── role "tool": {"content": "Created report.pdf"} ─►
+          └─◄──── streamed answer text ───────────────┘   (up to N steps; Stop ends it)
+```
+
+- **API mode** (your API key) uses native function calling on `deepseek-chat`. DeepThink (`deepseek-reasoner`) is used
+  when Agent is off, because tool turns run on the chat model.
+- **Account mode** (your chat.deepseek.com account) has no function-calling API, so the app describes the tools in text
+  and reads one fenced `tool` block per reply; the same agent loop, guard and approvals run both routes.
+- Tool errors, unknown tools and malformed arguments go back to the model as error results; they never crash the run.
+  Details: [docs/TOOLS.md](docs/TOOLS.md), [docs/AGENT_MODE.md](docs/AGENT_MODE.md).
+
+## Privacy
+
+- **Your API key is stored encrypted on the phone** (Android Keystore-backed EncryptedSharedPreferences) and is sent only
+  to DeepSeek.
+- **Calls go straight from the phone to api.deepseek.com** (or chat.deepseek.com in account mode). There is no server of
+  ours in between, no analytics and no account with us.
+- Other traffic happens only when a tool needs it and you allow it: web search (DuckDuckGo, or your own SearXNG), the
+  pages the agent reads, and a one-time download of the Python runtime from its pinned CDN.
+- Files the agent makes stay in the chat's private folder until you share or save them.
+- Install-time permission: INTERNET only. Microphone and photos are asked at the moment of use.
+
+## Screenshots
+
+From CI runs against mocked backends, not mock-ups: the emulator workflow (API 34, `ApiAgentJourneyTest`, `AgentModeTest`) and
+the release E2E suite (signed release APK, API 35, `ApiAgentJourneyTest`; the last two):
+
+| Welcome: API key front door | Agent on, examples | Tool step card and file card | Answer with the file card |
+|---|---|---|---|
+| ![Welcome screen with the API key button](docs/screenshots/v120-welcome-api-key.png) | ![API mode with Agent on and the examples card](docs/screenshots/v120-api-agent-examples.png) | ![An expanded create_pdf tool card](docs/screenshots/v120-api-tool-card.png) | ![The PDF's file card with Share](docs/screenshots/v120-api-file-card.png) |
+
+## v1.2.0 "Agent-first" (in review, not released)
+
+On branch `feature/v1.2.0`; versionCode 12, versionName 1.2.0. [docs/RELEASE_NOTES_120.md](docs/RELEASE_NOTES_120.md),
+[CHANGELOG.md](CHANGELOG.md).
+
+- **Agent on by default** on both routes (an existing install keeps Agent off only if you switched it off yourself), with
+  an Agent pill or chip that says what it can do.
+- **The API key is a front door:** "Use your DeepSeek API key (agent with tools)" on the welcome screen, and **Add API
+  key** in Settings > Accounts. The API-key client is now called **API mode**.
+- **Tool steps as cards**, as in ChatGPT and Claude: icon, a human title ("Searched the web: …", "Created report.pdf"),
+  status, and the arguments and result on tap. File cards have Open, Save to Downloads and Share, in both modes.
+- **Tool turns use deepseek-chat**; DeepThink's reasoner is used with Agent off.
+- **Step counter and limit:** "Step 3 of up to 8", Settings > Agent > Maximum steps (1 to 20); Stop keeps finished steps.
+- **"What Agent can do"** on an empty chat: four example prompts that fill the composer.
+
+## v1.1.0
+
+Released 2026-10-21 (tag v1.1.0); versionCode 11, versionName 1.1.0. Fixes what a signed-in run against the live service found,
+and closes the remaining differences from the official app. GitHub Actions built and tested it;
+[docs/RELEASE_NOTES_110.md](docs/RELEASE_NOTES_110.md) records the results.
 
 - **Works with the live service again:** uploads (each with its own proof of work, sent once DeepSeek has processed the
   file), Search and DeepThink + Search replies (live stream shapes), and the first message after signing in. The proof of
@@ -511,12 +593,11 @@ preferences are restored and imported schedules stay paused. Credentials and
 provider/connector configuration must be entered separately. Keep the unencrypted
 backup private. The latest release is 0.7.0 (versionCode 8).
 
-## Screenshots
+## More screenshots
 
-Screenshots will come from the real API 34 emulator smoke run, uploaded as the
-`emulator-smoke` workflow artifact. The tests capture chat, settings at 200% font
-scale, and an opened artifact. Screenshots for each major screen are still pending;
-no generated or mock screenshots are included.
+The v1.2.0 screenshots at the top of this page come from the emulator workflow's `emulator-smoke` artifact
+(`smoke-screenshots/`); the light and dark official-style screens are in its `official-ui-screenshots` artifact. No
+generated or mock screenshots are included.
 
 ## Tests and remaining validation
 

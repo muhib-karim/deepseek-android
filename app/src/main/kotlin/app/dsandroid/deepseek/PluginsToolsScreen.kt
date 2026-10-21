@@ -32,7 +32,7 @@ internal fun PluginsToolsPage(state: AccountUiState, actions: AgentActions, onNa
     Column(modifier.fillMaxWidth().background(LocalOfficialColors.current.groupedBackground).verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp, vertical = 8.dp).testTag("plugins-page"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Agent mode can use these tools in your DeepSeek chats. A switched-off tool is not offered to DeepSeek and is refused if " +
-            "DeepSeek asks for it. Tools that reach the network or other apps ask before each use. The switches also apply to the API-key client.",
+            "DeepSeek asks for it. Tools that reach the network or other apps ask before each use. The switches also apply to API mode.",
             Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.bodySmall, color = muted)
         SettingsGroup("Trusted execution") {
             ToolSwitchRow("Native Python and skill code", "Lets the agent run Python, Python packages and skill functions on this phone with this " +
@@ -82,7 +82,7 @@ internal fun PluginsToolsPage(state: AccountUiState, actions: AgentActions, onNa
             }
             SettingsRow("Add MCP server", tag = "plugins-add-server", enabled = enabled && state.remoteServers.size < 8) { adding = true }
         }
-        SettingsGroup("In the API-key client") {
+        SettingsGroup("In API mode") {
             Text(ToolCatalog.entries.filter { ToolRoute.ACCOUNT !in it.routes }.joinToString(", ") { it.label },
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), style = MaterialTheme.typography.bodyMedium)
             Text("These need that client's screens or its function calling, so DeepSeek chats here do not offer them.",

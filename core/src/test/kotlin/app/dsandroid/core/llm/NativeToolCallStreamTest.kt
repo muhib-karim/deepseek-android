@@ -116,4 +116,36 @@ class NativeToolCallStreamTest {
             assertEquals("Echoed.", history.last().content)
         }
     }
+
+    @Test fun toolCallSplitAcrossChunksMidNameMidIdAndMidEscape() = runBlocking<Unit> {
+        MockWebServer().use { server ->
+            server.enqueue(sse(
+                """{"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}""",
+                """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_","type":"function","function":{"name":"create_"}}]}}]}""",
+                """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"pdf1","function":{"name":"pdf","arguments":"{\"title\":\"Q\\"}}]}}]}""",
+                """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"u0033 report\",\"markdown\":\"# A\\nb\"}"}}]}}]}""",
+                """{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}""",
+            ).throttleBody(7, 1, TimeUnit.MILLISECONDS))
+            val accumulator = StreamAccumulator()
+            client(server).stream(listOf(ChatMessage("user", "PDF")), listOf(pythonSpec)).toList().forEach(accumulator::accept)
+            val call = accumulator.message().toolCalls!!.single()
+            assertEquals("call_pdf1", call.id)
+            assertEquals("create_pdf", call.function.name)
+            val args = Json.parseToJsonElement(call.function.arguments).jsonObject
+            assertEquals("Q3 report", args["title"]!!.jsonPrimitive.content)
+            assertEquals("# A\nb", args["markdown"]!!.jsonPrimitive.content)
+        }
+    }
+
+    @Test fun repeatedIdOnEveryDeltaIsNotDoubled() {
+        val accumulator = StreamAccumulator()
+        listOf("""{"na""", """me":"x"}""").forEachIndexed { index, part ->
+            accumulator.accept(ChatChunk(listOf(StreamChoice(delta = StreamDelta(toolCalls = listOf(
+                ToolCallDelta(0, "call_same", function = FunctionDelta(if (index == 0) "echo" else null, part))))))))
+        }
+        val call = accumulator.message().toolCalls!!.single()
+        assertEquals("call_same", call.id)
+        assertEquals("echo", call.function.name)
+        assertEquals("""{"name":"x"}""", call.function.arguments)
+    }
 }

@@ -1,5 +1,6 @@
 package app.dsandroid.deepseek
 
+import app.dsandroid.data.AgentModePrefs
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -117,8 +118,9 @@ class AgentModeTest {
     private fun toolBlock(name: String, arguments: JsonObject) = "$FENCE" + "tool\n" + buildJsonObject { put("name", name); put("arguments", arguments) } + "\n$FENCE"
 
     private fun sendInAgentMode(prompt: String) {
-        compose.onNodeWithTag("agent-toggle").performClick()
+        // Agent is on by default since v1.2.0 (this class clears the preferences first): no tap on the Agent pill.
         compose.waitUntil(5_000) { vm.state.value.agent }
+        compose.onNodeWithContentDescription("Agent mode on").assertExists()
         compose.onNodeWithTag("account-composer").performTextReplacement(prompt)
         compose.onNodeWithContentDescription("Send message").performClick()
     }
@@ -130,6 +132,23 @@ class AgentModeTest {
             val bitmap = compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap()
             File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+    }
+
+    /** v1.2.0: a fresh install starts with Agent on, the composer says what it can do, and the empty chat offers examples. */
+    @Test fun agentIsOnByDefaultWithHintAndExamplesThatFillTheComposer() {
+        compose.waitUntil(5_000) { vm.state.value.agent }
+        compose.onNodeWithContentDescription("Agent mode on").assertIsDisplayed()
+        compose.onNodeWithTag("agent-hint", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("agent-examples").assertIsDisplayed()
+        capture("v120-account-agent-default")
+        compose.onNodeWithTag("agent-example-3").performClick()
+        compose.waitUntil(5_000) { vm.state.value.draft == AGENT_EXAMPLES[3] }
+        assertTrue("A tap only fills the composer", completions.isEmpty())
+        // The person's own "off" sticks across a restart; nothing else turns it off.
+        compose.onNodeWithTag("agent-toggle").performClick()
+        compose.waitUntil(5_000) { !vm.state.value.agent }
+        assertFalse(AgentModePrefs.read(AgentModePrefs.prefs(app), AgentModePrefs.ACCOUNT))
+        compose.onNodeWithTag("agent-examples").assertDoesNotExist()
     }
 
     @Test fun createPdfToolBlockProducesAPdfAndAnArtifactCard() {

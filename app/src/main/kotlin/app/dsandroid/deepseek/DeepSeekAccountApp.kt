@@ -266,6 +266,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             }
             override fun rename(id: String, label: String) = vm.renameAccount(id, label)
             override fun refreshBalances(id: String?) = vm.refreshBalances(id)
+            // Settings > Accounts > Add API key: the welcome screen's key check, then API mode for the new key.
+            override fun useApiKey(key: String) = vm.useApiKey(key) { apiFallback = true; vm.navigate(AccountPage.CHAT) }
         }
     }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(vm::importAttachment) }
@@ -378,10 +380,10 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically) {
                                     if (apiProfile == null) {
-                                        Text("API-key fallback", Modifier.padding(vertical = 16.dp))
+                                        Text("API mode", Modifier.padding(vertical = 16.dp))
                                         TextButton(onClick = { leaveApi { apiFallback = false } }, enabled = !returning) { Text("Back to DeepSeek") }
                                     } else {
-                                        Text("API key \u00B7 ${apiProfile.label}", Modifier.weight(1f).padding(vertical = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("API mode \u00B7 ${apiProfile.label}", Modifier.weight(1f).padding(vertical = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         TextButton(onClick = { leaveApi { vm.navigate(AccountPage.ACCOUNTS) } }, enabled = !returning,
                                             modifier = Modifier.testTag("api-switch-account")) { Text("Switch account") }
                                     }
@@ -452,7 +454,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         },
                         appLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
                         onDeleteAllChats = vm::deleteAllChats, onShareChat = { shareText("DeepSeek chat", vm.chatMarkdown()) }, onExportChatPdf = vm::exportChatPdf,
-                        onTerms = vm::setTermsAgreed,
+                        onTerms = vm::setTermsAgreed, onAgentMaxSteps = vm::setAgentMaxSteps,
                     )
                 }
                 if (wide && pane != null) {

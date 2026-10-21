@@ -43,6 +43,19 @@ object ModelSelector {
         fun reasoning(id: String) = (overrides[id] ?: ModelCapabilities()).isReasoning(id)
         return if (think && !reasoning(selected)) ranked(models).firstOrNull { reasoning(it.id) }?.id ?: selected else selected
     }
+    /**
+     * The API route's model for one turn. DeepSeek's function calling runs on the chat model, so a turn that offers tools (Agent
+     * on) uses deepseek-chat (or the first non-reasoning model listed) even with DeepThink selected; deepseek-reasoner is used
+     * only when no tools are offered. A custom endpoint that lists only reasoning models keeps its own choice.
+     */
+    fun forAgentTurn(models: List<ModelInfo>, choice: String, think: Boolean, toolsOffered: Boolean, overrides: Map<String, ModelCapabilities>): String {
+        if (!toolsOffered) return forTurn(models, choice, think, overrides)
+        val selected = selected(models, choice)
+        fun reasoning(id: String) = (overrides[id] ?: ModelCapabilities()).isReasoning(id)
+        if (!reasoning(selected)) return selected
+        val chat = models.firstOrNull { it.id == OFFLINE_FALLBACK && !reasoning(it.id) }?.id ?: ranked(models).firstOrNull { !reasoning(it.id) }?.id
+        return chat ?: if (models.isEmpty() && selected.startsWith("deepseek-")) OFFLINE_FALLBACK else selected
+    }
     fun isReasoning(id: String): Boolean = Regex("reason|think|(?:^|[-_])r[1-9](?:$|[-_.])|^o[134](?:$|[-_])", RegexOption.IGNORE_CASE).containsMatchIn(id)
     fun isVision(id: String): Boolean = Regex("vision|(?:^|[-_])vl(?:$|[-_])|gpt-4o|gpt-4\\.1|gemini|pixtral|llava", RegexOption.IGNORE_CASE).containsMatchIn(id)
 }

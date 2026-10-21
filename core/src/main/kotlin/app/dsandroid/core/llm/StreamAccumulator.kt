@@ -21,7 +21,8 @@ class StreamAccumulator {
                 require(part.index in 0..63) { "Too many tool calls" }
                 require(part.type == null || part.type == "function") { "Unsupported tool call type" }
                 val pending = calls.getOrPut(part.index) { PendingCall() }
-                part.id?.let { append(pending.id, it) }
+                // Some OpenAI-compatible servers repeat the full id on every delta; DeepSeek sends it once (or split).
+                part.id?.let { if (pending.id.toString() != it) append(pending.id, it) }
                 part.function?.name?.let { append(pending.name, it) }
                 part.function?.arguments?.let { append(pending.arguments, it) }
             }

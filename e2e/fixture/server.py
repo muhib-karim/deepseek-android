@@ -358,7 +358,8 @@ def agent_reply(prompt):
     request = prompt.rsplit("User request:\n", 1)[-1]
     match = re.search(r"E2E-TOOL:([A-Za-z0-9_]+)", request)
     if not match:
-        return "No tool is needed for this request."
+        # Agent mode is on by default since v1.2.0, so a plain message also arrives as an agent turn.
+        return "No tool is needed for this request. Hello from the E2E fixture."
     scenario = match.group(1)
     name = TOOL_ALIASES.get(scenario, scenario)
     arguments = TOOL_CALLS.get(scenario, {})
@@ -726,9 +727,17 @@ class Handler(BaseHTTPRequestHandler):
         def chunk(delta, finish=None):
             return "data: " + json.dumps({"id": "e2e", "object": "chat.completion.chunk", "created": created, "model": body.get("model", "deepseek-chat"),
                                           "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}) + "\n\n"
+        model = body.get("model", "")
         if last.get("role") == "tool":
-            self.note(kind="api_tool_result", tools=tools)
-            text = chunk({"role": "assistant", "content": "Native tool call finished."}) + chunk({}, "stop") + "data: [DONE]\n\n"
+            try:
+                result = json.loads(last.get("content") or "{}")
+            except ValueError:
+                result = {}
+            # v1.2.0: a tool turn must use the chat model with the tools still offered (ModelSelector.forAgentTurn).
+            scenario = "api_agent" if model == "deepseek-chat" and tools else "api_agent_wrong_model"
+            self.note(kind="api_tool_result", tools=tools, model=model, ok=not result.get("isError", False), scenario=scenario)
+            text = (chunk({"role": "assistant", "content": "Here is your file. "}) + chunk({"content": "Native tool call "})
+                    + chunk({"content": "finished."}) + chunk({}, "stop") + "data: [DONE]\n\n")
             return self.stream(text)
         content = last.get("content") if isinstance(last.get("content"), str) else json.dumps(last.get("content"))
         match = re.search(r"E2E-TOOL:([A-Za-z0-9_]+)", content or "")
@@ -736,13 +745,16 @@ class Handler(BaseHTTPRequestHandler):
             scenario = match.group(1)
             name = TOOL_ALIASES.get(scenario, scenario)
             arguments = json.dumps(TOOL_CALLS.get(scenario, {}))
-            self.note(kind="api_agent", tools=tools, requested=name)
+            self.note(kind="api_agent", tools=tools, requested=name, model=model)
+            # The arguments arrive split across deltas, as the live API streams them.
+            third = max(1, len(arguments) // 3)
+            parts = [arguments[:third], arguments[third:2 * third], arguments[2 * third:]]
             text = (chunk({"role": "assistant", "content": None, "tool_calls": [{"index": 0, "id": "call_e2e_1", "type": "function",
                                                                                  "function": {"name": name, "arguments": ""}}]})
-                    + chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments}}]})
+                    + "".join(chunk({"tool_calls": [{"index": 0, "function": {"arguments": part}}]}) for part in parts)
                     + chunk({}, "tool_calls") + "data: [DONE]\n\n")
             return self.stream(text)
-        self.note(kind="api_chat", tools=tools)
+        self.note(kind="api_chat", tools=tools, model=model)
         text = chunk({"role": "assistant", "content": "Hello from the API fixture."}) + chunk({}, "stop") + "data: [DONE]\n\n"
         return self.stream(text)
 

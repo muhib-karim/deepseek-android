@@ -5,6 +5,11 @@ files, PDF/DOCX/CSV documents, installable skills, web pages) in both the accoun
 and the API-key client. There is one `AgentLoop` and one `ToolRegistry` in `:core`; only the way a
 tool call travels between the model and the app differs per backend.
 
+**Since v1.2.0 ("Agent-first")** agent mode is on by default on both routes (off only after the person switches it off),
+the API key is offered on the welcome screen ("API mode"), tool calls render as collapsible cards, API mode routes tool
+turns to `deepseek-chat`, and each reply may take up to Settings > Agent > Maximum steps (default 8, 1 to 20) with a step
+counter. See [RELEASE_NOTES_120.md](RELEASE_NOTES_120.md).
+
 ## Facts this design rests on
 
 Verified on 2026-10-18 from DeepSeek's published harness,

@@ -110,17 +110,26 @@ fun WelcomeScreen(
         Text("Google doesn't allow its sign-in inside apps, so browser and Google sign-in use your phone's browser once and bring " +
             "the session back here. Phone and email open DeepSeek's own sign-in page in the app.",
             Modifier.widthIn(max = 420.dp), style = MaterialTheme.typography.bodySmall, color = muted, textAlign = TextAlign.Center)
+        // The API key is a front door (v1.2.0): API mode is the route with native function calling, so it is shown here
+        // without "More sign-in options".
+        Row(Modifier.widthIn(max = 420.dp).padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+            Text("or", Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.labelMedium, color = muted)
+            HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        FilledTonalButton(onClick = { keyDialog = true }, enabled = !busy, modifier = wide.testTag("welcome-api-key"), shape = RoundedCornerShape(24.dp)) {
+            Text("Use your DeepSeek API key (agent with tools)", fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+        }
+        Text("API mode: the agent searches the web, runs code and makes files with DeepSeek's function calling. " +
+            "API use is billed to your DeepSeek platform balance.", Modifier.padding(top = 6.dp).widthIn(max = 420.dp).testTag("welcome-api-billing"),
+            style = MaterialTheme.typography.bodySmall, color = muted, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = { more = !more }, modifier = Modifier.testTag("welcome-more")) { Text(if (more) "Fewer options" else "More sign-in options") }
         if (more) {
-            OutlinedButton(onClick = { keyDialog = true }, enabled = !busy, modifier = wide.testTag("welcome-api-key"), shape = RoundedCornerShape(24.dp)) {
-                Text("Use a DeepSeek API key", color = MaterialTheme.colorScheme.onBackground)
-            }
-            Text("Opens the separate API-key client. API use is billed to your DeepSeek platform balance.", Modifier.padding(top = 6.dp).widthIn(max = 420.dp),
-                style = MaterialTheme.typography.bodySmall, color = muted, textAlign = TextAlign.Center)
             if (state.accounts.isNotEmpty()) TextButton(onClick = onAccounts, enabled = !busy, modifier = Modifier.testTag("welcome-accounts")) {
                 Text("Choose one of your accounts")
             }
+            else Text("No saved accounts on this phone yet.", style = MaterialTheme.typography.bodySmall, color = muted)
         }
         Spacer(Modifier.height(24.dp))
         Row(Modifier.widthIn(max = 420.dp).toggleable(state.termsAgreed, enabled = !busy, role = Role.Checkbox) { onTerms(it) }
@@ -143,24 +152,32 @@ fun WelcomeScreen(
             confirmButton = { TextButton(onClick = { pendingRoute = null; onTerms(true); routes.getValue(key)() }, modifier = Modifier.testTag("consent-agree")) { Text("Agree") } },
             dismissButton = { TextButton(onClick = { pendingRoute = null }, modifier = Modifier.testTag("consent-cancel")) { Text("Cancel") } })
     }
-    if (keyDialog) {
-        var key by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { key = ""; keyDialog = false },
-            title = { Text("Use a DeepSeek API key") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("The key is checked with DeepSeek, then stored encrypted on this phone. The API-key client uses your platform balance.",
-                        style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(key, { key = it.take(16_384) }, Modifier.fillMaxWidth().testTag("welcome-api-key-field"), label = { Text("API key") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-                }
-            },
-            confirmButton = { TextButton(onClick = { onUseApiKey(key); key = ""; keyDialog = false }, enabled = key.isNotBlank()) { Text("Check and use") } },
-            dismissButton = { TextButton(onClick = { key = ""; keyDialog = false }) { Text("Cancel") } },
-        )
-    }
+    if (keyDialog) ApiKeyDialog(onDismiss = { keyDialog = false }, onSubmit = { key -> keyDialog = false; onUseApiKey(key) })
+}
+
+/**
+ * "Use your DeepSeek API key": the welcome screen's and Settings > Accounts' key dialog. The key is checked with DeepSeek
+ * (GET /user/balance) before it is saved encrypted; then the app chats in API mode with that key.
+ */
+@Composable
+fun ApiKeyDialog(onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { key = ""; onDismiss() },
+        title = { Text("Use your DeepSeek API key") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Create a key at platform.deepseek.com. It is checked with DeepSeek, then stored encrypted on this phone; requests go " +
+                    "straight to api.deepseek.com. API mode uses your DeepSeek platform balance.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(key, { key = it.take(16_384) }, Modifier.fillMaxWidth().testTag("welcome-api-key-field"), label = { Text("API key") },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+            }
+        },
+        confirmButton = { TextButton(onClick = { val value = key; key = ""; onSubmit(value) }, enabled = key.isNotBlank(),
+            modifier = Modifier.testTag("api-key-submit")) { Text("Check and use") } },
+        dismissButton = { TextButton(onClick = { key = ""; onDismiss() }) { Text("Cancel") } },
+    )
 }
 
 /** While the encrypted stores open: the mark alone, as the official app's launch screen shows its logo. */

@@ -46,4 +46,26 @@ class ModelSelectorTest {
         assertTrue(ModelCapabilities(vision = true).isVision("private-model"))
         assertFalse(ModelCapabilities(vision = false).isVision("qwen2.5-vl"))
     }
+
+    @Test fun agentTurnsWithToolsUseTheChatModelAndReasonerOnlyWithoutTools() {
+        val deepseek = listOf(ModelInfo("deepseek-chat"), ModelInfo("deepseek-reasoner"))
+        // Agent on (tools offered): deepseek-chat, even with DeepThink or deepseek-reasoner picked in the model menu.
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(deepseek, "", think = false, toolsOffered = true, overrides = emptyMap()))
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(deepseek, "", think = true, toolsOffered = true, overrides = emptyMap()))
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(deepseek, "deepseek-reasoner", think = true, toolsOffered = true, overrides = emptyMap()))
+        // Agent off: DeepThink picks deepseek-reasoner; plain chat stays on deepseek-chat.
+        assertEquals("deepseek-reasoner", ModelSelector.forAgentTurn(deepseek, "", think = true, toolsOffered = false, overrides = emptyMap()))
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(deepseek, "", think = false, toolsOffered = false, overrides = emptyMap()))
+        assertEquals("deepseek-reasoner", ModelSelector.forAgentTurn(deepseek, "deepseek-reasoner", think = false, toolsOffered = false, overrides = emptyMap()))
+        // No model list yet (offline): the reasoner choice still routes tool turns to deepseek-chat.
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(emptyList(), "deepseek-reasoner", think = true, toolsOffered = true, overrides = emptyMap()))
+        assertEquals("deepseek-chat", ModelSelector.forAgentTurn(emptyList(), "", think = true, toolsOffered = true, overrides = emptyMap()))
+        // A custom endpoint: the first non-reasoning model; one that lists only reasoning models keeps its choice.
+        assertEquals("v4-chat", ModelSelector.forAgentTurn(listOf(ModelInfo("r1-pro"), ModelInfo("v4-chat")), "r1-pro", true, true, emptyMap()))
+        assertEquals("r1-pro", ModelSelector.forAgentTurn(listOf(ModelInfo("r1-pro")), "r1-pro", true, true, emptyMap()))
+        assertEquals("custom", ModelSelector.forAgentTurn(emptyList(), "custom", true, true, mapOf("custom" to ModelCapabilities(reasoning = true))))
+        // An explicit capability override wins over the name heuristic.
+        assertEquals("deepseek-reasoner", ModelSelector.forAgentTurn(deepseek, "deepseek-reasoner", true, true,
+            mapOf("deepseek-reasoner" to ModelCapabilities(reasoning = false))))
+    }
 }

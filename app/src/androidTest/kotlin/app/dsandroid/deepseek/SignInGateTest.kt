@@ -1,5 +1,6 @@
 package app.dsandroid.deepseek
 
+import app.dsandroid.TestAgentMode
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
@@ -62,6 +63,7 @@ class SignInGateTest {
     }
 
     @Before fun setup() {
+        TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
         reset()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
