@@ -11,7 +11,12 @@ permissions:
   contents: read
 
 jobs:
+  payload:
+    uses: ./.github/workflows/payload.yml
+    with:
+      abis: '["arm64-v8a", "x86_64"]'
   validate:
+    needs: payload
     runs-on: ubuntu-latest
     outputs:
       apk-artifact-id: ${{ steps.upload.outputs.artifact-id }}
@@ -30,8 +35,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.2
         with:
           gradle-version: '8.10.2'
+      - name: Take the engine payloads
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: dsh-payload-*
+          path: payload-download
+      - name: Place the payloads for the full flavor
+        run: bash scripts/place_payloads.sh payload-download
       - name: Test, lint and assemble
-        run: gradle --no-daemon :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
+        run: >-
+          gradle --no-daemon :core:test :app:testPlayDebugUnitTest :app:testFullDebugUnitTest :app:lintPlayDebug :app:lintFullDebug
+          :app:assemblePlayRelease :app:assembleFullRelease
       - name: Check merged release permissions
         run: python3 scripts/check_release_manifest.py
       - name: Build the signed release (signing secrets required)
@@ -50,9 +64,11 @@ jobs:
           export DSA_KEYSTORE_PATH="$(mktemp "$RUNNER_TEMP/dsa-signing.XXXXXX")"
           trap 'rm -f "$DSA_KEYSTORE_PATH"' EXIT
           printf '%s' "$DSA_KEYSTORE_BASE64" | base64 --decode > "$DSA_KEYSTORE_PATH"
-          gradle --no-daemon --no-configuration-cache :app:assembleRelease
+          gradle --no-daemon --no-configuration-cache :app:assemblePlayRelease :app:assembleFullRelease
           mkdir -p signed
-          cp app/build/outputs/apk/release/app-release.apk signed/app-release.apk
+          cp app/build/outputs/apk/play/release/app-play-universal-release.apk signed/app-release.apk
+          python3 -I scripts/check_full_apk.py app/build/outputs/apk/full/release
+          cp app/build/outputs/apk/full/release/app-full-arm64-v8a-release.apk signed/app-full-arm64-v8a-release.apk
       - name: Check the signed APK (package, version from the tag, SDK levels, permissions, ABIs, not debuggable)
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -60,6 +76,8 @@ jobs:
         run: |
           [[ "$RELEASE_TAG" =~ ^v[0-9A-Za-z._-]+$ ]] || exit 1
           python3 scripts/check_release_apk.py signed/app-release.apk --version-name "${RELEASE_TAG#v}" --json signed/release-apk-check.json
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$apksigner" verify --min-sdk-version 26 signed/app-full-arm64-v8a-release.apk
       - name: Upload the signed APK for the Release E2E run
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -73,6 +91,8 @@ jobs:
         run: |
           mkdir -p release
           cp signed/app-release.apk "release/deepseek-android-${RELEASE_TAG}-release.apk"
+          # Primary download: the official DeepSeek engine build (targetSdk 28, not for Google Play).
+          cp signed/app-full-arm64-v8a-release.apk "release/deepseek-android-${RELEASE_TAG}-full-arm64-v8a.apk"
           cd release
           sha256sum ./*.apk > SHA256SUMS.txt
       - name: Upload validated APK

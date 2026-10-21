@@ -11,7 +11,7 @@ adb shell settings put system font_scale 1.0
 adb logcat -c
 if [[ "${LIVE_LOGIN:-false}" == "true" ]]; then
   # Opt-in diagnostic only: the real sign-in page, nothing else. Never part of pull request checks.
-  gradle --no-daemon :app:connectedDebugAndroidTest \
+  gradle --no-daemon :app:connectedPlayDebugAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=app.dsandroid.deepseek.LiveLoginDiagnosticTest \
     -Pandroid.testInstrumentationRunnerArguments.liveLogin=true \
     -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
@@ -22,7 +22,7 @@ if [[ "${LIVE_LOGIN:-false}" == "true" ]]; then
   exit $live_status
 fi
 # Collect completed captures even if another instrumentation test fails.
-gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
+gradle --no-daemon :app:connectedPlayDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
 test_status=$?
 adb pull /sdcard/Android/data/app.dsandroid/files/official-ui-screenshots official-ui-screenshots
 pull_status=$?

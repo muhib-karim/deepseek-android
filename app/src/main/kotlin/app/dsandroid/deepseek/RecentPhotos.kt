@@ -18,7 +18,9 @@ import kotlinx.coroutines.withContext
  * only when the person taps "Recent photos" in the panel; without it the Photo tile's system picker still works.
  */
 object RecentPhotos {
-    val permission: String = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    // The full build targets API 28 (it runs the bundled engine), where READ_EXTERNAL_STORAGE still grants photo access.
+    val permission: String = if (Build.VERSION.SDK_INT >= 33 && app.dsandroid.BuildConfig.TARGET_SDK >= 33) Manifest.permission.READ_MEDIA_IMAGES
+        else Manifest.permission.READ_EXTERNAL_STORAGE
 
     fun allowed(context: Context): Boolean = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
