@@ -133,6 +133,23 @@ class AgentModeTest {
         }
     }
 
+    /** v1.2.0: a fresh install starts with Agent on, the composer says what it can do, and the empty chat offers examples. */
+    @Test fun agentIsOnByDefaultWithHintAndExamplesThatFillTheComposer() {
+        compose.waitUntil(5_000) { vm.state.value.agent }
+        compose.onNodeWithContentDescription("Agent mode on").assertIsDisplayed()
+        compose.onNodeWithTag("agent-hint", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("agent-examples").assertIsDisplayed()
+        capture("v120-account-agent-default")
+        compose.onNodeWithTag("agent-example-3").performClick()
+        compose.waitUntil(5_000) { vm.state.value.draft == AGENT_EXAMPLES[3] }
+        assertTrue("A tap only fills the composer", completions.isEmpty())
+        // The person's own "off" sticks across a restart; nothing else turns it off.
+        compose.onNodeWithTag("agent-toggle").performClick()
+        compose.waitUntil(5_000) { !vm.state.value.agent }
+        assertFalse(app.dsandroid.data.AgentModePrefs.read(app.dsandroid.data.AgentModePrefs.prefs(app), app.dsandroid.data.AgentModePrefs.ACCOUNT))
+        compose.onNodeWithTag("agent-examples").assertDoesNotExist()
+    }
+
     @Test fun createPdfToolBlockProducesAPdfAndAnArtifactCard() {
         val markdown = "# Quarterly summary\n\nRevenue grew **12%**.\n\n- North led\n- South recovered\n\n| Region | Revenue |\n|---|---:|\n| North | 1200 |\n| South | 980 |"
         replies += "I'll create the report now.\n" + toolBlock("create_pdf", buildJsonObject {

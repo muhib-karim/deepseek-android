@@ -124,7 +124,7 @@ private fun TimelineRow(content: @Composable () -> Unit) {
 private fun toolLabel(step: TurnStep.ToolCall): String {
     val args = remember(step.argsJson) { runCatching { LlmJson.parseToJsonElement(step.argsJson) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
     fun arg(key: String): String = (args?.get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-    val resultName = if(step.status == ToolStatus.DONE && step.resultPreview.startsWith("Created ")) step.resultPreview.lineSequence().first().removePrefix("Created ") else ""
+    val resultName = if (step.status == ToolStatus.DONE) Regex("^Created (\\S+)").find(step.resultPreview.lineSequence().first())?.groupValues?.get(1).orEmpty() else ""
     val done = step.status == ToolStatus.DONE
     val zippedCount = if(done) Regex("^Zipped (\\d+) files").find(step.resultPreview)?.groupValues?.get(1)?.toIntOrNull() else null
     phoneActionLabel(step.name)?.let { return stringResource(it) }
@@ -135,7 +135,7 @@ private fun toolLabel(step: TurnStep.ToolCall): String {
         step.name == "web_search" -> stringResource(if(done) R.string.searched_query else R.string.searching_query, arg("query"))
         step.name in listOf("web_fetch", "visit_web") -> stringResource(if(done) R.string.visited_site else R.string.visiting_site, runCatching { java.net.URI(arg("url")).host }.getOrNull().orEmpty())
         step.name == "zip_files" -> if(zippedCount != null) stringResource(R.string.zipped_files, zippedCount) else stringResource(if(done) R.string.zipped_archive else R.string.zipping_files)
-        step.name.startsWith("create_") -> listOf(resultName, arg("path"), arg("fileName")).firstOrNull { it.isNotBlank() }?.let { stringResource(if(done) R.string.created_file else R.string.creating_file, it.substringAfterLast('/')) } ?: stringResource(if(done) R.string.created_artifact else R.string.creating_artifact)
+        step.name.startsWith("create_") -> listOf(resultName, arg("file_path"), arg("path"), arg("fileName")).firstOrNull { it.isNotBlank() }?.let { stringResource(if(done) R.string.created_file else R.string.creating_file, it.substringAfterLast('/')) } ?: stringResource(if(done) R.string.created_artifact else R.string.creating_artifact)
         step.name == "read_file" -> stringResource(R.string.read_file)
         step.name in listOf("list_files", "list_dir", "list_zip") -> stringResource(R.string.browse_files)
         else -> step.name.replace('_', ' ')
