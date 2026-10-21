@@ -64,6 +64,7 @@ class AccountManagerTest {
         WebHistory(File(app.filesDir, "deepseek-web-chats.json")).clear()
         File(app.filesDir, "workbench").deleteRecursively()
         app.getSharedPreferences("deepseek_web_appearance", 0).edit().clear().commit()
+        app.dsandroid.TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
         val settings = SettingsStore(app)
         settings.save(settings.load().copy(apiKey = "", accounts = emptyList(), activeAccountId = null))
         runBlocking { DeepSeekCookies.clear() }

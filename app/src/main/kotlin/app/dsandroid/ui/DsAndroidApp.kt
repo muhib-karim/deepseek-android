@@ -157,6 +157,16 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
             catch (_: Exception) { vm.showError(context.getString(R.string.share_failed)) }
         }
     }
+    fun save(artifact: Artifact) {
+        try {
+            pendingSave = artifact.path
+            saveLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = artifact.mimeType
+                putExtra(Intent.EXTRA_TITLE, artifact.fileName)
+            })
+        } catch (_: Exception) { pendingSave = null; vm.showError(context.getString(R.string.document_unavailable)) }
+    }
     /** Save to Downloads (Downloads/DeepSeek, no permission on Android 10+); older Android uses the system file picker. */
     fun saveToDownloads(artifact: Artifact) {
         scope.launch {
@@ -167,16 +177,6 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { vm.showError(context.getString(R.string.save_failed)) }
         }
-    }
-    fun save(artifact: Artifact) {
-        try {
-            pendingSave = artifact.path
-            saveLauncher.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = artifact.mimeType
-                putExtra(Intent.EXTRA_TITLE, artifact.fileName)
-            })
-        } catch (_: Exception) { pendingSave = null; vm.showError(context.getString(R.string.document_unavailable)) }
     }
     ChatTheme(settings.appearance, settings.fontScale) {
         Surface(Modifier.fillMaxSize()) {

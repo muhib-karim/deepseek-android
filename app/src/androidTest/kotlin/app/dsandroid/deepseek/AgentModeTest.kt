@@ -117,8 +117,9 @@ class AgentModeTest {
     private fun toolBlock(name: String, arguments: JsonObject) = "$FENCE" + "tool\n" + buildJsonObject { put("name", name); put("arguments", arguments) } + "\n$FENCE"
 
     private fun sendInAgentMode(prompt: String) {
-        compose.onNodeWithTag("agent-toggle").performClick()
+        // Agent is on by default since v1.2.0 (this class clears the preferences first): no tap on the Agent pill.
         compose.waitUntil(5_000) { vm.state.value.agent }
+        compose.onNodeWithContentDescription("Agent mode on").assertExists()
         compose.onNodeWithTag("account-composer").performTextReplacement(prompt)
         compose.onNodeWithContentDescription("Send message").performClick()
     }

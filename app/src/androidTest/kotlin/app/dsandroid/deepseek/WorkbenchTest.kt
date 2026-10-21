@@ -81,6 +81,7 @@ class WorkbenchTest {
     }
 
     @Before fun setup() {
+        app.dsandroid.TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
         reset()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.requestUrl!!.encodedPath) {
