@@ -117,11 +117,15 @@ fi
 
 echo "== 4/6 Android patches =="
 node "$HERE/engine/patches/apply-payload-patches.mjs" "$RT/dsh/node_modules" --arch "$NODE_ARCH" --rg "$RT/usr/bin/rg"
+# The same patcher ships in the payload: the app re-applies it when it installs a newer harness from npm.
+mkdir -p "$RT/engine/patches"
+cp "$HERE/engine/patches/apply-payload-patches.mjs" "$HERE/engine/patches/payload-patches.json" "$RT/engine/patches/"
 
 echo "== 5/6 checks =="
 for sentinel in usr/bin/node usr/bin/bash usr/bin/rg usr/bin/git usr/bin/ls usr/etc/tls/cert.pem usr/etc/tls/openssl.cnf \
     dsh/node_modules/@deepseek-ai/dsh/lib/bin.js dsh/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js \
-    dsh/node_modules/dsh-web-mobile/package.json dsh/node_modules/pnpm/bin/pnpm.cjs; do
+    dsh/node_modules/dsh-web-mobile/package.json dsh/node_modules/pnpm/bin/pnpm.cjs engine/patches/payload-patches.json \
+    usr/lib/node_modules/npm/bin/npm-cli.js; do
   [[ -e "$RT/$sentinel" ]] || { echo "::error::payload incomplete: $sentinel is missing" >&2; exit 1; }
 done
 want_machine=$([[ "$NODE_ARCH" == arm64 ]] && echo AArch64 || echo X86-64)
