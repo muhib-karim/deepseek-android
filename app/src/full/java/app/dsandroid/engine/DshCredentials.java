@@ -65,11 +65,21 @@ public final class DshCredentials {
     /** Ensure the store exists in the current layout and is owner-only, without changing any value. */
     public static void ensure(File dshHome) throws IOException {
         File f = file(dshHome);
-        if (!f.isFile()) {
+        if (!f.isFile() || !hasVersion(new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8))) {
+            // Missing, or the pre-release flat layout ("{}" seeded by older Android ports): 0.2.x refuses that.
             update(dshHome, null);
         } else {
             ownerOnly(f);
         }
+    }
+
+    private static boolean hasVersion(String doc) {
+        for (String line : doc.split("\n")) {
+            if (line.startsWith("version:")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean hasKey(File dshHome) {
