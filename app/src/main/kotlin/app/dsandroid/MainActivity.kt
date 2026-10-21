@@ -19,10 +19,18 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState?.getBoolean("shareConsumed") != true) sharedInput = SharedInput.read(intent, packageName)
         if (savedInstanceState?.getBoolean("launchConsumed") != true) launchRequest = app.dsandroid.core.launch.QuickAction.fromAction(intent?.action)?.let { app.dsandroid.launch.LaunchRequest(it) }
+        // Full build: once the engine has a key and was the last route, launch goes straight to DeepSeek's harness.
+        val builtIn = intent?.getBooleanExtra(app.dsandroid.flavor.EngineEntry.EXTRA_BUILT_IN, false) == true
+        if (BuildConfig.DSH_ENGINE && !builtIn && savedInstanceState == null && sharedInput == null &&
+            app.dsandroid.flavor.EngineEntry.shouldOpenEngine(this)) {
+            app.dsandroid.flavor.EngineEntry.openEngine(this)
+            finish()
+            return
+        }
         app.dsandroid.launch.QuickLaunch.publish(this)
         app.dsandroid.widget.AskDeepSeekWidget.refresh(this)
         enableEdgeToEdge()
-        setContent { DeepSeekAccountApp(sharedInput = sharedInput, sharedConsumed = { sharedInput = null }, launchRequest = launchRequest, launchConsumed = { launchRequest = null }) }
+        setContent { DeepSeekAccountApp(startBuiltIn = builtIn, sharedInput = sharedInput, sharedConsumed = { sharedInput = null }, launchRequest = launchRequest, launchConsumed = { launchRequest = null }) }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -152,6 +152,11 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.caverock:androidsvg-aar:1.4")
     testImplementation(libs.junit)
+    // Engine unit tests (full flavor): real org.json instead of android.jar's stubs, and a mock npm registry / GitHub.
+    "testFullImplementation"("org.json:json:20240303")
+    "testFullImplementation"(libs.mockwebserver)
+    // The engine journey checks the browser hand-off and the Google page outside the app.
+    "androidTestFullImplementation"(libs.androidx.test.uiautomator)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.runner)

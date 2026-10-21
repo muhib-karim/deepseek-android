@@ -252,6 +252,11 @@ fun DeepSeekShell(
     // the account list exist. No drawer, history, composer, files or tools are composed while signed out.
     if (!state.ready) { LoadingScreen(); return }
     if (!state.signedIn && state.page != AccountPage.LOGIN && state.page != AccountPage.ACCOUNTS) {
+        // Full build (v1.3.0): one clean first screen, Continue with Google + Use API key (DeepSeek's harness).
+        if (app.dsandroid.BuildConfig.DSH_ENGINE) {
+            EngineWelcomeScreen(state, onGoogle = onBrowserSignIn, onTerms = onTerms, onDismissNotice = onDismissNotice)
+            return
+        }
         WelcomeScreen(state, heldShare = heldShare, onBrowser = onBrowserSignIn, onGoogle = onBrowserSignIn, onPhoneEmail = onLogin,
             onPaste = onPasteSession, onUseApiKey = onUseApiKey, onAccounts = { onNavigate(AccountPage.ACCOUNTS) },
             onDismissNotice = onDismissNotice, onOpenLink = onOpenLink, onFinishLogout = onLogout, onTerms = onTerms)
