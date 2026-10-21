@@ -17,7 +17,7 @@ REPO = "https://packages.termux.dev/apt/termux-main"
 ARCHES = ("aarch64", "x86_64")
 # What the harness runs: node (LTS), bash, ripgrep, GNU coreutils/grep/sed/findutils/gawk/tar/gzip (toybox lacks options
 # agents rely on), git (plugin installs from git URLs), TLS roots.
-ROOTS = ("nodejs-lts", "bash", "ripgrep", "coreutils", "grep", "sed", "findutils", "gawk", "tar", "gzip", "git",
+ROOTS = ("nodejs-lts", "npm", "bash", "ripgrep", "coreutils", "grep", "sed", "findutils", "gawk", "tar", "gzip", "git",
          "ca-certificates", "openssl")
 # Termux's own helper scripts and git's pager are not needed inside the app (GIT_PAGER=cat).
 SKIP = {"termux-tools", "termux-am", "termux-exec", "less", "dash", "termux-keyring", "termux-licenses"}
@@ -42,7 +42,9 @@ def depends(fields):
     for clause in (fields.get("Pre-Depends", "") + "," + fields.get("Depends", "")).split(","):
         clause = clause.strip()
         if clause:
-            out.append(re.split(r"[\s(]", clause.split("|")[0].strip())[0])
+            # "nodejs | nodejs-lts": take an alternative the roots already name, else the first.
+            options = [re.split(r"[\s(]", alt.strip())[0] for alt in clause.split("|")]
+            out.append(next((o for o in options if o in ROOTS), options[0]))
     return out
 
 
