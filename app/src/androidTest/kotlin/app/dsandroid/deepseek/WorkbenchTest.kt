@@ -1,5 +1,6 @@
 package app.dsandroid.deepseek
 
+import app.dsandroid.TestAgentMode
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -81,7 +82,7 @@ class WorkbenchTest {
     }
 
     @Before fun setup() {
-        app.dsandroid.TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
+        TestAgentMode.chat(app) // written for the plain chat route; Agent is on by default since v1.2.0
         reset()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.requestUrl!!.encodedPath) {

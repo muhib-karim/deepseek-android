@@ -1,5 +1,6 @@
 package app.dsandroid.deepseek
 
+import app.dsandroid.data.AgentModePrefs
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -146,7 +147,7 @@ class AgentModeTest {
         // The person's own "off" sticks across a restart; nothing else turns it off.
         compose.onNodeWithTag("agent-toggle").performClick()
         compose.waitUntil(5_000) { !vm.state.value.agent }
-        assertFalse(app.dsandroid.data.AgentModePrefs.read(app.dsandroid.data.AgentModePrefs.prefs(app), app.dsandroid.data.AgentModePrefs.ACCOUNT))
+        assertFalse(AgentModePrefs.read(AgentModePrefs.prefs(app), AgentModePrefs.ACCOUNT))
         compose.onNodeWithTag("agent-examples").assertDoesNotExist()
     }
 
