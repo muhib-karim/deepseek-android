@@ -380,10 +380,10 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically) {
                                     if (apiProfile == null) {
-                                        Text("API-key fallback", Modifier.padding(vertical = 16.dp))
+                                        Text("API mode", Modifier.padding(vertical = 16.dp))
                                         TextButton(onClick = { leaveApi { apiFallback = false } }, enabled = !returning) { Text("Back to DeepSeek") }
                                     } else {
-                                        Text("API key \u00B7 ${apiProfile.label}", Modifier.weight(1f).padding(vertical = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("API mode \u00B7 ${apiProfile.label}", Modifier.weight(1f).padding(vertical = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         TextButton(onClick = { leaveApi { vm.navigate(AccountPage.ACCOUNTS) } }, enabled = !returning,
                                             modifier = Modifier.testTag("api-switch-account")) { Text("Switch account") }
                                     }

@@ -198,7 +198,7 @@ class AccountManagerTest {
         assertEquals("synthetic-key-two", settings.apiKey)
         assertEquals(personal.id, settings.activeAccountId)
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("api-fallback-ui").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("API key · Personal key").assertIsDisplayed()
+        compose.onNodeWithText("API mode · Personal key").assertIsDisplayed()
         assertEquals("The DeepSeek account keeps its own encrypted sign-in", TOKEN, DeepSeekSessionStore(app).load()!!.bearer())
         capture("accounts-api-profile-active")
 

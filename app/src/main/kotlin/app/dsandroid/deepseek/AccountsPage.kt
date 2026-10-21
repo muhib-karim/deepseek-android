@@ -32,6 +32,7 @@ fun AccountsPage(state: AccountUiState, actions: AccountActions, modifier: Modif
     var renaming by remember { mutableStateOf<AccountRow?>(null) }
     var renameText by remember { mutableStateOf("") }
     var removing by remember { mutableStateOf<AccountRow?>(null) }
+    var keyDialog by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your accounts", style = MaterialTheme.typography.titleMedium)
         Text("Tap an account to use it. The app never switches, rotates or falls back to another account by itself, not even after a quota " +
@@ -45,6 +46,8 @@ fun AccountsPage(state: AccountUiState, actions: AccountActions, modifier: Modif
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton(onClick = actions::addDeepSeekAccount, enabled = !state.busy, modifier = Modifier.testTag("add-deepseek-account")) { Text("Add DeepSeek account") }
+            // The welcome screen's key dialog: checked with DeepSeek, saved, then API mode (agent with tools) for this key.
+            OutlinedButton(onClick = { keyDialog = true }, enabled = !state.busy, modifier = Modifier.testTag("add-api-key")) { Text("Add API key") }
             OutlinedButton(onClick = { label = ""; key = ""; adding = true }, enabled = !state.busy, modifier = Modifier.testTag("add-api-key-profile")) {
                 Text("Add API-key profile")
             }
@@ -71,6 +74,7 @@ fun AccountsPage(state: AccountUiState, actions: AccountActions, modifier: Modif
                 modifier = Modifier.testTag("save-profile")) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = { key = ""; adding = false }) { Text("Cancel") } })
+    if (keyDialog) ApiKeyDialog(onDismiss = { keyDialog = false }, onSubmit = { value -> keyDialog = false; actions.useApiKey(value) })
     renaming?.let { row ->
         AlertDialog(onDismissRequest = { renaming = null }, title = { Text("Rename account") },
             text = { OutlinedTextField(renameText, { renameText = it.take(80) }, singleLine = true, label = { Text("Label") }, modifier = Modifier.testTag("account-label")) },
