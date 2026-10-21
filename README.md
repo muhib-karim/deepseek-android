@@ -71,9 +71,10 @@ answers with `tool_calls`, the app runs them on the phone and sends the results 
 
 ## Screenshots
 
-From the CI emulator run (API 34, `ApiAgentJourneyTest` and `AgentModeTest`, mocked backend), not mock-ups:
+From CI runs against mocked backends, not mock-ups: the emulator workflow (API 34, `ApiAgentJourneyTest`, `AgentModeTest`) and
+the release E2E suite (signed release APK, API 35, `ApiAgentJourneyTest`; the last two):
 
-| Welcome: API key front door | Agent on, examples | Tool step card | File card |
+| Welcome: API key front door | Agent on, examples | Tool step card and file card | Answer with the file card |
 |---|---|---|---|
 | ![Welcome screen with the API key button](docs/screenshots/v120-welcome-api-key.png) | ![API mode with Agent on and the examples card](docs/screenshots/v120-api-agent-examples.png) | ![An expanded create_pdf tool card](docs/screenshots/v120-api-tool-card.png) | ![The PDF's file card with Share](docs/screenshots/v120-api-file-card.png) |
 
