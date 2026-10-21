@@ -157,6 +157,17 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
             catch (_: Exception) { vm.showError(context.getString(R.string.share_failed)) }
         }
     }
+    /** Save to Downloads (Downloads/DeepSeek, no permission on Android 10+); older Android uses the system file picker. */
+    fun saveToDownloads(artifact: Artifact) {
+        scope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) { app.dsandroid.deepseek.ArtifactActions.saveToDownloads(context, artifact, vm.workspace.resolve(artifact.path)) }
+                if (saved == null) save(artifact)
+                else android.widget.Toast.makeText(context, context.getString(R.string.saved_to_downloads), android.widget.Toast.LENGTH_SHORT).show()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { vm.showError(context.getString(R.string.save_failed)) }
+        }
+    }
     fun save(artifact: Artifact) {
         try {
             pendingSave = artifact.path
@@ -212,7 +223,8 @@ fun DsAndroidApp(vm: ChatViewModel = viewModel(), sharedInput: app.dsandroid.att
                                     }
                                 })
                             }) { padding ->
-                                ChatScreen(state, settings, Modifier.padding(padding), vm, cameraRequest = cameraRequest, cameraConsumed = { cameraRequest = null }, shareArtifact = ::share) { artifact ->
+                                ChatScreen(state, settings, Modifier.padding(padding), vm, cameraRequest = cameraRequest, cameraConsumed = { cameraRequest = null }, shareArtifact = ::share,
+                                    saveArtifact = ::saveToDownloads) { artifact ->
                                     viewerPath = artifact.path; viewerName = artifact.fileName; viewerMime = artifact.mimeType
                                     navigation.navigate("viewer")
                                 }

@@ -143,8 +143,8 @@
     <string name="resume_task">Resume this task</string>
     <string name="sign_in_again">Sign in again</string>
     <string name="created_file">Created %1$s</string>
-    <string name="visited_site">Visited %1$s</string>
-    <string name="searched_query">Searched: %1$s</string>
+    <string name="visited_site">Read %1$s</string>
+    <string name="searched_query">Searched the web: %1$s</string>
     <string name="zipped_files">Zipped %1$d files</string>
     <string name="read_file">Read a file</string>
     <string name="browse_files">Browse files</string>
@@ -175,15 +175,15 @@
     <string name="ai_generated_footer">AI-generated content may be inaccurate. Check important information.</string>
     <string name="confirm">Confirm</string>
     <string name="attachment_limits">Up to 50 files per message, 20 MB per file and 100 MB combined. Text context is limited to 120,000 characters per message. Up to 4 images use vision; all images use on-device OCR.</string>
-    <string name="searching_query">Searching: %1$s</string>
-    <string name="visiting_site">Visiting %1$s</string>
+    <string name="searching_query">Searching the web: %1$s</string>
+    <string name="visiting_site">Reading %1$s</string>
     <string name="zipping_files">Zipping files</string>
     <string name="zipped_archive">Zipped files</string>
     <string name="creating_file">Creating %1$s</string>
     <string name="creating_artifact">Creating an artifact</string>
     <string name="mode_chat">Chat</string>
     <string name="mode_agent">Agent</string>
-    <string name="mode_description">Agent can use tools. Search queries and unfamiliar web addresses ask first.</string>
+    <string name="mode_description">Agent can search the web, run code and make files: PDF, Word, Excel, charts.</string>
     <string name="turn_retry">Retry</string>
     <string name="turn_regenerate">Regenerate</string>
     <string name="turn_edit">Edit</string>
@@ -427,4 +427,13 @@
     <string name="diagnostics_clear">Clear diagnostics</string>
     <string name="diagnostics_clear_title">Clear local diagnostics?</string>
     <string name="diagnostics_failed">Local diagnostics could not be read or saved.</string>
+    <string name="agent_step_counter">Step %1$d of up to %2$d</string>
+    <string name="agent_think_note">With Agent on, replies use deepseek-chat with tools. DeepThink (deepseek-reasoner) applies when Agent is off.</string>
+    <string name="save_to_downloads">Save to Downloads</string>
+    <string name="saved_to_downloads">Saved to Downloads</string>
+    <string name="ran_javascript">Ran JavaScript</string>
+    <string name="ran_python">Ran Python</string>
+    <string name="agent_max_steps">Maximum steps per reply</string>
+    <string name="agent_max_steps_value">%1$d steps</string>
+    <string name="agent_max_steps_note">Each step is one model reply that may call tools. The agent stops after this many and says so; Stop ends it at once.</string>
 </resources>

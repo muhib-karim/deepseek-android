@@ -166,7 +166,7 @@ class AccountViewModel @JvmOverloads constructor(
                 chats = loaded.chats
                 val expired = session?.isExpired(System.currentTimeMillis()) == true
                 val appearance = runCatching { Appearance.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(Appearance.SYSTEM)
-                val agent = appearancePrefs.getBoolean("agent_mode", false)
+                val agent = app.dsandroid.data.AgentModePrefs.read(appearancePrefs, app.dsandroid.data.AgentModePrefs.ACCOUNT)
                 mutable.update { it.copy(appearance = appearance, hasApiKey = loaded.settings.apiKey.isNotBlank(), agent = agent,
                     apiKeyProfile = apiProfileOf(loaded.settings), termsAgreed = appearancePrefs.getBoolean("terms_agreed", false)).withSettings(loaded.settings) }
                 if (expired) expireSession()
@@ -198,7 +198,7 @@ class AccountViewModel @JvmOverloads constructor(
         if (page == AccountPage.ACCOUNTS) viewModelScope.launch { refreshApiKey() }
     }
     fun setAgent(enabled: Boolean) {
-        appearancePrefs.edit().putBoolean("agent_mode", enabled).apply()
+        app.dsandroid.data.AgentModePrefs.write(appearancePrefs, app.dsandroid.data.AgentModePrefs.ACCOUNT, enabled)
         mutable.update { it.copy(agent = enabled) }
     }
     fun draft(value: String) { mutable.update { it.copy(draft = value.take(20_000)) } }
@@ -798,7 +798,7 @@ class AccountViewModel @JvmOverloads constructor(
     /** What the account screens show of the settings (Settings, Plugins & tools); keys and other secrets never enter UI state. */
     private fun AccountUiState.withSettings(config: AppSettings) = copy(textScale = config.fontScale, collapseThinking = config.collapseThinking,
         audioLanguage = config.audioLanguage, disabledTools = config.disabledTools, remoteServers = config.remoteServers,
-        trustedExecution = config.trustedExecution)
+        trustedExecution = config.trustedExecution, agentMaxSteps = config.agentMaxSteps)
 
     // ---- Plugins & tools (app.dsandroid.tools.ToolCatalog). The switches are the API-key client's too: one setting per tool. ----
 
@@ -808,6 +808,8 @@ class AccountViewModel @JvmOverloads constructor(
 
     /** Trusted execution: native Python, packages and skill functions are offered to the agent (each call still asks). */
     fun setTrustedExecution(enabled: Boolean) = updateSettings("The setting could not be saved.") { it.copy(trustedExecution = enabled) }
+    /** Settings > Agent > Maximum steps (1-20), shared with API mode. */
+    fun setAgentMaxSteps(steps: Int) = updateSettings("The setting could not be saved.") { it.copy(agentMaxSteps = AgentLoop.clampSteps(steps)) }
 
     /** Adds an HTTPS MCP server after reading its tool list. Its tools ask before every call, and their answers go to DeepSeek. */
     fun addRemoteServer(name: String, url: String) {
@@ -984,6 +986,7 @@ class AccountViewModel @JvmOverloads constructor(
     private fun runAgentTurn(prefix: List<WebMessage>, user: WebMessage, files: List<Upload>) {
         if (session == null) { mutable.update { it.copy(page = AccountPage.LOGIN, signedIn = false) }; return }
         val replyId = UUID.randomUUID().toString()
+        mutable.update { it.copy(agentStep = null) }
         val before = current
         val displayedTitle = if (before.messages.isEmpty()) titleFor(user) else current.title
         current = current.copy(title = displayedTitle, messages = prefix + user + WebMessage(replyId, false, ""), parentId = user.parentId, blocked = true)
@@ -1079,9 +1082,13 @@ class AccountViewModel @JvmOverloads constructor(
                 }
                 val llm = WebToolProtocolClient(transport) { specs -> ToolCallProtocol.systemPrompt(specs, SkillPrompt.summaries(skills)) }
                 val loop = AgentLoop(llm, registry, GuardPolicy(registry, agentWorkspace), ToolContext(agentWorkspace, chatDir = chatDir(current.id)),
-                    Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = 8)
+                    Confirmer { name, arguments -> confirmTool(name, arguments) }, GuardSettings(), maxSteps = AgentLoop.clampSteps(config.agentMaxSteps))
                 loop.run(mutableListOf(ChatMessage("user", user.prompt.orEmpty()))).collect { event ->
-                    if (event is AgentEvent.StepsUpdated) { steps = event.steps; publish() }
+                    if (event is AgentEvent.StepsUpdated) {
+                        steps = event.steps
+                        if (event.maxSteps > 0) mutable.update { it.copy(agentStep = event.step to event.maxSteps) }
+                        publish()
+                    }
                     if (event is AgentEvent.ArtifactCreated && artifacts.none { it.path == event.artifact.path }) { artifacts += event.artifact; publish() }
                     if (event is AgentEvent.Error) agentError = event.message
                 }

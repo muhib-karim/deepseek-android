@@ -266,6 +266,8 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
             }
             override fun rename(id: String, label: String) = vm.renameAccount(id, label)
             override fun refreshBalances(id: String?) = vm.refreshBalances(id)
+            // Settings > Accounts > Add API key: the welcome screen's key check, then API mode for the new key.
+            override fun useApiKey(key: String) = vm.useApiKey(key) { apiFallback = true; vm.navigate(AccountPage.CHAT) }
         }
     }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { it?.let(vm::importAttachment) }
@@ -452,7 +454,7 @@ fun DeepSeekAccountApp(vm: AccountViewModel = viewModel(), sharedInput: SharedIn
                         },
                         appLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
                         onDeleteAllChats = vm::deleteAllChats, onShareChat = { shareText("DeepSeek chat", vm.chatMarkdown()) }, onExportChatPdf = vm::exportChatPdf,
-                        onTerms = vm::setTermsAgreed,
+                        onTerms = vm::setTermsAgreed, onAgentMaxSteps = vm::setAgentMaxSteps,
                     )
                 }
                 if (wide && pane != null) {

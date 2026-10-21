@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
@@ -463,9 +465,24 @@ internal fun ChatComposer(state: AccountUiState, draft: (String) -> Unit, send: 
                     }
                 }
             }
+            AgentStatusLine(state.agent, state.agentStep.takeIf { state.busy })
         }
     }
 }
+
+/** One line under the composer pills: what Agent can do, or "Step 3 of up to 8" while an agent reply runs. */
+@Composable
+internal fun AgentStatusLine(agent: Boolean, step: Pair<Int, Int>?, modifier: Modifier = Modifier) {
+    if (!agent) return
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    if (step != null) Text("Step ${step.first} of up to ${step.second}", modifier.padding(bottom = 6.dp).testTag("agent-step-counter")
+        .semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+    else Text(AGENT_HINT, modifier.padding(bottom = 6.dp).testTag("agent-hint"), color = muted, style = MaterialTheme.typography.labelSmall,
+        maxLines = 2, overflow = TextOverflow.Ellipsis)
+}
+
+/** The composer's one-line summary of Agent mode (both routes). */
+const val AGENT_HINT = "Agent can search the web, run code and make files: PDF, Word, Excel, charts."
 
 /** The official composer's outlined 32 dp circle; it takes the button's content colour, so disabled buttons dim with it. */
 @Composable

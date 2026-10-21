@@ -92,7 +92,15 @@ fun SettingsScreen(settings: AppSettings, saving: Boolean, modifier: Modifier,
                         MemoryUpkeepSettings(draft.memoryUpkeep, { draft = draft.copy(memoryUpkeep = it) }, state, vm)
                     }
                     "connectors" -> ConnectorsSettings(settings, state, vm)
-                    "tools" -> ToolsSettings(draft, remember { vm.builtInToolNames() }, saving) { draft = it }
+                    "tools" -> {
+                        // Settings > Agent > Maximum steps, shared with the account route.
+                        Text(stringResource(R.string.agent_max_steps), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.agent_max_steps_value, draft.agentMaxSteps), style = MaterialTheme.typography.bodyMedium)
+                        Slider(draft.agentMaxSteps.toFloat(), { draft = draft.copy(agentMaxSteps = Math.round(it).coerceIn(1, 20)) },
+                            valueRange = 1f..20f, steps = 18, enabled = !saving)
+                        Text(stringResource(R.string.agent_max_steps_note), style = MaterialTheme.typography.bodySmall)
+                        ToolsSettings(draft, remember { vm.builtInToolNames() }, saving) { draft = it }
+                    }
                     "data" -> {
                         Text(stringResource(R.string.local_data_notice), style = MaterialTheme.typography.bodyMedium)
                         TextButton(onClick = { clearConfirm = true }, enabled = !saving) { Text(stringResource(R.string.clear_history)) }

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -37,6 +38,7 @@ import androidx.core.content.FileProvider
 import app.dsandroid.R
 import app.dsandroid.core.attachments.AttachmentKind
 import app.dsandroid.core.tools.Artifact
+import app.dsandroid.data.AgentModePrefs
 import app.dsandroid.data.AppSettings
 import java.io.File
 import java.util.UUID
@@ -44,14 +46,18 @@ import kotlinx.coroutines.flow.collect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, cameraRequest: String? = null, cameraConsumed: () -> Unit = {}, shareArtifact: (Artifact) -> Unit, openArtifact: (Artifact) -> Unit) {
+fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm: ChatViewModel, cameraRequest: String? = null, cameraConsumed: () -> Unit = {}, shareArtifact: (Artifact) -> Unit,
+    saveArtifact: (Artifact) -> Unit = {}, openArtifact: (Artifact) -> Unit) {
     var draft by rememberSaveable(state.conversationId) { mutableStateOf("") }
     LaunchedEffect(state.conversationId, state.sharedDraft) {
         state.sharedDraft?.let { draft = it; vm.consumeSharedDraft() }
     }
     var think by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable { mutableStateOf(false) }
-    var agentEnabled by rememberSaveable { mutableStateOf(false) }
+    // Agent is on by default (v1.2.0) and remembered; only the person's own "off" sticks (AgentModePrefs).
+    val agentPrefs = AgentModePrefs.prefs(LocalContext.current)
+    var agentEnabled by remember { mutableStateOf(AgentModePrefs.read(agentPrefs, AgentModePrefs.API)) }
+    fun setAgentEnabled(enabled: Boolean) { agentEnabled = enabled; AgentModePrefs.write(agentPrefs, AgentModePrefs.API, enabled) }
     var research by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable(state.conversationId) { mutableStateOf<String?>(null) }
     var editedText by rememberSaveable(state.conversationId) { mutableStateOf("") }
@@ -137,7 +143,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
                             }
                             is ChatItem.Assistant -> Column {
                                 AssistantTurn(item, working = state.running && item.id == state.items.lastOrNull()?.id,
-                                    openArtifact = openArtifact, shareArtifact = shareArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
+                                    openArtifact = openArtifact, shareArtifact = shareArtifact, saveArtifact = saveArtifact, collapseThinking = settings.collapseThinking, workspace = vm.workspace,
                                     openFence = { index, fence -> vm.openFencedArtifact(item.id, index, fence, openArtifact) },
                                     speech = speech, speechError = vm::showError)
                                 if (!state.running && item.steps.any { it is app.dsandroid.core.agent.TurnStep.Answer && it.text.isNotBlank() }) {
@@ -171,7 +177,7 @@ fun ChatScreen(state: ChatUiState, settings: AppSettings, modifier: Modifier, vm
             }
         }
         SubAgentsCard(state)
-        Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { agentEnabled = it }, state, settings.supportsVision(think),
+        Composer(draft, { draft = it }, think, { think = it }, search, { search = it }, agentEnabled, { setAgentEnabled(it) }, state, settings.supportsVision(think),
             { attachSheet = true }, { if (vm.send(draft, think, search, agentEnabled, research && agentEnabled)) draft = "" }, vm::stop, vm::removeAttachment,
             settings.audioLanguage, { spoken -> draft = listOf(draft, spoken).filter { it.isNotBlank() }.joinToString(" ") }, vm::showError,
             research, { research = it }, { style, study -> vm.setResponseStyle(style, study) })
@@ -268,7 +274,8 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                 ResponseStylePicker(state.responseStyle, state.studyMode, enabled, setStyle)
                 FilterChip(selected = !agentEnabled, onClick = { setAgent(false) }, enabled = enabled,
                     label = { Text(stringResource(R.string.mode_chat)) })
-                FilterChip(selected = agentEnabled, onClick = { setAgent(true) }, enabled = enabled,
+                FilterChip(selected = agentEnabled, onClick = { setAgent(true) }, enabled = enabled, modifier = Modifier.testTag("api-agent-chip"),
+                    leadingIcon = { AppIcon(Glyph.TOOL, modifier = Modifier.size(16.dp)) },
                     label = { Text(stringResource(R.string.mode_agent)) })
                 ComposerChip(stringResource(R.string.think), Glyph.THINK, think, enabled) { setThink(!think) }
                 ComposerChip(stringResource(R.string.search), Glyph.SEARCH, search && agentEnabled, enabled && agentEnabled) { setSearch(!search) }
@@ -279,9 +286,15 @@ private fun Composer(draft: String, edit: (String) -> Unit, think: Boolean, setT
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(stringResource(if (agentEnabled) R.string.mode_description else R.string.mode_chat), Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val step = state.agentStep?.takeIf { state.running && agentEnabled }
+                Text(when {
+                    step != null -> stringResource(R.string.agent_step_counter, step.first, step.second)
+                    agentEnabled && think -> stringResource(R.string.agent_think_note)
+                    agentEnabled -> stringResource(R.string.mode_description)
+                    else -> stringResource(R.string.mode_chat)
+                }, Modifier.weight(1f).testTag(if (step != null) "agent-step-counter" else "agent-hint"),
+                    style = MaterialTheme.typography.labelSmall, color = if (step != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3, overflow = TextOverflow.Ellipsis)
                 VoiceDictation(enabled, audioLanguage, dictate, report)
                 IconButton(onClick = attach, enabled = enabled, modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)) {
                     AppIcon(Glyph.PLUS, stringResource(R.string.attach_files))

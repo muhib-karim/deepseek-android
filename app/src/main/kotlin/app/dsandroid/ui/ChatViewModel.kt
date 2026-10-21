@@ -67,6 +67,8 @@ data class ConversationSummary(val id: String, val title: String, val createdAt:
 data class Confirmation(val name: String, val arguments: JsonObject, val destination: String? = null, val remoteName: String? = null)
 data class ChatUiState(
     val items: List<ChatItem> = emptyList(),
+    /** While an agent run streams: the step being worked on and the run's limit ("Step 3 of up to 8"). */
+    val agentStep: Pair<Int, Int>? = null,
     val conversationId: String = "",
     val title: String = "",
     val conversations: List<ConversationSummary> = emptyList(),
@@ -342,8 +344,9 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
         if ((text.isBlank() && ui.attachments.isEmpty()) || ui.running || ui.importing || ui.saving || ui.signingIn || !ui.settingsReady) return false
         if (current.pendingRunId != null) { showError(this.text(R.string.resume_before_send)); return false }
         val config = settings.value
-        val model = config.turnModel(think)
-        try { client(config, model, think && !(config.capabilities[model] ?: ModelCapabilities()).isReasoning(model)) }
+        // Tool turns go to the chat model (deepseek-chat); DeepThink's reasoner is used only with Agent off.
+        val model = config.turnModel(think, tools = agentEnabled)
+        try { client(config, model, think && !agentEnabled && !(config.capabilities[model] ?: ModelCapabilities()).isReasoning(model)) }
         catch (_: Exception) { showError(this.text(R.string.credentials_required)); return false }
         if (deepResearch && (!agentEnabled || !search || !ToolCatalog.isEnabled("web_search", config.disabledTools) || !ToolCatalog.isEnabled("web_fetch", config.disabledTools))) {
             showError(this.text(R.string.research_tools_required)); return false
@@ -425,7 +428,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
     private suspend fun executeRun(conversation: Conversation, run: RunConfig, checkpoint: RunCheckpoint? = null) {
         val config = settings.value
         require(config.runIdentity == run.providerKey)
-        val llm = client(config, run.model, run.thinking && !(config.capabilities[run.model] ?: ModelCapabilities()).isReasoning(run.model))
+        val llm = client(config, run.model, run.thinking && !run.agentEnabled && !(config.capabilities[run.model] ?: ModelCapabilities()).isReasoning(run.model))
         val budget = AgentBudget()
         val tools = builtInTools(config).filterNot {
             (it.name in setOf("web_search", "web_fetch", "visit_web") && (!run.agentEnabled || !run.searchEnabled)) ||
@@ -490,7 +493,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
             } else requestConfirmation(name, args, remote?.server?.url, remote?.definition?.name)
         }
         val loop = AgentLoop(llm, registry, GuardPolicy(registry, workspace), ToolContext(workspace, chatDir = chatDir), confirmer,
-            config.guardSettings(), maxSteps = if (run.deepResearch) ResearchPolicy.MAX_STEPS else 8, checkpointStore = checkpoints, runConfig = run, manualRateLimit = true, budget = budget)
+            config.guardSettings(), maxSteps = if (run.deepResearch) ResearchPolicy.MAX_STEPS else AgentLoop.clampSteps(config.agentMaxSteps), checkpointStore = checkpoints, runConfig = run, manualRateLimit = true, budget = budget)
         // Enabled skills are listed by name and description; the skill tool loads full instructions on demand.
         val skillSection = SkillPrompt.section(skills)
         fun system() = systemMessage(conversation).let { it.copy(content = it.content.orEmpty() + skillSection) }
@@ -500,7 +503,10 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
             checkpoint.copy(messages = checkpoint.messages.map { if (it.role == "system") system() else it }), conversation.history)
         events.collect { event ->
             when (event) {
-                is AgentEvent.StepsUpdated -> updateAssistant(run.runId) { it.copy(steps = event.steps) }
+                is AgentEvent.StepsUpdated -> {
+                    if (run.agentEnabled && event.maxSteps > 0) mutableState.update { it.copy(agentStep = event.step to event.maxSteps) }
+                    updateAssistant(run.runId) { it.copy(steps = event.steps) }
+                }
                 is AgentEvent.SourcesUpdated -> updateAssistant(run.runId) { it.copy(sources = event.sources) }
                 is AgentEvent.ArtifactCreated -> {
                     updateAssistant(run.runId) { it.copy(artifacts = (it.artifacts + event.artifact).distinctBy { artifact -> artifact.path }) }
@@ -593,7 +599,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
             showError(text(R.string.history_save_error))
         } finally {
             activeRunId = null
-            mutableState.update { it.copy(items = conversation.items, running = false, confirmation = null,
+            mutableState.update { it.copy(items = conversation.items, running = false, agentStep = null, confirmation = null,
                 retrySeconds = null, resumable = conversation.pendingRunId != null) }
             syncConversation()
         }
@@ -649,7 +655,7 @@ class ChatViewModel @JvmOverloads constructor(application: Application, private 
         catch (_: IllegalArgumentException) { showError(text(R.string.turn_edit_unavailable)); return false }
         if (revised.items.last().text.isBlank() && revised.items.last().attachments.isEmpty()) return false
         val config = settings.value
-        val model = config.turnModel(think)
+        val model = config.turnModel(think, tools = agentEnabled)
         try { client(config, model) }
         catch (_: Exception) { showError(text(R.string.credentials_required)); return false }
         val runId = UUID.randomUUID().toString()

@@ -53,6 +53,8 @@ data class AppSettings(
      * so agents are offered them only when this is on, and each call still asks. Off by default; never part of a backup.
      */
     val trustedExecution: Boolean = false,
+    /** Settings > Agent > Maximum steps: assistant steps one reply may take (1-20, default 8), on both routes. */
+    val agentMaxSteps: Int = app.dsandroid.core.agent.AgentLoop.DEFAULT_MAX_STEPS,
 ) {
     val accountConfigured: Boolean get() = authorizeUrl.isNotBlank() && exchangeUrl.isNotBlank() && clientId.isNotBlank()
     fun guardSettings() = GuardSettings(shellEnabled, installEnabled)
@@ -61,6 +63,8 @@ data class AppSettings(
     val availableModels: List<ModelInfo> get() = cachedModels.takeIf { modelCacheKey == cacheKey }.orEmpty()
     val selectedModel: String get() = ModelSelector.selected(availableModels, model)
     fun turnModel(think: Boolean): String = ModelSelector.forTurn(availableModels, model, think, capabilities)
+    /** API mode's model for a turn: deepseek-chat whenever tools are offered (Agent on), see [ModelSelector.forAgentTurn]. */
+    fun turnModel(think: Boolean, tools: Boolean): String = ModelSelector.forAgentTurn(availableModels, model, think, tools, capabilities)
     fun supportsVision(think: Boolean): Boolean = (capabilities[turnModel(think)] ?: ModelCapabilities()).isVision(turnModel(think))
 }
 
@@ -109,6 +113,7 @@ class SettingsStore(context: Context) {
         disabledTools = preferences.getStringSet("disabled_tools", emptySet())!!.toSet(),
         remoteServers = runCatching { LlmJson.decodeFromString<List<RemoteServer>>(preferences.getString("remote_servers", "[]")!!) }.getOrDefault(emptyList()),
         trustedExecution = preferences.getBoolean("trusted_execution", false),
+        agentMaxSteps = app.dsandroid.core.agent.AgentLoop.clampSteps(preferences.getInt("agent_max_steps", app.dsandroid.core.agent.AgentLoop.DEFAULT_MAX_STEPS)),
     )
 
     fun connectorToken(id: String): String? = preferences.getString("connector_token_$id", null)
@@ -142,6 +147,7 @@ class SettingsStore(context: Context) {
             .putBoolean("memory_upkeep", value.memoryUpkeep).putBoolean("memory_enabled", value.memoryEnabled).putString("custom_instructions", value.customInstructions.take(8000))
             .putStringSet("disabled_tools", value.disabledTools).putString("remote_servers", LlmJson.encodeToString(value.remoteServers))
             .putBoolean("trusted_execution", value.trustedExecution)
+            .putInt("agent_max_steps", app.dsandroid.core.agent.AgentLoop.clampSteps(value.agentMaxSteps))
             .commit()) { "Could not save encrypted settings" }
     }
 }
